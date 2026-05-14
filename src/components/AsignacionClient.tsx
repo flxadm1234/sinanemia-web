@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import type { PadronRow } from "@/lib/padronnominal";
 import { ActorSocialCombobox } from "@/components/ActorSocialCombobox";
 import type { AsignacionResult } from "@/app/asignacion/actions";
@@ -32,13 +32,34 @@ export function AsignacionClient(props: {
     null,
   );
 
+  const successTimerRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (state?.ok) {
-      setSelected({});
-      setOpen(false);
-      setActorInfo(null);
+      if (successTimerRef.current) {
+        window.clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+
+      if (open) {
+        successTimerRef.current = window.setTimeout(() => {
+          setSelected({});
+          setOpen(false);
+          setActorInfo(null);
+          successTimerRef.current = null;
+        }, 900);
+      } else {
+        setSelected({});
+        setActorInfo(null);
+      }
     }
-  }, [state]);
+    return () => {
+      if (successTimerRef.current) {
+        window.clearTimeout(successTimerRef.current);
+        successTimerRef.current = null;
+      }
+    };
+  }, [state, open]);
 
   const toggleAll = (v: boolean) => {
     const next: Record<number, boolean> = {};
@@ -48,17 +69,26 @@ export function AsignacionClient(props: {
 
   return (
     <div className="flex flex-col gap-4">
-      {state && (!open || state.ok) ? (
-        state.ok ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            Asignación completada. Registros actualizados:{" "}
-            <span className="font-semibold">{state.affected}</span>
+      {state && !open ? (
+        <div className="fixed inset-x-0 top-3 z-50 px-4">
+          <div
+            className={
+              "mx-auto w-full max-w-2xl rounded-2xl border px-4 py-3 text-sm shadow-lg " +
+              (state.ok
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-amber-200 bg-amber-50 text-amber-900")
+            }
+          >
+            {state.ok ? (
+              <>
+                Asignación completada. Registros actualizados:{" "}
+                <span className="font-semibold">{state.affected}</span>
+              </>
+            ) : (
+              state.message
+            )}
           </div>
-        ) : (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            {state.message}
-          </div>
-        )
+        </div>
       ) : null}
 
       <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
@@ -180,9 +210,23 @@ export function AsignacionClient(props: {
               </button>
             </div>
 
-            {state && !state.ok ? (
-              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                {state.message}
+            {state ? (
+              <div
+                className={
+                  "mt-4 rounded-2xl border px-4 py-3 text-sm " +
+                  (state.ok
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-amber-200 bg-amber-50 text-amber-900")
+                }
+              >
+                {state.ok ? (
+                  <>
+                    Asignación completada. Registros actualizados:{" "}
+                    <span className="font-semibold">{state.affected}</span>
+                  </>
+                ) : (
+                  state.message
+                )}
               </div>
             ) : null}
 
@@ -231,10 +275,10 @@ export function AsignacionClient(props: {
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
-                  disabled={pending}
+                  disabled={pending || !!(state && state.ok)}
                   className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
                 >
-                  {pending ? "Guardando..." : "Asignar"}
+                  {state?.ok ? "Listo" : pending ? "Guardando..." : "Asignar"}
                 </button>
               </div>
             </form>
