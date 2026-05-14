@@ -8,6 +8,7 @@ type NavLink = { href: string; label: string };
 
 function buildLinks(user: SessionUser): NavLink[] {
   const links: NavLink[] = [];
+  links.push({ href: "/dashboard", label: "Dashboard" });
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
     links.push({ href: "/admin/personas", label: "Usuarios" });
   }

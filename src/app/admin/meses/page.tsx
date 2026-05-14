@@ -46,12 +46,22 @@ export default async function AdminMesesPage() {
               </div>
             ) : null}
           </div>
-          <Link
-            href="/admin/meses/nuevo"
-            className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
-          >
-            Nuevo mes
-          </Link>
+          <div className="flex items-center gap-2">
+            {user.tipo === "SUPER ADMIN" ? (
+              <Link
+                href="/admin/meses/importar"
+                className="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+              >
+                Importar Excel
+              </Link>
+            ) : null}
+            <Link
+              href="/admin/meses/nuevo"
+              className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              Nuevo mes
+            </Link>
+          </div>
         </div>
 
         <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
