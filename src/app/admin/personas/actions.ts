@@ -153,5 +153,6 @@ export async function updatePersonaAction(formData: FormData) {
   await updatePersonaById(data.idpersona, patch);
   revalidatePath("/admin/personas");
   revalidatePath(`/admin/personas/${data.idpersona}`);
+  redirect("/admin/personas");
 }
 

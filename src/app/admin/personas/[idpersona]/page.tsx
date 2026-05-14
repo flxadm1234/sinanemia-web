@@ -5,6 +5,7 @@ import { findPersonaById, getRoleFromPersonaTipo } from "@/lib/persona";
 import { AppShell } from "@/components/AppShell";
 import { updatePersonaAction } from "../actions";
 import { CoordinatorCombobox } from "@/components/CoordinatorCombobox";
+import { FormSubmitButton } from "@/components/FormSubmitButton";
 
 export default async function AdminPersonaDetailPage(props: {
   params: Promise<{ idpersona: string }>;
@@ -179,9 +180,11 @@ export default async function AdminPersonaDetailPage(props: {
             </div>
 
             <div className="md:col-span-2 flex justify-end gap-2 pt-2">
-              <button className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
-                Guardar cambios
-              </button>
+              <FormSubmitButton
+                label="Guardar cambios"
+                pendingLabel="Guardando..."
+                className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+              />
             </div>
           </form>
         </div>
