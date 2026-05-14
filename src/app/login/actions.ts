@@ -21,7 +21,15 @@ export async function loginAction(_: unknown, formData: FormData) {
   }
 
   const { dni, clave } = parsed.data;
-  const persona = await findPersonaByDni(dni);
+  let persona: Awaited<ReturnType<typeof findPersonaByDni>> | null = null;
+  try {
+    persona = await findPersonaByDni(dni);
+  } catch {
+    return {
+      ok: false as const,
+      error: "No se pudo conectar con la base de datos. Intenta nuevamente.",
+    };
+  }
 
   if (!persona) return { ok: false as const, error: "Credenciales incorrectas." };
   if ((persona.estado ?? 0) !== 1)
@@ -31,16 +39,24 @@ export async function loginAction(_: unknown, formData: FormData) {
   if (!role) return { ok: false as const, error: "Usuario sin rol válido." };
 
   const claveDb = (persona as any).clave ? String((persona as any).clave) : "";
-  if (claveDb !== clave) return { ok: false as const, error: "Credenciales incorrectas." };
+  if (claveDb.trim() !== clave.trim())
+    return { ok: false as const, error: "Credenciales incorrectas." };
 
-  await createSessionCookie({
-    dni: persona.dni,
-    tipo: role,
-    ubigeo: persona.ubigeo ?? null,
-    nombre:
-      `${persona.nombrecompleto ?? ""} ${persona.apellidos ?? ""}`.trim() ||
-      persona.dni,
-  });
+  try {
+    await createSessionCookie({
+      dni: persona.dni,
+      tipo: role,
+      ubigeo: persona.ubigeo ?? null,
+      nombre:
+        `${persona.nombrecompleto ?? ""} ${persona.apellidos ?? ""}`.trim() ||
+        persona.dni,
+    });
+  } catch {
+    return {
+      ok: false as const,
+      error: "No se pudo iniciar sesión. Intenta nuevamente.",
+    };
+  }
 
   redirect(routeForRole(role));
 }
