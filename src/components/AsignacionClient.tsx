@@ -15,6 +15,12 @@ export function AsignacionClient(props: {
   const { rows, etapa, ubigeo, isCoordinador, action } = props;
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const [open, setOpen] = useState(false);
+  const [toast, setToast] = useState<{
+    ok: boolean;
+    message: string;
+    detail?: number;
+  } | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
   const [actorInfo, setActorInfo] = useState<{
     dni: string;
     nombre: string;
@@ -32,34 +38,41 @@ export function AsignacionClient(props: {
     null,
   );
 
-  const successTimerRef = useRef<number | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (state?.ok) {
-      if (successTimerRef.current) {
-        window.clearTimeout(successTimerRef.current);
-        successTimerRef.current = null;
-      }
+    if (!state) return;
 
-      if (open) {
-        successTimerRef.current = window.setTimeout(() => {
-          setSelected({});
-          setOpen(false);
-          setActorInfo(null);
-          successTimerRef.current = null;
-        }, 900);
-      } else {
-        setSelected({});
-        setActorInfo(null);
-      }
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+
+    if (state.ok) {
+      setModalError(null);
+      setSelected({});
+      setActorInfo(null);
+      setOpen(false);
+      setToast({
+        ok: true,
+        message: "Asignación completada. Registros actualizados:",
+        detail: state.affected,
+      });
+      toastTimerRef.current = window.setTimeout(() => {
+        setToast(null);
+        toastTimerRef.current = null;
+      }, 3500);
+    } else {
+      setToast(null);
+      setModalError(state.message);
     }
     return () => {
-      if (successTimerRef.current) {
-        window.clearTimeout(successTimerRef.current);
-        successTimerRef.current = null;
+      if (toastTimerRef.current) {
+        window.clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = null;
       }
     };
-  }, [state, open]);
+  }, [state]);
 
   const toggleAll = (v: boolean) => {
     const next: Record<number, boolean> = {};
@@ -69,23 +82,22 @@ export function AsignacionClient(props: {
 
   return (
     <div className="flex flex-col gap-4">
-      {state ? (
+      {toast ? (
         <div className="fixed inset-x-0 top-3 z-[100] px-4">
           <div
             className={
               "mx-auto w-full max-w-2xl rounded-2xl border px-4 py-3 text-sm shadow-lg " +
-              (state.ok
+              (toast.ok
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800"
                 : "border-amber-200 bg-amber-50 text-amber-900")
             }
           >
-            {state.ok ? (
+            {toast.ok ? (
               <>
-                Asignación completada. Registros actualizados:{" "}
-                <span className="font-semibold">{state.affected}</span>
+                {toast.message} <span className="font-semibold">{toast.detail}</span>
               </>
             ) : (
-              state.message
+              toast.message
             )}
           </div>
         </div>
@@ -121,7 +133,10 @@ export function AsignacionClient(props: {
             <button
               type="button"
               disabled={ids.length === 0}
-              onClick={() => setOpen(true)}
+              onClick={() => {
+                setModalError(null);
+                setOpen(true);
+              }}
               className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
             >
               Asignar ({ids.length})
@@ -190,7 +205,7 @@ export function AsignacionClient(props: {
       </div>
 
       {open ? (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -203,12 +218,21 @@ export function AsignacionClient(props: {
               </div>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setModalError(null);
+                  setOpen(false);
+                }}
                 className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
               >
                 Cerrar
               </button>
             </div>
+
+            {modalError ? (
+              <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {modalError}
+              </div>
+            ) : null}
 
             <form action={formAction as any} className="mt-5 flex flex-col gap-4">
               <input type="hidden" name="ids" value={JSON.stringify(ids)} />
@@ -255,10 +279,10 @@ export function AsignacionClient(props: {
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
-                  disabled={pending || !!(state && state.ok)}
+                  disabled={pending}
                   className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
                 >
-                  {state?.ok ? "Listo" : pending ? "Guardando..." : "Asignar"}
+                  {pending ? "Guardando..." : "Asignar"}
                 </button>
               </div>
             </form>
