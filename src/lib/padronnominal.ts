@@ -14,6 +14,77 @@ export async function updatePadronActorSocial(params: {
   return res as any;
 }
 
+export async function countAsignadosPorActores(params: {
+  ubigeo: number;
+  etapa: string;
+  actores: string[];
+}) {
+  if (!params.actores.length) return new Map<string, number>();
+  const pool = getDbPool();
+  const placeholders = params.actores.map(() => "?").join(",");
+  const [rows] = await pool.query(
+    `SELECT actorsocial as actor, COUNT(*) as c
+     FROM padronnominal
+     WHERE ubigeo = ? AND etapa = ? AND actorsocial IN (${placeholders})
+     GROUP BY actorsocial`,
+    [params.ubigeo, params.etapa, ...params.actores],
+  );
+  const map = new Map<string, number>();
+  for (const r of rows as any[]) {
+    const actor = String(r.actor ?? "").trim();
+    if (!actor) continue;
+    map.set(actor, Number(r.c ?? 0));
+  }
+  return map;
+}
+
+export type PadronAsignadoRow = {
+  idpn: number;
+  dni: string | null;
+  nombres: string | null;
+  fecha_nac: string | null;
+  direccion: string | null;
+  referencia: string | null;
+  eess_ua: string | null;
+  dnimadre: string | null;
+  appatmadre: string | null;
+  apmatmadre: string | null;
+  nombresmadre: string | null;
+  dni_padre: string | null;
+  nombre_padre: string | null;
+  telefonopn: string | null;
+  telefono: string | null;
+  primera_vd: string | null;
+  segunda_vd: string | null;
+  tercera_vd: string | null;
+  fecha_fin_vd: string | null;
+  fechamodificacion: string | null;
+  fechamodificacion2: string | null;
+};
+
+export async function listAsignadosPorActor(params: {
+  ubigeo: number;
+  etapa: string;
+  actor: string;
+  limit?: number;
+}) {
+  const pool = getDbPool();
+  const limit = Math.min(Math.max(params.limit ?? 500, 1), 2000);
+  const [rows] = await pool.query(
+    `SELECT idpn, dni, nombres, fecha_nac, direccion, referencia, eess_ua,
+            dnimadre, appatmadre, apmatmadre, nombresmadre,
+            dni_padre, nombre_padre, telefonopn, telefono,
+            primera_vd, segunda_vd, tercera_vd, fecha_fin_vd,
+            fechamodificacion, fechamodificacion2
+     FROM padronnominal
+     WHERE ubigeo = ? AND etapa = ? AND actorsocial = ?
+     ORDER BY idpn DESC
+     LIMIT ${limit}`,
+    [params.ubigeo, params.etapa, params.actor],
+  );
+  return rows as PadronAsignadoRow[];
+}
+
 export async function updatePadronResponsable(params: {
   ubigeo: number;
   etapa: string;

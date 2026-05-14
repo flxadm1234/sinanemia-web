@@ -113,7 +113,9 @@ export async function listPersonas(params: {
 export async function listActoresPorCoordinador(dniCoordinador: string) {
   const pool = getDbPool();
   const [rows] = await pool.query(
-    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono FROM persona WHERE UPPER(tipo) LIKE 'ACTOR SOCIAL%' AND cdr = ? ORDER BY idpersona DESC",
+    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono, " +
+      "(SELECT 1 FROM sectorizacion_actor sa WHERE sa.dni_actor_social = persona.dni LIMIT 1) AS sectorizacion " +
+      "FROM persona WHERE UPPER(tipo) LIKE 'ACTOR SOCIAL%' AND cdr = ? ORDER BY idpersona DESC",
     [dniCoordinador],
   );
   return rows as PersonaSafe[];

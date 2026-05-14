@@ -2,13 +2,40 @@ import { requireCoordinador } from "@/lib/auth";
 import { listActoresPorCoordinador } from "@/lib/persona";
 import { AppShell } from "@/components/AppShell";
 import Link from "next/link";
+import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
+import { countAsignadosPorActores } from "@/lib/padronnominal";
+import { CoordinadorActoresClient } from "@/components/CoordinadorActoresClient";
 
 export default async function CoordinadorActoresPage() {
   const user = await requireCoordinador();
   const rows = await listActoresPorCoordinador(user.dni);
+  const ubigeo = user.ubigeo ?? null;
+  const sel = ubigeo ? await getEtapaSeleccionadaPorUbigeo(ubigeo) : null;
+  const etapa = sel?.etapa ?? null;
+  const counts =
+    ubigeo && etapa
+      ? await countAsignadosPorActores({
+          ubigeo,
+          etapa,
+          actores: rows.map((r) => r.dni),
+        })
+      : new Map<string, number>();
+  const clientRows = rows.map((r) => {
+    const nombre = `${r.nombrecompleto ?? ""} ${r.apellidos ?? ""}`.trim() || r.dni;
+    return {
+      idpersona: r.idpersona,
+      dni: r.dni,
+      nombre,
+      ubigeo: r.ubigeo ?? null,
+      telefono: (r as any).telefono ?? null,
+      estado: r.estado ?? null,
+      sectorizacion: (r as any).sectorizacion ?? null,
+      ninos: counts.get(r.dni) ?? 0,
+    };
+  });
 
   return (
-    <AppShell user={user} title="Actores sociales">
+    <AppShell user={user} title="Actores sociales" fullWidth>
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -17,6 +44,18 @@ export default async function CoordinadorActoresPage() {
             </div>
             <div className="mt-1 text-sm text-zinc-600">
               Listado según CDR = tu DNI ({user.dni})
+              {ubigeo ? (
+                <>
+                  {" "}
+                  · Ubigeo: <span className="font-semibold">{ubigeo}</span>
+                </>
+              ) : null}
+              {etapa ? (
+                <>
+                  {" "}
+                  · Etapa: <span className="font-semibold">{etapa}</span>
+                </>
+              ) : null}
             </div>
           </div>
           <Link
@@ -27,75 +66,7 @@ export default async function CoordinadorActoresPage() {
           </Link>
         </div>
 
-        <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600">
-                <tr>
-                  <th className="px-4 py-3">ID</th>
-                  <th className="px-4 py-3">DNI</th>
-                  <th className="px-4 py-3">Nombre</th>
-                  <th className="px-4 py-3">Ubigeo</th>
-                  <th className="px-4 py-3">Teléfono</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100">
-                {rows.map((r) => {
-                  const nombre =
-                    `${r.nombrecompleto ?? ""} ${r.apellidos ?? ""}`.trim() ||
-                    r.dni;
-                  const activo = (r.estado ?? 0) === 1;
-                  return (
-                    <tr key={r.idpersona} className="hover:bg-zinc-50/50">
-                      <td className="px-4 py-3 text-zinc-700">{r.idpersona}</td>
-                      <td className="px-4 py-3 font-medium text-zinc-900">
-                        {r.dni}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-800">{nombre}</td>
-                      <td className="px-4 py-3 text-zinc-700">
-                        {r.ubigeo ?? "-"}
-                      </td>
-                      <td className="px-4 py-3 text-zinc-700">
-                        {r.telefono ?? "-"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={
-                            "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold " +
-                            (activo
-                              ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                              : "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200")
-                          }
-                        >
-                          {activo ? "Activo" : "Inactivo"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
-                          <Link
-                            href={`/coordinador/actores/${r.idpersona}`}
-                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                          >
-                            Editar
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {rows.length === 0 ? (
-                  <tr>
-                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={7}>
-                      No tienes actores sociales asociados.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <CoordinadorActoresClient rows={clientRows} etapa={etapa} />
       </div>
     </AppShell>
   );

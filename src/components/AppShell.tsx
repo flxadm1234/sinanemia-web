@@ -5,8 +5,10 @@ export function AppShell(props: {
   user: SessionUser;
   title: string;
   children: React.ReactNode;
+  fullWidth?: boolean;
 }) {
-  const { user, title, children } = props;
+  const { user, title, children, fullWidth } = props;
+  const container = fullWidth ? "max-w-none" : "max-w-6xl";
 
   return (
     <div className="flex min-h-full flex-1 bg-zinc-50">
@@ -61,7 +63,7 @@ export function AppShell(props: {
 
       <div className="flex flex-1 flex-col">
         <header className="sticky top-0 z-10 border-b border-zinc-200 bg-white/80 backdrop-blur">
-          <div className="mx-auto w-full max-w-6xl px-5 py-4 flex items-center justify-between gap-4">
+          <div className={`mx-auto w-full ${container} px-5 py-4 flex items-center justify-between gap-4`}>
             <div>
               <div className="text-sm font-semibold text-zinc-900">{title}</div>
               <div className="text-xs text-zinc-500">{user.nombre}</div>
@@ -77,7 +79,7 @@ export function AppShell(props: {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-6">
+        <main className={`mx-auto w-full ${container} flex-1 px-5 py-6`}>
           {children}
         </main>
       </div>
