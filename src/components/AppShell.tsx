@@ -9,7 +9,7 @@ export function AppShell(props: {
   fullWidth?: boolean;
 }) {
   const { user, title, children, fullWidth } = props;
-  const container = fullWidth ? "max-w-none" : "max-w-6xl";
+  const container = fullWidth === false ? "max-w-6xl" : "max-w-none";
 
   return (
     <div className="flex min-h-full flex-1 bg-zinc-50">
