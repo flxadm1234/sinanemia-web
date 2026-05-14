@@ -41,6 +41,14 @@ export async function listMesesByUbigeo(ubigeo: number | string): Promise<MesRow
   return rows as MesRow[];
 }
 
+export async function listMesesAll(): Promise<MesRow[]> {
+  const pool = getDbPool();
+  const [rows] = await pool.query(
+    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo FROM meses ORDER BY ubigeo ASC, year DESC, numero_mes DESC, idmeses DESC",
+  );
+  return rows as MesRow[];
+}
+
 export async function findMesById(params: {
   ubigeo: number | string;
   idmeses: number;
@@ -50,6 +58,15 @@ export async function findMesById(params: {
   const [rows] = await pool.query(
     "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo FROM meses WHERE ubigeo = ? AND idmeses = ? LIMIT 1",
     [ubigeoStr, params.idmeses],
+  );
+  return ((rows as any[])[0] as MesRow | undefined) ?? null;
+}
+
+export async function findMesByIdAny(idmeses: number): Promise<MesRow | null> {
+  const pool = getDbPool();
+  const [rows] = await pool.query(
+    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo FROM meses WHERE idmeses = ? LIMIT 1",
+    [idmeses],
   );
   return ((rows as any[])[0] as MesRow | undefined) ?? null;
 }
@@ -95,6 +112,27 @@ export async function updateMesById(input: {
   const [res] = await pool.query(
     `UPDATE meses SET ${set} WHERE ubigeo = ? AND idmeses = ?`,
     [...values, ubigeoStr, input.idmeses],
+  );
+  return res as any;
+}
+
+export async function updateMesByIdAny(input: {
+  idmeses: number;
+  patch: Partial<{
+    numero_mes: number;
+    meses: string;
+    year: number;
+    ubigeo: string;
+  }>;
+}): Promise<any> {
+  const keys = Object.keys(input.patch) as (keyof typeof input.patch)[];
+  if (!keys.length) return;
+  const pool = getDbPool();
+  const set = keys.map((k) => `${k} = ?`).join(", ");
+  const values = keys.map((k) => (input.patch as any)[k]);
+  const [res] = await pool.query(
+    `UPDATE meses SET ${set} WHERE idmeses = ?`,
+    [...values, input.idmeses],
   );
   return res as any;
 }

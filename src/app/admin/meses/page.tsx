@@ -1,14 +1,14 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminOrSuperAdmin } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
-import { listMesesByUbigeo } from "@/lib/meses";
+import { listMesesAll, listMesesByUbigeo } from "@/lib/meses";
 import { seleccionarMesAction } from "./actions";
 
 export default async function AdminMesesPage() {
-  const user = await requireAdmin();
+  const user = await requireAdminOrSuperAdmin();
   const ubigeo = user.ubigeo ?? null;
 
-  if (!ubigeo) {
+  if (user.tipo === "ADMINISTRADOR" && !ubigeo) {
     return (
       <AppShell user={user} title="Meses">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -18,8 +18,14 @@ export default async function AdminMesesPage() {
     );
   }
 
-  const rows = await listMesesByUbigeo(ubigeo);
-  const selected = rows.find((r) => Number(r.seleccion ?? 0) === 1) ?? null;
+  const rows =
+    user.tipo === "SUPER ADMIN"
+      ? await listMesesAll()
+      : await listMesesByUbigeo(ubigeo as number);
+  const selected =
+    user.tipo === "SUPER ADMIN"
+      ? null
+      : rows.find((r) => Number(r.seleccion ?? 0) === 1) ?? null;
 
   return (
     <AppShell user={user} title="Meses">
@@ -27,16 +33,18 @@ export default async function AdminMesesPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-lg font-semibold text-zinc-900">
-              Meses (ubigeo {ubigeo})
+              {user.tipo === "SUPER ADMIN" ? "Meses (todos los ubigeos)" : `Meses (ubigeo ${ubigeo})`}
             </div>
-            <div className="mt-1 text-sm text-zinc-600">
-              Mes seleccionado:{" "}
-              <span className="font-semibold">
-                {selected
-                  ? `${selected.meses} ${selected.year} (N° ${selected.numero_mes})`
-                  : "—"}
-              </span>
-            </div>
+            {user.tipo !== "SUPER ADMIN" ? (
+              <div className="mt-1 text-sm text-zinc-600">
+                Mes seleccionado:{" "}
+                <span className="font-semibold">
+                  {selected
+                    ? `${selected.meses} ${selected.year} (N° ${selected.numero_mes})`
+                    : "—"}
+                </span>
+              </div>
+            ) : null}
           </div>
           <Link
             href="/admin/meses/nuevo"
@@ -52,6 +60,7 @@ export default async function AdminMesesPage() {
               <thead className="bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600">
                 <tr>
                   <th className="px-4 py-3">ID</th>
+                  <th className="px-4 py-3">Ubigeo</th>
                   <th className="px-4 py-3">Mes</th>
                   <th className="px-4 py-3">N°</th>
                   <th className="px-4 py-3">Año</th>
@@ -65,6 +74,7 @@ export default async function AdminMesesPage() {
                   return (
                     <tr key={r.idmeses} className="hover:bg-zinc-50/50">
                       <td className="px-4 py-3 text-zinc-700">{r.idmeses}</td>
+                      <td className="px-4 py-3 text-zinc-700">{r.ubigeo}</td>
                       <td className="px-4 py-3 font-medium text-zinc-900">
                         {r.meses}
                       </td>
@@ -96,6 +106,11 @@ export default async function AdminMesesPage() {
                               name="idmeses"
                               value={String(r.idmeses)}
                             />
+                            <input
+                              type="hidden"
+                              name="ubigeo"
+                              value={String(r.ubigeo ?? "")}
+                            />
                             <button
                               disabled={isSelected}
                               className="rounded-xl bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
@@ -112,9 +127,9 @@ export default async function AdminMesesPage() {
                   <tr>
                     <td
                       className="px-4 py-10 text-center text-zinc-500"
-                      colSpan={6}
+                      colSpan={7}
                     >
-                      No hay meses registrados para tu ubigeo.
+                      No hay meses registrados.
                     </td>
                   </tr>
                 ) : null}

@@ -7,6 +7,8 @@ type State = { ok: false; message: string } | null;
 
 export function MesForm(props: {
   action: any;
+  allowUbigeo?: boolean;
+  defaultUbigeo?: string;
   initial?: {
     idmeses?: number;
     numero_mes?: number;
@@ -15,7 +17,7 @@ export function MesForm(props: {
     seleccion?: number | null;
   };
 }) {
-  const { action, initial } = props;
+  const { action, initial, allowUbigeo, defaultUbigeo } = props;
   const [state, formAction] = useActionState<State, FormData>(action, null);
 
   return (
@@ -28,6 +30,23 @@ export function MesForm(props: {
 
       {typeof initial?.idmeses === "number" ? (
         <input type="hidden" name="idmeses" value={String(initial.idmeses)} />
+      ) : null}
+
+      {allowUbigeo ? (
+        <div>
+          <label className="block text-sm font-medium text-zinc-900">
+            Ubigeo
+          </label>
+          <input
+            name="ubigeo"
+            maxLength={6}
+            defaultValue={defaultUbigeo ?? ""}
+            placeholder="Ej: 160101"
+            className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          />
+        </div>
+      ) : defaultUbigeo ? (
+        <input type="hidden" name="ubigeo" value={defaultUbigeo} />
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

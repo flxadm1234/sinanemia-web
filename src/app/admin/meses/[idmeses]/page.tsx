@@ -1,23 +1,26 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminOrSuperAdmin } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { MesForm } from "@/components/MesForm";
-import { findMesById } from "@/lib/meses";
+import { findMesById, findMesByIdAny } from "@/lib/meses";
 import { updateMesAction } from "../actions";
 
 export default async function AdminMesEditPage(props: {
   params: Promise<{ idmeses: string }>;
 }) {
-  const user = await requireAdmin();
+  const user = await requireAdminOrSuperAdmin();
   const ubigeo = user.ubigeo ?? null;
-  if (!ubigeo) notFound();
+  if (user.tipo === "ADMINISTRADOR" && !ubigeo) notFound();
 
   const { idmeses } = await props.params;
   const id = Number(idmeses);
   if (!Number.isFinite(id) || id <= 0) notFound();
 
-  const row = await findMesById({ ubigeo, idmeses: id });
+  const row =
+    user.tipo === "SUPER ADMIN"
+      ? await findMesByIdAny(id)
+      : await findMesById({ ubigeo: ubigeo as number, idmeses: id });
   if (!row) notFound();
 
   return (
@@ -29,7 +32,7 @@ export default async function AdminMesEditPage(props: {
               Editar mes
             </div>
             <div className="mt-1 text-sm text-zinc-600">
-              Ubigeo {ubigeo} · ID {row.idmeses}
+              Ubigeo {row.ubigeo} · ID {row.idmeses}
             </div>
           </div>
           <Link
@@ -43,6 +46,8 @@ export default async function AdminMesEditPage(props: {
         <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
           <MesForm
             action={updateMesAction}
+            allowUbigeo={user.tipo === "SUPER ADMIN"}
+            defaultUbigeo={String(row.ubigeo ?? "")}
             initial={{
               idmeses: row.idmeses,
               numero_mes: row.numero_mes,
