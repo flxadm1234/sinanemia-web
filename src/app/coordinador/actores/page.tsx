@@ -38,6 +38,7 @@ export default async function CoordinadorActoresPage() {
                   <th className="px-4 py-3">Ubigeo</th>
                   <th className="px-4 py-3">Teléfono</th>
                   <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
@@ -71,12 +72,22 @@ export default async function CoordinadorActoresPage() {
                           {activo ? "Activo" : "Inactivo"}
                         </span>
                       </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/coordinador/actores/${r.idpersona}`}
+                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                          >
+                            Editar
+                          </Link>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={6}>
+                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={7}>
                       No tienes actores sociales asociados.
                     </td>
                   </tr>
