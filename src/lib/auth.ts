@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 export type SessionUser = {
   dni: string;
-  tipo: "ADMINISTRADOR" | "COORDINADOR" | "ACTOR SOCIAL";
+  tipo: "SUPER ADMIN" | "ADMINISTRADOR" | "COORDINADOR" | "ACTOR SOCIAL";
   ubigeo: number | null;
   nombre: string;
 };
@@ -62,6 +62,7 @@ export async function getSession(): Promise<SessionUser | null> {
 
     if (!dni || !nombre) return null;
     if (
+      tipo !== "SUPER ADMIN" &&
       tipo !== "ADMINISTRADOR" &&
       tipo !== "COORDINADOR" &&
       tipo !== "ACTOR SOCIAL"
@@ -87,6 +88,19 @@ export async function requireAdmin() {
   return s;
 }
 
+export async function requireAdminOrSuperAdmin() {
+  const s = await requireSession();
+  if (s.tipo !== "ADMINISTRADOR" && s.tipo !== "SUPER ADMIN")
+    redirect(routeForRole(s.tipo));
+  return s;
+}
+
+export async function requireSuperAdmin() {
+  const s = await requireSession();
+  if (s.tipo !== "SUPER ADMIN") redirect(routeForRole(s.tipo));
+  return s;
+}
+
 export async function requireCoordinador() {
   const s = await requireSession();
   if (s.tipo !== "COORDINADOR") redirect(routeForRole(s.tipo));
@@ -94,6 +108,7 @@ export async function requireCoordinador() {
 }
 
 export function routeForRole(tipo: SessionUser["tipo"]) {
+  if (tipo === "SUPER ADMIN") return "/admin/personas";
   if (tipo === "ADMINISTRADOR") return "/admin/personas";
   if (tipo === "COORDINADOR") return "/coordinador/actores";
   return "/actor";

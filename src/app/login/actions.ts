@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { createSessionCookie, routeForRole } from "@/lib/auth";
-import { findPersonaByDni, getRoleFromPersonaTipo } from "@/lib/persona";
+import { findPersonaForLogin, getRoleFromPersonaTipo } from "@/lib/persona";
 import { redirect } from "next/navigation";
 
 const loginSchema = z.object({
@@ -21,9 +21,9 @@ export async function loginAction(_: unknown, formData: FormData) {
   }
 
   const { dni, clave } = parsed.data;
-  let persona: Awaited<ReturnType<typeof findPersonaByDni>> | null = null;
+  let persona: Awaited<ReturnType<typeof findPersonaForLogin>> | null = null;
   try {
-    persona = await findPersonaByDni(dni);
+    persona = await findPersonaForLogin(dni, clave);
   } catch {
     return {
       ok: false as const,
@@ -37,10 +37,6 @@ export async function loginAction(_: unknown, formData: FormData) {
 
   const role = getRoleFromPersonaTipo(persona.tipo);
   if (!role) return { ok: false as const, error: "Usuario sin rol válido." };
-
-  const claveDb = (persona as any).clave ? String((persona as any).clave) : "";
-  if (claveDb.trim() !== clave.trim())
-    return { ok: false as const, error: "Credenciales incorrectas." };
 
   try {
     await createSessionCookie({

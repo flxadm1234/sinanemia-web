@@ -1,6 +1,7 @@
 import { requireCoordinador } from "@/lib/auth";
 import { listActoresPorCoordinador } from "@/lib/persona";
 import { AppShell } from "@/components/AppShell";
+import Link from "next/link";
 
 export default async function CoordinadorActoresPage() {
   const user = await requireCoordinador();
@@ -9,13 +10,21 @@ export default async function CoordinadorActoresPage() {
   return (
     <AppShell user={user} title="Actores sociales">
       <div className="flex flex-col gap-4">
-        <div>
-          <div className="text-lg font-semibold text-zinc-900">
-            Tus actores sociales
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="text-lg font-semibold text-zinc-900">
+              Tus actores sociales
+            </div>
+            <div className="mt-1 text-sm text-zinc-600">
+              Listado según CDR = tu DNI ({user.dni})
+            </div>
           </div>
-          <div className="mt-1 text-sm text-zinc-600">
-            Listado según CDR = tu DNI ({user.dni})
-          </div>
+          <Link
+            href="/coordinador/actores/nuevo"
+            className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
+          >
+            Nuevo actor social
+          </Link>
         </div>
 
         <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
@@ -23,9 +32,11 @@ export default async function CoordinadorActoresPage() {
             <table className="min-w-full text-sm">
               <thead className="bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600">
                 <tr>
+                  <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">DNI</th>
                   <th className="px-4 py-3">Nombre</th>
                   <th className="px-4 py-3">Ubigeo</th>
+                  <th className="px-4 py-3">Teléfono</th>
                   <th className="px-4 py-3">Estado</th>
                 </tr>
               </thead>
@@ -36,13 +47,17 @@ export default async function CoordinadorActoresPage() {
                     r.dni;
                   const activo = (r.estado ?? 0) === 1;
                   return (
-                    <tr key={r.dni} className="hover:bg-zinc-50/50">
+                    <tr key={r.idpersona} className="hover:bg-zinc-50/50">
+                      <td className="px-4 py-3 text-zinc-700">{r.idpersona}</td>
                       <td className="px-4 py-3 font-medium text-zinc-900">
                         {r.dni}
                       </td>
                       <td className="px-4 py-3 text-zinc-800">{nombre}</td>
                       <td className="px-4 py-3 text-zinc-700">
                         {r.ubigeo ?? "-"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-700">
+                        {r.telefono ?? "-"}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -61,7 +76,7 @@ export default async function CoordinadorActoresPage() {
                 })}
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={4}>
+                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={6}>
                       No tienes actores sociales asociados.
                     </td>
                   </tr>

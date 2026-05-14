@@ -1,20 +1,25 @@
 import Link from "next/link";
-import { requireAdmin } from "@/lib/auth";
-import { listActoresSociales } from "@/lib/persona";
+import { requireAdminOrSuperAdmin } from "@/lib/auth";
+import { listPersonas } from "@/lib/persona";
 import { AppShell } from "@/components/AppShell";
 import { setEstadoAction } from "./actions";
 
 export default async function AdminPersonasPage(props: {
-  searchParams: Promise<{ estado?: string; q?: string }>;
+  searchParams: Promise<{ estado?: string; q?: string; tipo?: string }>;
 }) {
-  const user = await requireAdmin();
-  const { estado, q } = await props.searchParams;
+  const user = await requireAdminOrSuperAdmin();
+  const { estado, q, tipo } = await props.searchParams;
 
   const estadoNum =
     estado === "1" ? 1 : estado === "0" ? 0 : undefined;
 
-  const rows = await listActoresSociales({
+  const ubigeoFilter =
+    user.tipo === "ADMINISTRADOR" ? user.ubigeo ?? undefined : undefined;
+
+  const rows = await listPersonas({
+    ubigeo: ubigeoFilter,
     estado: estadoNum,
+    tipo: tipo ?? undefined,
     q: q ?? undefined,
   });
 
@@ -24,10 +29,12 @@ export default async function AdminPersonasPage(props: {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-lg font-semibold text-zinc-900">
-              Actores sociales
+              Usuarios
             </div>
             <div className="mt-1 text-sm text-zinc-600">
-              Administra usuarios por estado y coordinador asignado
+              {user.tipo === "SUPER ADMIN"
+                ? "Vista global de todos los ubigeos"
+                : `Vista por ubigeo: ${user.ubigeo ?? "-"}`}
             </div>
           </div>
           <Link
@@ -44,11 +51,24 @@ export default async function AdminPersonasPage(props: {
               <input
                 name="q"
                 defaultValue={q ?? ""}
-                placeholder="Buscar por DNI, nombres, apellidos o CDR..."
+                placeholder="Buscar por DNI, nombres, apellidos, CDR o teléfono..."
                 className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
               />
             </div>
             <div className="flex gap-2">
+              <select
+                name="tipo"
+                defaultValue={tipo ?? ""}
+                className="rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              >
+                <option value="">Todos</option>
+                <option value="ACTOR SOCIAL">ACTOR SOCIAL</option>
+                <option value="COORDINADOR">COORDINADOR</option>
+                <option value="ADMINISTRADOR">ADMINISTRADOR</option>
+                {user.tipo === "SUPER ADMIN" ? (
+                  <option value="SUPER ADMIN">SUPER ADMIN</option>
+                ) : null}
+              </select>
               <select
                 name="estado"
                 defaultValue={estado ?? ""}
@@ -70,10 +90,13 @@ export default async function AdminPersonasPage(props: {
             <table className="min-w-full text-sm">
               <thead className="bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600">
                 <tr>
+                  <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">DNI</th>
                   <th className="px-4 py-3">Nombre</th>
+                  <th className="px-4 py-3">Tipo</th>
                   <th className="px-4 py-3">CDR</th>
                   <th className="px-4 py-3">Ubigeo</th>
+                  <th className="px-4 py-3">Teléfono</th>
                   <th className="px-4 py-3">Estado</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
@@ -85,14 +108,19 @@ export default async function AdminPersonasPage(props: {
                     r.dni;
                   const activo = (r.estado ?? 0) === 1;
                   return (
-                    <tr key={r.dni} className="hover:bg-zinc-50/50">
+                    <tr key={r.idpersona} className="hover:bg-zinc-50/50">
+                      <td className="px-4 py-3 text-zinc-700">{r.idpersona}</td>
                       <td className="px-4 py-3 font-medium text-zinc-900">
                         {r.dni}
                       </td>
                       <td className="px-4 py-3 text-zinc-800">{nombre}</td>
+                      <td className="px-4 py-3 text-zinc-700">{r.tipo ?? "-"}</td>
                       <td className="px-4 py-3 text-zinc-700">{r.cdr}</td>
                       <td className="px-4 py-3 text-zinc-700">
                         {r.ubigeo ?? "-"}
+                      </td>
+                      <td className="px-4 py-3 text-zinc-700">
+                        {r.telefono ?? "-"}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -109,13 +137,17 @@ export default async function AdminPersonasPage(props: {
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
                           <Link
-                            href={`/admin/personas/${r.dni}`}
+                            href={`/admin/personas/${r.idpersona}`}
                             className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
                           >
                             Ver
                           </Link>
                           <form action={setEstadoAction}>
-                            <input type="hidden" name="dni" value={r.dni} />
+                            <input
+                              type="hidden"
+                              name="idpersona"
+                              value={String(r.idpersona)}
+                            />
                             <input
                               type="hidden"
                               name="estado"
@@ -132,7 +164,7 @@ export default async function AdminPersonasPage(props: {
                 })}
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={6}>
+                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={9}>
                       No hay resultados con los filtros actuales.
                     </td>
                   </tr>

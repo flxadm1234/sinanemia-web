@@ -1,22 +1,33 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
-import { findPersonaByDni } from "@/lib/persona";
+import { requireAdminOrSuperAdmin } from "@/lib/auth";
+import { findPersonaById, getRoleFromPersonaTipo } from "@/lib/persona";
 import { AppShell } from "@/components/AppShell";
 import { updatePersonaAction } from "../actions";
+import { CoordinatorCombobox } from "@/components/CoordinatorCombobox";
 
 export default async function AdminPersonaDetailPage(props: {
-  params: Promise<{ dni: string }>;
+  params: Promise<{ idpersona: string }>;
 }) {
-  const user = await requireAdmin();
-  const { dni } = await props.params;
+  const user = await requireAdminOrSuperAdmin();
+  const { idpersona } = await props.params;
+  const id = Number(idpersona);
+  if (!Number.isFinite(id) || id <= 0) notFound();
 
-  const persona = await findPersonaByDni(dni);
+  const persona = await findPersonaById(id);
   if (!persona) notFound();
+
+  if (user.tipo === "ADMINISTRADOR") {
+    if ((persona.ubigeo ?? null) !== (user.ubigeo ?? null)) notFound();
+  }
 
   const nombre =
     `${persona.nombrecompleto ?? ""} ${persona.apellidos ?? ""}`.trim() ||
     persona.dni;
+
+  const role = getRoleFromPersonaTipo(persona.tipo);
+  const allowUbigeo = user.tipo === "SUPER ADMIN";
+  const allowCdr = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
 
   return (
     <AppShell user={user} title="Detalle de usuario">
@@ -24,7 +35,10 @@ export default async function AdminPersonaDetailPage(props: {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-lg font-semibold text-zinc-900">{nombre}</div>
-            <div className="mt-1 text-sm text-zinc-600">DNI: {persona.dni}</div>
+            <div className="mt-1 text-sm text-zinc-600">
+              ID: {persona.idpersona} · DNI: {persona.dni} · Tipo:{" "}
+              {persona.tipo ?? "-"}
+            </div>
           </div>
           <Link
             href="/admin/personas"
@@ -37,11 +51,17 @@ export default async function AdminPersonaDetailPage(props: {
         <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
           <div className="text-sm font-semibold text-zinc-900">Editar</div>
           <div className="mt-1 text-sm text-zinc-600">
-            Guarda cambios sin alterar otras tablas del sistema
+            El tipo no se puede modificar.{" "}
+            {role === "ACTOR SOCIAL"
+              ? "Puedes ajustar datos y coordinador según permisos."
+              : "Puedes ajustar datos según permisos."}
           </div>
 
-          <form action={updatePersonaAction} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <input type="hidden" name="dni" value={persona.dni} />
+          <form
+            action={updatePersonaAction}
+            className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2"
+          >
+            <input type="hidden" name="idpersona" value={String(persona.idpersona)} />
 
             <div>
               <label className="block text-sm font-medium text-zinc-900">
@@ -67,26 +87,34 @@ export default async function AdminPersonaDetailPage(props: {
 
             <div>
               <label className="block text-sm font-medium text-zinc-900">
-                Tipo
+                Teléfono
               </label>
-              <select
-                name="tipo"
-                defaultValue={persona.tipo ?? ""}
+              <input
+                name="telefono"
+                defaultValue={(persona as any).telefono ?? ""}
                 className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-              >
-                <option value="ACTOR SOCIAL">ACTOR SOCIAL</option>
-                <option value="COORDINADOR">COORDINADOR</option>
-                <option value="ADMINISTRADOR">ADMINISTRADOR</option>
-              </select>
+              />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-zinc-900">
-                CDR (DNI coordinador)
+                Email
               </label>
               <input
-                name="cdr"
-                defaultValue={persona.cdr ?? ""}
+                name="email"
+                type="email"
+                defaultValue={(persona as any).email ?? ""}
+                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-zinc-900">
+                Dirección
+              </label>
+              <input
+                name="direccion"
+                defaultValue={(persona as any).direccion ?? ""}
                 className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
               />
             </div>
@@ -95,12 +123,47 @@ export default async function AdminPersonaDetailPage(props: {
               <label className="block text-sm font-medium text-zinc-900">
                 Ubigeo
               </label>
-              <input
-                name="ubigeo"
-                defaultValue={persona.ubigeo ?? ""}
-                inputMode="numeric"
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-              />
+              {allowUbigeo ? (
+                <input
+                  name="ubigeo"
+                  defaultValue={persona.ubigeo ?? ""}
+                  inputMode="numeric"
+                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                />
+              ) : (
+                <>
+                  <input
+                    type="hidden"
+                    name="ubigeo"
+                    value={persona.ubigeo ?? ""}
+                  />
+                  <div className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm text-zinc-700">
+                    {persona.ubigeo ?? "-"}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-900">
+                Coordinador (CDR)
+              </label>
+              {allowCdr ? (
+                <div className="mt-1">
+                  <CoordinatorCombobox
+                    name="cdr"
+                    defaultValue={persona.cdr ?? ""}
+                    ubigeo={user.tipo === "ADMINISTRADOR" ? user.ubigeo ?? null : persona.ubigeo ?? null}
+                  />
+                </div>
+              ) : (
+                <>
+                  <input type="hidden" name="cdr" value={persona.cdr ?? ""} />
+                  <div className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm text-zinc-700">
+                    {persona.cdr ?? "-"}
+                  </div>
+                </>
+              )}
             </div>
 
             <div>
