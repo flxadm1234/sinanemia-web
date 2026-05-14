@@ -37,12 +37,20 @@ export default async function AdminPersonasPage(props: {
                 : `Vista por ubigeo: ${user.ubigeo ?? "-"}`}
             </div>
           </div>
-          <Link
-            href="/admin/personas/nuevo"
-            className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
-          >
-            Nuevo usuario
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/personas/importar"
+              className="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+            >
+              Importar Excel
+            </Link>
+            <Link
+              href="/admin/personas/nuevo"
+              className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              Nuevo usuario
+            </Link>
+          </div>
         </div>
 
         <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
