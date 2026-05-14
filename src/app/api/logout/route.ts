@@ -3,9 +3,13 @@ import { NextResponse } from "next/server";
 const cookieName = "sinanemia_session";
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  url.pathname = "/login";
-  url.search = "";
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  const proto =
+    request.headers.get("x-forwarded-proto") ??
+    (process.env.NODE_ENV === "production" ? "https" : "http");
+
+  const base = host ? `${proto}://${host}` : request.url;
+  const url = new URL("/login", base);
 
   const res = NextResponse.redirect(url);
   res.cookies.set(cookieName, "", {
