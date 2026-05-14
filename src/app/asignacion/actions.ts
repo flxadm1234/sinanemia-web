@@ -54,7 +54,9 @@ export async function asignarAction(
 
   const actor = await findActorSocialByDni(parsed.data.actor);
   if (!actor) return { ok: false, message: "Actor social no encontrado." };
-  if ((actor.ubigeo ?? null) !== ubigeo)
+  const actorUbigeo =
+    actor.ubigeo == null ? null : Number(String(actor.ubigeo).trim());
+  if (!Number.isFinite(actorUbigeo) || actorUbigeo !== ubigeo)
     return { ok: false, message: "El actor social no pertenece a tu ubigeo." };
 
   const cdr = String(actor.cdr ?? "").trim();

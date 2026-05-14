@@ -54,7 +54,9 @@ export async function GET(request: Request) {
   if (!actor) {
     return NextResponse.json({ error: "actor_not_found" }, { status: 404 });
   }
-  if ((actor.ubigeo ?? null) !== ubigeo) {
+  const actorUbigeo =
+    actor.ubigeo == null ? null : Number(String(actor.ubigeo).trim());
+  if (!Number.isFinite(actorUbigeo) || actorUbigeo !== ubigeo) {
     return NextResponse.json({ error: "actor_outside_ubigeo" }, { status: 403 });
   }
   const cdr = String(actor.cdr ?? "").trim();

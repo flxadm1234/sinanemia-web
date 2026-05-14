@@ -35,10 +35,13 @@ export async function GET(request: Request) {
   if (!actor) {
     return NextResponse.json({ error: "actor_not_found" }, { status: 404 });
   }
-  if ((actor.ubigeo ?? null) !== ubigeo) {
+  const actorUbigeo =
+    actor.ubigeo == null ? null : Number(String(actor.ubigeo).trim());
+  if (!Number.isFinite(actorUbigeo) || actorUbigeo !== ubigeo) {
     return NextResponse.json({ error: "actor_outside_ubigeo" }, { status: 403 });
   }
-  if (session.tipo === "COORDINADOR" && String(actor.cdr ?? "") !== session.dni) {
+  const cdr = String(actor.cdr ?? "").trim();
+  if (session.tipo === "COORDINADOR" && cdr !== session.dni) {
     return NextResponse.json({ error: "actor_not_owned" }, { status: 403 });
   }
 
@@ -56,7 +59,7 @@ export async function GET(request: Request) {
       dni: actor.dni,
       nombre:
         `${actor.nombrecompleto ?? ""} ${actor.apellidos ?? ""}`.trim() || actor.dni,
-      cdr: String(actor.cdr ?? "").trim() || null,
+      cdr: cdr || null,
     },
     rows,
   });

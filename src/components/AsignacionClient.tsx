@@ -69,8 +69,8 @@ export function AsignacionClient(props: {
 
   return (
     <div className="flex flex-col gap-4">
-      {state && !open ? (
-        <div className="fixed inset-x-0 top-3 z-50 px-4">
+      {state ? (
+        <div className="fixed inset-x-0 top-3 z-[100] px-4">
           <div
             className={
               "mx-auto w-full max-w-2xl rounded-2xl border px-4 py-3 text-sm shadow-lg " +
@@ -209,26 +209,6 @@ export function AsignacionClient(props: {
                 Cerrar
               </button>
             </div>
-
-            {state ? (
-              <div
-                className={
-                  "mt-4 rounded-2xl border px-4 py-3 text-sm " +
-                  (state.ok
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                    : "border-amber-200 bg-amber-50 text-amber-900")
-                }
-              >
-                {state.ok ? (
-                  <>
-                    Asignación completada. Registros actualizados:{" "}
-                    <span className="font-semibold">{state.affected}</span>
-                  </>
-                ) : (
-                  state.message
-                )}
-              </div>
-            ) : null}
 
             <form action={formAction as any} className="mt-5 flex flex-col gap-4">
               <input type="hidden" name="ids" value={JSON.stringify(ids)} />

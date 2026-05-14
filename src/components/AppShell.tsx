@@ -70,7 +70,10 @@ export function AppShell(props: {
                 <MobileNav user={user} />
                 <div className="text-sm font-semibold text-zinc-900">{title}</div>
               </div>
-              <div className="text-xs text-zinc-500">{user.nombre}</div>
+              <div className="text-xs text-zinc-500">
+                {user.nombre}
+                {typeof user.ubigeo === "number" ? ` (${user.ubigeo})` : ""}
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <Link
