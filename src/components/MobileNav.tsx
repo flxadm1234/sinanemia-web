@@ -69,7 +69,7 @@ export function MobileNav(props: { user: SessionUser }) {
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-40 md:hidden">
+        <div className="fixed inset-0 z-[9997] md:hidden">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}

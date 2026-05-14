@@ -3,6 +3,9 @@ import { requireAdminOrSuperAdmin } from "@/lib/auth";
 import { listPersonas } from "@/lib/persona";
 import { AppShell } from "@/components/AppShell";
 import { setEstadoAction } from "./actions";
+import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
+import { countAsignadosPorActores } from "@/lib/padronnominal";
+import { NinosAsignadosButton } from "@/components/NinosAsignadosButton";
 
 export default async function AdminPersonasPage(props: {
   searchParams: Promise<{ estado?: string; q?: string; tipo?: string }>;
@@ -22,6 +25,33 @@ export default async function AdminPersonasPage(props: {
     tipo: tipo ?? undefined,
     q: q ?? undefined,
   });
+
+  const actorRows = rows.filter((r) =>
+    String(r.tipo ?? "").toUpperCase().startsWith("ACTOR SOCIAL"),
+  );
+  const ninosMap = new Map<string, number>();
+  if (actorRows.length) {
+    const byUbigeo = new Map<number, string[]>();
+    for (const r of actorRows) {
+      const u = Number(r.ubigeo ?? NaN);
+      if (!Number.isFinite(u)) continue;
+      const dni = String(r.dni ?? "").trim();
+      if (!dni) continue;
+      const arr = byUbigeo.get(u) ?? [];
+      arr.push(dni);
+      byUbigeo.set(u, arr);
+    }
+
+    for (const [u, dnis] of byUbigeo.entries()) {
+      const sel = await getEtapaSeleccionadaPorUbigeo(u);
+      const etapa = sel?.etapa ?? "";
+      if (!etapa) continue;
+      const counts = await countAsignadosPorActores({ ubigeo: u, etapa, actores: dnis });
+      for (const dni of dnis) {
+        ninosMap.set(dni, counts.get(dni) ?? 0);
+      }
+    }
+  }
 
   return (
     <AppShell user={user} title="Usuarios">
@@ -106,6 +136,7 @@ export default async function AdminPersonasPage(props: {
                   <th className="px-4 py-3">Ubigeo</th>
                   <th className="px-4 py-3">Teléfono</th>
                   <th className="px-4 py-3">Sectorización</th>
+                  <th className="px-4 py-3">Niños</th>
                   <th className="px-4 py-3">Estado</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
@@ -119,6 +150,7 @@ export default async function AdminPersonasPage(props: {
                   const isActor =
                     String(r.tipo ?? "").toUpperCase().startsWith("ACTOR SOCIAL");
                   const hasSector = (r.sectorizacion ?? null) === 1;
+                  const ninos = isActor ? ninosMap.get(r.dni) ?? 0 : 0;
                   return (
                     <tr key={r.idpersona} className="hover:bg-zinc-50/50">
                       <td className="px-4 py-3 text-zinc-700">{r.idpersona}</td>
@@ -146,6 +178,17 @@ export default async function AdminPersonasPage(props: {
                           >
                             {hasSector ? "Registrado" : "Pendiente"}
                           </span>
+                        ) : (
+                          <span className="text-zinc-400">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isActor ? (
+                          <NinosAsignadosButton
+                            actorDni={r.dni}
+                            actorNombre={nombre}
+                            count={ninos}
+                          />
                         ) : (
                           <span className="text-zinc-400">-</span>
                         )}
@@ -200,7 +243,7 @@ export default async function AdminPersonasPage(props: {
                 })}
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={10}>
+                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={11}>
                       No hay resultados con los filtros actuales.
                     </td>
                   </tr>

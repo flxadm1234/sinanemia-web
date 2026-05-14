@@ -6,10 +6,14 @@ import { AsignacionClient } from "@/components/AsignacionClient";
 import { asignarAction } from "./actions";
 
 export default async function AsignacionPage(props: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    na?: string | string[];
+    a?: string | string[];
+  }>;
 }) {
   const user = await requireAdminOrCoordinador();
-  const { q } = await props.searchParams;
+  const { q, na, a } = await props.searchParams;
 
   const ubigeo = user.ubigeo ?? null;
   if (!ubigeo) {
@@ -25,11 +29,23 @@ export default async function AsignacionPage(props: {
   const sel = await getEtapaSeleccionadaPorUbigeo(ubigeo);
   const etapa = sel?.etapa ?? "";
 
+  const naVal = Array.isArray(na) ? na[na.length - 1] : na;
+  const aVal = Array.isArray(a) ? a[a.length - 1] : a;
+  const includeNoAsignados = naVal == null ? true : naVal !== "0";
+  const includeAsignados = aVal == null ? true : aVal !== "0";
+  const asignadosFilter =
+    includeAsignados && !includeNoAsignados
+      ? ("assigned" as const)
+      : includeNoAsignados && !includeAsignados
+        ? ("unassigned" as const)
+        : ("all" as const);
+
   const rows = etapa
     ? await searchPadronNominal({
         ubigeo,
         etapa,
         q: q ?? "",
+        asignados: asignadosFilter,
         limit: 250,
       })
     : [];
@@ -46,7 +62,8 @@ export default async function AsignacionPage(props: {
             etapa del mes seleccionado.
           </div>
 
-          <form className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+          <form className="mt-4 flex flex-col gap-3">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
             <input
               name="q"
               defaultValue={q ?? ""}
@@ -56,6 +73,35 @@ export default async function AsignacionPage(props: {
             <button className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800">
               Buscar
             </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4">
+              <input type="hidden" name="na" value="0" />
+              <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="checkbox"
+                  name="na"
+                  value="1"
+                  defaultChecked={includeNoAsignados}
+                  className="h-4 w-4 rounded border-zinc-300"
+                />
+                No asignados
+              </label>
+              <input type="hidden" name="a" value="0" />
+              <label className="inline-flex items-center gap-2 text-sm text-zinc-700">
+                <input
+                  type="checkbox"
+                  name="a"
+                  value="1"
+                  defaultChecked={includeAsignados}
+                  className="h-4 w-4 rounded border-zinc-300"
+                />
+                Asignados
+              </label>
+              <div className="text-xs text-zinc-500">
+                No asignados = actor social 0 o vacío.
+              </div>
+            </div>
           </form>
 
           <div className="mt-4 text-sm text-zinc-700">

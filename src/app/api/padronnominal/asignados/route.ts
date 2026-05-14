@@ -10,7 +10,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  if (session.tipo !== "ADMINISTRADOR" && session.tipo !== "COORDINADOR") {
+  if (
+    session.tipo !== "ADMINISTRADOR" &&
+    session.tipo !== "COORDINADOR" &&
+    session.tipo !== "SUPER ADMIN"
+  ) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -20,9 +24,22 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "invalid_actor" }, { status: 400 });
   }
 
-  const ubigeo = session.ubigeo;
+  const actor = await findActorSocialByDni(actorDni);
+  if (!actor) {
+    return NextResponse.json({ error: "actor_not_found" }, { status: 404 });
+  }
+  const actorUbigeo =
+    actor.ubigeo == null ? null : Number(String(actor.ubigeo).trim());
+  if (!Number.isFinite(actorUbigeo)) {
+    return NextResponse.json({ error: "actor_missing_ubigeo" }, { status: 400 });
+  }
+
+  const ubigeo = session.tipo === "SUPER ADMIN" ? actorUbigeo : session.ubigeo;
   if (!ubigeo) {
     return NextResponse.json({ error: "missing_ubigeo" }, { status: 400 });
+  }
+  if (session.tipo !== "SUPER ADMIN" && actorUbigeo !== ubigeo) {
+    return NextResponse.json({ error: "actor_outside_ubigeo" }, { status: 403 });
   }
 
   const sel = await getEtapaSeleccionadaPorUbigeo(ubigeo);
@@ -31,15 +48,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "missing_etapa" }, { status: 400 });
   }
 
-  const actor = await findActorSocialByDni(actorDni);
-  if (!actor) {
-    return NextResponse.json({ error: "actor_not_found" }, { status: 404 });
-  }
-  const actorUbigeo =
-    actor.ubigeo == null ? null : Number(String(actor.ubigeo).trim());
-  if (!Number.isFinite(actorUbigeo) || actorUbigeo !== ubigeo) {
-    return NextResponse.json({ error: "actor_outside_ubigeo" }, { status: 403 });
-  }
   const cdr = String(actor.cdr ?? "").trim();
   if (session.tipo === "COORDINADOR" && cdr !== session.dni) {
     return NextResponse.json({ error: "actor_not_owned" }, { status: 403 });

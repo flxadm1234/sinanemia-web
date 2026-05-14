@@ -119,11 +119,18 @@ export async function searchPadronNominal(params: {
   ubigeo: number;
   etapa: string;
   q?: string;
+  asignados?: "all" | "assigned" | "unassigned";
   limit?: number;
 }) {
   const pool = getDbPool();
   const where: string[] = ["ubigeo = ?", "etapa = ?"];
   const values: any[] = [params.ubigeo, params.etapa];
+
+  if (params.asignados === "unassigned") {
+    where.push("(actorsocial IS NULL OR TRIM(actorsocial) = '' OR TRIM(actorsocial) = '0')");
+  } else if (params.asignados === "assigned") {
+    where.push("(actorsocial IS NOT NULL AND TRIM(actorsocial) <> '' AND TRIM(actorsocial) <> '0')");
+  }
 
   if (params.q && params.q.trim()) {
     const like = `%${params.q.trim()}%`;
