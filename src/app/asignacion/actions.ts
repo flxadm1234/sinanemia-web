@@ -25,77 +25,92 @@ export async function asignarAction(
   _prev: AsignacionResult | null,
   formData: FormData,
 ): Promise<AsignacionResult> {
-  const user = await requireAdminOrCoordinador();
-  const parsed = schema.safeParse({
-    ids: String(formData.get("ids") ?? ""),
-    actor: String(formData.get("actor") ?? ""),
-  });
-  if (!parsed.success) return { ok: false, message: "Datos inválidos." };
+  try {
+    const user = await requireAdminOrCoordinador();
+    const parsed = schema.safeParse({
+      ids: String(formData.get("ids") ?? ""),
+      actor: String(formData.get("actor") ?? ""),
+    });
+    if (!parsed.success) return { ok: false, message: "Datos inválidos." };
 
-  const idsRaw = (() => {
-    try {
-      return JSON.parse(parsed.data.ids) as unknown;
-    } catch {
-      return null;
+    const idsRaw = (() => {
+      try {
+        return JSON.parse(parsed.data.ids) as unknown;
+      } catch {
+        return null;
+      }
+    })();
+    if (!Array.isArray(idsRaw)) return { ok: false, message: "Selección inválida." };
+    const ids = idsRaw
+      .map((x) => Number(x))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (!ids.length) return { ok: false, message: "Selecciona al menos un registro." };
+
+    const ubigeo = user.ubigeo;
+    if (!ubigeo) return { ok: false, message: "Tu usuario no tiene ubigeo." };
+
+    const sel = await getEtapaSeleccionadaPorUbigeo(ubigeo);
+    const etapa = sel?.etapa ?? "";
+    if (!etapa) return { ok: false, message: "No hay etapa seleccionada para tu ubigeo." };
+
+    const actor = await findActorSocialByDni(parsed.data.actor);
+    if (!actor) return { ok: false, message: "Actor social no encontrado." };
+    const actorUbigeo =
+      actor.ubigeo == null ? null : Number(String(actor.ubigeo).trim());
+    if (!Number.isFinite(actorUbigeo) || actorUbigeo !== ubigeo)
+      return { ok: false, message: "El actor social no pertenece a tu ubigeo." };
+
+    const cdr = String(actor.cdr ?? "").trim();
+    if (!cdr)
+      return {
+        ok: false,
+        message: "El actor social no tiene coordinador asignado (CDR).",
+      };
+
+    if (user.tipo === "COORDINADOR" && cdr !== user.dni)
+      return { ok: false, message: "Solo puedes asignar a tus actores sociales." };
+
+    const countOk = await countIdsEnEtapaUbigeo({ ubigeo, etapa, ids });
+    if (countOk !== ids.length)
+      return {
+        ok: false,
+        message: "La selección contiene registros fuera de tu etapa/ubigeo.",
+      };
+
+    const yaAsignado = await countSeleccionYaAsignado({
+      ubigeo,
+      etapa,
+      actor: actor.dni,
+      ids,
+    });
+    const actuales = await countAsignadosActor({ ubigeo, etapa, actor: actor.dni });
+    const extra = ids.length - yaAsignado;
+    const total = actuales + extra;
+
+    if (total > 20) {
+      const cupo = Math.max(20 - actuales, 0);
+      return {
+        ok: false,
+        message: `No se puede asignar. Cupo disponible para este actor: ${cupo}. Máximo 20 niños por etapa.`,
+      };
     }
-  })();
-  if (!Array.isArray(idsRaw)) return { ok: false, message: "Selección inválida." };
-  const ids = idsRaw
-    .map((x) => Number(x))
-    .filter((n) => Number.isFinite(n) && n > 0);
-  if (!ids.length) return { ok: false, message: "Selecciona al menos un registro." };
 
-  const ubigeo = user.ubigeo;
-  if (!ubigeo) return { ok: false, message: "Tu usuario no tiene ubigeo." };
-
-  const sel = await getEtapaSeleccionadaPorUbigeo(ubigeo);
-  const etapa = sel?.etapa ?? "";
-  if (!etapa) return { ok: false, message: "No hay etapa seleccionada para tu ubigeo." };
-
-  const actor = await findActorSocialByDni(parsed.data.actor);
-  if (!actor) return { ok: false, message: "Actor social no encontrado." };
-  const actorUbigeo =
-    actor.ubigeo == null ? null : Number(String(actor.ubigeo).trim());
-  if (!Number.isFinite(actorUbigeo) || actorUbigeo !== ubigeo)
-    return { ok: false, message: "El actor social no pertenece a tu ubigeo." };
-
-  const cdr = String(actor.cdr ?? "").trim();
-  if (!cdr) return { ok: false, message: "El actor social no tiene coordinador asignado (CDR)." };
-
-  if (user.tipo === "COORDINADOR" && cdr !== user.dni)
-    return { ok: false, message: "Solo puedes asignar a tus actores sociales." };
-
-  const countOk = await countIdsEnEtapaUbigeo({ ubigeo, etapa, ids });
-  if (countOk !== ids.length)
-    return { ok: false, message: "La selección contiene registros fuera de tu etapa/ubigeo." };
-
-  const yaAsignado = await countSeleccionYaAsignado({
-    ubigeo,
-    etapa,
-    actor: actor.dni,
-    ids,
-  });
-  const actuales = await countAsignadosActor({ ubigeo, etapa, actor: actor.dni });
-  const extra = ids.length - yaAsignado;
-  const total = actuales + extra;
-
-  if (total > 20) {
-    const cupo = Math.max(20 - actuales, 0);
+    const res = await asignarPadron({
+      ubigeo,
+      etapa,
+      ids,
+      actor: actor.dni,
+      responsable: cdr,
+    });
+    const affected = Number((res as any)?.affectedRows ?? 0);
+    revalidatePath("/asignacion");
+    return { ok: true, affected };
+  } catch {
     return {
       ok: false,
-      message: `No se puede asignar. Cupo disponible para este actor: ${cupo}. Máximo 20 niños por etapa.`,
+      message:
+        "No se pudo guardar la asignación por un error interno. Intenta nuevamente.",
     };
   }
-
-  const res = await asignarPadron({
-    ubigeo,
-    etapa,
-    ids,
-    actor: actor.dni,
-    responsable: cdr,
-  });
-  const affected = Number((res as any)?.affectedRows ?? 0);
-  revalidatePath("/asignacion");
-  return { ok: true, affected };
 }
 

@@ -279,6 +279,7 @@ export function AsignacionClient(props: {
 
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
+                  type="submit"
                   disabled={pending}
                   className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
                 >
