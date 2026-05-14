@@ -97,6 +97,7 @@ export default async function AdminPersonasPage(props: {
                   <th className="px-4 py-3">CDR</th>
                   <th className="px-4 py-3">Ubigeo</th>
                   <th className="px-4 py-3">Teléfono</th>
+                  <th className="px-4 py-3">Sectorización</th>
                   <th className="px-4 py-3">Estado</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
@@ -107,6 +108,9 @@ export default async function AdminPersonasPage(props: {
                     `${r.nombrecompleto ?? ""} ${r.apellidos ?? ""}`.trim() ||
                     r.dni;
                   const activo = (r.estado ?? 0) === 1;
+                  const isActor =
+                    String(r.tipo ?? "").toUpperCase().startsWith("ACTOR SOCIAL");
+                  const hasSector = (r.sectorizacion ?? null) === 1;
                   return (
                     <tr key={r.idpersona} className="hover:bg-zinc-50/50">
                       <td className="px-4 py-3 text-zinc-700">{r.idpersona}</td>
@@ -121,6 +125,22 @@ export default async function AdminPersonasPage(props: {
                       </td>
                       <td className="px-4 py-3 text-zinc-700">
                         {r.telefono ?? "-"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {isActor ? (
+                          <span
+                            className={
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold " +
+                              (hasSector
+                                ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                : "bg-amber-50 text-amber-800 ring-1 ring-amber-200")
+                            }
+                          >
+                            {hasSector ? "Registrado" : "Pendiente"}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -142,6 +162,14 @@ export default async function AdminPersonasPage(props: {
                           >
                             Ver
                           </Link>
+                          {isActor ? (
+                            <Link
+                              href={`/admin/sectorizacion/${r.idpersona}`}
+                              className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                            >
+                              Sectorizar
+                            </Link>
+                          ) : null}
                           <form action={setEstadoAction}>
                             <input
                               type="hidden"
@@ -164,7 +192,7 @@ export default async function AdminPersonasPage(props: {
                 })}
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={9}>
+                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={10}>
                       No hay resultados con los filtros actuales.
                     </td>
                   </tr>

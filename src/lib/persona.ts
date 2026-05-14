@@ -20,6 +20,7 @@ export type PersonaSafe = {
   ubigeo: number | null;
   cdr: string;
   telefono?: string | null;
+  sectorizacion?: number | null;
 };
 
 function normalizeTipo(tipo: string | null | undefined) {
@@ -99,7 +100,9 @@ export async function listPersonas(params: {
   }
 
   const sql =
-    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono FROM persona" +
+    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono, " +
+    "(SELECT 1 FROM sectorizacion_actor sa WHERE sa.dni_actor_social = persona.dni LIMIT 1) AS sectorizacion " +
+    "FROM persona" +
     (where.length ? ` WHERE ${where.join(" AND ")}` : "") +
     " ORDER BY idpersona DESC";
 
