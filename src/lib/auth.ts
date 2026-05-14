@@ -95,6 +95,13 @@ export async function requireAdminOrSuperAdmin() {
   return s;
 }
 
+export async function requireAdminOrCoordinador() {
+  const s = await requireSession();
+  if (s.tipo !== "ADMINISTRADOR" && s.tipo !== "COORDINADOR")
+    redirect(routeForRole(s.tipo));
+  return s;
+}
+
 export async function requireSuperAdmin() {
   const s = await requireSession();
   if (s.tipo !== "SUPER ADMIN") redirect(routeForRole(s.tipo));

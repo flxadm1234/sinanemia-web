@@ -7,6 +7,8 @@ type Option = {
   dni: string;
   nombre: string;
   ubigeo: number | null;
+  cdr?: string | null;
+  coordinadorNombre?: string | null;
 };
 
 export function ActorSocialCombobox(props: {
@@ -14,8 +16,9 @@ export function ActorSocialCombobox(props: {
   defaultValue?: string;
   ubigeo?: number | null;
   disabled?: boolean;
+  onSelect?: (opt: Option | null) => void;
 }) {
-  const { name, defaultValue, ubigeo, disabled } = props;
+  const { name, defaultValue, ubigeo, disabled, onSelect } = props;
   const [options, setOptions] = useState<Option[]>([]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -56,6 +59,9 @@ export function ActorSocialCombobox(props: {
     () => options.find((o) => o.dni === value) ?? null,
     [options, value],
   );
+  useEffect(() => {
+    if (onSelect) onSelect(selected);
+  }, [onSelect, selected]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

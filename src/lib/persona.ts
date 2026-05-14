@@ -121,6 +121,7 @@ export async function listActoresPorCoordinador(dniCoordinador: string) {
 
 export async function listActoresSociales(params: {
   ubigeo?: number;
+  cdr?: string;
   includeInactivos?: boolean;
 }) {
   const pool = getDbPool();
@@ -130,6 +131,10 @@ export async function listActoresSociales(params: {
     where.push("ubigeo = ?");
     values.push(params.ubigeo);
   }
+  if (params.cdr && params.cdr.trim()) {
+    where.push("cdr = ?");
+    values.push(params.cdr.trim());
+  }
   if (!params.includeInactivos) where.push("estado = 1");
 
   const [rows] = await pool.query(
@@ -137,6 +142,24 @@ export async function listActoresSociales(params: {
     values,
   );
   return rows as PersonaSafe[];
+}
+
+export async function findActorSocialByDni(dni: string) {
+  const pool = getDbPool();
+  const [rows] = await pool.query(
+    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono, email, direccion FROM persona WHERE UPPER(tipo) LIKE 'ACTOR SOCIAL%' AND dni = ? ORDER BY idpersona DESC LIMIT 1",
+    [dni],
+  );
+  return ((rows as any[])[0] as any) ?? null;
+}
+
+export async function findCoordinadorByDni(dni: string) {
+  const pool = getDbPool();
+  const [rows] = await pool.query(
+    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono, email, direccion FROM persona WHERE UPPER(tipo) = 'COORDINADOR' AND dni = ? ORDER BY idpersona DESC LIMIT 1",
+    [dni],
+  );
+  return ((rows as any[])[0] as any) ?? null;
 }
 
 export async function listCoordinadores(params: {
