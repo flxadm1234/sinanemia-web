@@ -116,6 +116,26 @@ export async function listActoresPorCoordinador(dniCoordinador: string) {
   return rows as PersonaSafe[];
 }
 
+export async function listActoresSociales(params: {
+  ubigeo?: number;
+  includeInactivos?: boolean;
+}) {
+  const pool = getDbPool();
+  const where: string[] = ["UPPER(tipo) LIKE 'ACTOR SOCIAL%'"];
+  const values: any[] = [];
+  if (typeof params.ubigeo === "number") {
+    where.push("ubigeo = ?");
+    values.push(params.ubigeo);
+  }
+  if (!params.includeInactivos) where.push("estado = 1");
+
+  const [rows] = await pool.query(
+    `SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono FROM persona WHERE ${where.join(" AND ")} ORDER BY apellidos ASC, nombrecompleto ASC`,
+    values,
+  );
+  return rows as PersonaSafe[];
+}
+
 export async function listCoordinadores(params: {
   ubigeo?: number;
   includeInactivos?: boolean;

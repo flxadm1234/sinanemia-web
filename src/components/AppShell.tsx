@@ -24,6 +24,14 @@ export function AppShell(props: {
               Usuarios
             </Link>
           ) : null}
+          {user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" ? (
+            <Link
+              href="/admin/padronnominal"
+              className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+            >
+              Padrón nominal
+            </Link>
+          ) : null}
           {user.tipo === "COORDINADOR" ? (
             <Link
               href="/coordinador/actores"
