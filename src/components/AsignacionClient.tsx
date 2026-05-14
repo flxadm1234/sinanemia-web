@@ -16,7 +16,7 @@ export function AsignacionClient(props: {
   const [selected, setSelected] = useState<Record<number, boolean>>({});
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<{
-    ok: boolean;
+    kind: "pending" | "success" | "error";
     message: string;
     detail?: number;
   } | null>(null);
@@ -54,7 +54,7 @@ export function AsignacionClient(props: {
       setActorInfo(null);
       setOpen(false);
       setToast({
-        ok: true,
+        kind: "success",
         message: "Asignación completada. Registros actualizados:",
         detail: state.affected,
       });
@@ -63,8 +63,12 @@ export function AsignacionClient(props: {
         toastTimerRef.current = null;
       }, 3500);
     } else {
-      setToast(null);
       setModalError(state.message);
+      setToast({ kind: "error", message: state.message });
+      toastTimerRef.current = window.setTimeout(() => {
+        setToast(null);
+        toastTimerRef.current = null;
+      }, 5000);
     }
     return () => {
       if (toastTimerRef.current) {
@@ -83,16 +87,18 @@ export function AsignacionClient(props: {
   return (
     <div className="flex flex-col gap-4">
       {toast ? (
-        <div className="fixed inset-x-0 top-3 z-[100] px-4">
+        <div className="fixed inset-x-0 top-3 z-[9999] px-4">
           <div
             className={
               "mx-auto w-full max-w-2xl rounded-2xl border px-4 py-3 text-sm shadow-lg " +
-              (toast.ok
+              (toast.kind === "success"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : "border-amber-200 bg-amber-50 text-amber-900")
+                : toast.kind === "error"
+                  ? "border-amber-200 bg-amber-50 text-amber-900"
+                  : "border-blue-200 bg-blue-50 text-blue-900")
             }
           >
-            {toast.ok ? (
+            {toast.kind === "success" ? (
               <>
                 {toast.message} <span className="font-semibold">{toast.detail}</span>
               </>
@@ -234,7 +240,15 @@ export function AsignacionClient(props: {
               </div>
             ) : null}
 
-            <form action={formAction as any} className="mt-5 flex flex-col gap-4">
+            <form
+              action={formAction as any}
+              onSubmit={() => {
+                setModalError(null);
+                setToast({ kind: "pending", message: "Guardando asignación..." });
+                setOpen(false);
+              }}
+              className="mt-5 flex flex-col gap-4"
+            >
               <input type="hidden" name="ids" value={JSON.stringify(ids)} />
 
               <div>
