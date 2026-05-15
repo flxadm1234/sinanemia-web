@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { SessionUser } from "@/lib/auth";
 
 type NavLink = { href: string; label: string };
@@ -33,7 +34,12 @@ function buildLinks(user: SessionUser): NavLink[] {
 export function MobileNav(props: { user: SessionUser }) {
   const { user } = props;
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const links = useMemo(() => buildLinks(user), [user]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -73,63 +79,71 @@ export function MobileNav(props: { user: SessionUser }) {
         </svg>
       </button>
 
-      {open ? (
-        <div className="fixed inset-0 z-[10000] md:hidden">
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setOpen(false)}
-          />
-          <div className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-xl overflow-y-auto">
-            <div className="flex items-start justify-between gap-3 px-5 py-5 border-b border-zinc-200">
-              <div>
-                <div className="text-lg font-semibold text-zinc-900">
-                  SinAnemia
-                </div>
-                <div className="mt-1 text-xs text-zinc-500">Compromiso 1</div>
-              </div>
-              <button
-                type="button"
+      {open && mounted
+        ? createPortal(
+            <div className="fixed inset-0 z-[10000] md:hidden">
+              <div
+                className="absolute inset-0 bg-black/40"
                 onClick={() => setOpen(false)}
-                className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
+              />
+              <div
+                className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-xl overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
               >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="px-3 py-4">
-              <div className="px-3 pb-3">
-                <div className="text-sm font-semibold text-zinc-900">
-                  {user.nombre}
-                </div>
-                <div className="mt-1 text-xs text-zinc-500">{user.tipo}</div>
-              </div>
-
-              <nav className="space-y-1">
-                {links.map((l) => (
-                  <Link
-                    key={l.href}
-                    href={l.href}
+                <div className="flex items-start justify-between gap-3 px-5 py-5 border-b border-zinc-200">
+                  <div>
+                    <div className="text-lg font-semibold text-zinc-900">
+                      SinAnemia
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500">
+                      Compromiso 1
+                    </div>
+                  </div>
+                  <button
+                    type="button"
                     onClick={() => setOpen(false)}
-                    className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+                    className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
                   >
-                    {l.label}
-                  </Link>
-                ))}
-              </nav>
+                    Cerrar
+                  </button>
+                </div>
 
-              <div className="mt-5 px-3">
-                <Link
-                  href="/logout"
-                  onClick={() => setOpen(false)}
-                  className="inline-flex w-full items-center justify-center rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800"
-                >
-                  Salir
-                </Link>
+                <div className="px-3 py-4">
+                  <div className="px-3 pb-3">
+                    <div className="text-sm font-semibold text-zinc-900">
+                      {user.nombre}
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500">{user.tipo}</div>
+                  </div>
+
+                  <nav className="space-y-1">
+                    {links.map((l) => (
+                      <Link
+                        key={l.href}
+                        href={l.href}
+                        onClick={() => setOpen(false)}
+                        className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+                      >
+                        {l.label}
+                      </Link>
+                    ))}
+                  </nav>
+
+                  <div className="mt-5 px-3">
+                    <Link
+                      href="/logout"
+                      onClick={() => setOpen(false)}
+                      className="inline-flex w-full items-center justify-center rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800"
+                    >
+                      Salir
+                    </Link>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </>
   );
 }
