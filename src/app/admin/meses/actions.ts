@@ -8,6 +8,7 @@ import {
   updateMesById,
   updateMesByIdAny,
 } from "@/lib/meses";
+import { deletePadronByUbigeoEtapa } from "@/lib/padronnominal";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -30,6 +31,11 @@ const updateSchema = createSchema.extend({
 const selectSchema = z.object({
   idmeses: z.coerce.number().int().min(1),
   ubigeo: ubigeoSchema.optional(),
+});
+
+const deletePadronSchema = z.object({
+  ubigeo: ubigeoSchema,
+  etapa: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
 function revalidateMeses() {
@@ -130,6 +136,27 @@ export async function seleccionarMesAction(formData: FormData) {
   if (!ubigeo) return;
 
   await setMesSeleccionadoById({ ubigeo, idmeses: parsed.data.idmeses });
+  revalidateMeses();
+}
+
+export async function deletePadronMesAction(formData: FormData) {
+  const user = await requireAdminOrSuperAdmin();
+  const parsed = deletePadronSchema.safeParse({
+    ubigeo: formData.get("ubigeo"),
+    etapa: formData.get("etapa"),
+  });
+  if (!parsed.success) return;
+
+  if (user.tipo === "ADMINISTRADOR") {
+    const own = String(user.ubigeo ?? "");
+    if (!own) return;
+    if (parsed.data.ubigeo !== own) return;
+  }
+
+  await deletePadronByUbigeoEtapa({
+    ubigeo: Number(parsed.data.ubigeo),
+    etapa: parsed.data.etapa,
+  });
   revalidateMeses();
 }
 

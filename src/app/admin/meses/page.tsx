@@ -2,7 +2,13 @@ import Link from "next/link";
 import { requireAdminOrSuperAdmin } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { listMesesAll, listMesesByUbigeo } from "@/lib/meses";
-import { seleccionarMesAction } from "./actions";
+import { seleccionarMesAction, deletePadronMesAction } from "./actions";
+import { countPadronPorUbigeoEtapaTipovd } from "@/lib/padronnominal";
+import { DeletePadronButton } from "@/components/DeletePadronButton";
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
 
 export default async function AdminMesesPage() {
   const user = await requireAdminOrSuperAdmin();
@@ -26,6 +32,15 @@ export default async function AdminMesesPage() {
     user.tipo === "SUPER ADMIN"
       ? null
       : rows.find((r) => Number(r.seleccion ?? 0) === 1) ?? null;
+
+  const ubigeos = Array.from(
+    new Set(
+      rows
+        .map((r) => Number(r.ubigeo ?? NaN))
+        .filter((n) => Number.isFinite(n)),
+    ),
+  );
+  const countsMap = await countPadronPorUbigeoEtapaTipovd({ ubigeos, tipovd: "1" });
 
   return (
     <AppShell user={user} title="Meses">
@@ -74,13 +89,17 @@ export default async function AdminMesesPage() {
                   <th className="px-4 py-3">Mes</th>
                   <th className="px-4 py-3">N°</th>
                   <th className="px-4 py-3">Año</th>
+                  <th className="px-4 py-3">Niños (tipovd=1)</th>
                   <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3">Eliminar padrón</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
                 {rows.map((r) => {
                   const isSelected = Number(r.seleccion ?? 0) === 1;
+                  const etapa = `${r.year}-${pad2(Number(r.numero_mes ?? 0))}-01`;
+                  const count = countsMap.get(`${Number(r.ubigeo)}|${etapa}`) ?? 0;
                   return (
                     <tr key={r.idmeses} className="hover:bg-zinc-50/50">
                       <td className="px-4 py-3 text-zinc-700">{r.idmeses}</td>
@@ -90,6 +109,7 @@ export default async function AdminMesesPage() {
                       </td>
                       <td className="px-4 py-3 text-zinc-700">{r.numero_mes}</td>
                       <td className="px-4 py-3 text-zinc-700">{r.year}</td>
+                      <td className="px-4 py-3 text-zinc-700">{count}</td>
                       <td className="px-4 py-3">
                         <span
                           className={
@@ -101,6 +121,14 @@ export default async function AdminMesesPage() {
                         >
                           {isSelected ? "Seleccionado" : "No seleccionado"}
                         </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <DeletePadronButton
+                          action={deletePadronMesAction}
+                          ubigeo={String(r.ubigeo)}
+                          etapa={etapa}
+                          count={count}
+                        />
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
@@ -137,7 +165,7 @@ export default async function AdminMesesPage() {
                   <tr>
                     <td
                       className="px-4 py-10 text-center text-zinc-500"
-                      colSpan={7}
+                      colSpan={9}
                     >
                       No hay meses registrados.
                     </td>

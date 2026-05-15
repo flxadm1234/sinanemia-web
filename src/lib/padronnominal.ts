@@ -212,3 +212,41 @@ export async function asignarPadron(params: {
   );
   return res as any;
 }
+
+export async function countPadronPorUbigeoEtapaTipovd(params: {
+  ubigeos: number[];
+  tipovd?: string;
+}) {
+  const pool = getDbPool();
+  const ubigeos = params.ubigeos.filter((u) => Number.isFinite(u));
+  if (!ubigeos.length) return new Map<string, number>();
+  const tipovd = String(params.tipovd ?? "1").trim();
+  const placeholders = ubigeos.map(() => "?").join(",");
+  const [rows] = await pool.query(
+    `SELECT ubigeo, etapa, COUNT(*) as c
+     FROM padronnominal
+     WHERE ubigeo IN (${placeholders}) AND tipovd = ?
+     GROUP BY ubigeo, etapa`,
+    [...ubigeos, tipovd],
+  );
+  const map = new Map<string, number>();
+  for (const r of rows as any[]) {
+    const u = Number(r.ubigeo ?? NaN);
+    const etapa = String(r.etapa ?? "").slice(0, 10);
+    if (!Number.isFinite(u) || !etapa) continue;
+    map.set(`${u}|${etapa}`, Number(r.c ?? 0));
+  }
+  return map;
+}
+
+export async function deletePadronByUbigeoEtapa(params: {
+  ubigeo: number;
+  etapa: string;
+}) {
+  const pool = getDbPool();
+  const [res] = await pool.query(
+    "DELETE FROM padronnominal WHERE ubigeo = ? AND etapa = ?",
+    [params.ubigeo, params.etapa],
+  );
+  return res as any;
+}
