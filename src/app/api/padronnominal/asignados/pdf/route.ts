@@ -5,6 +5,8 @@ import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
 import { listAsignadosPorActor } from "@/lib/padronnominal";
 import { findActorSocialByDni, findCoordinadorByDni } from "@/lib/persona";
 
+export const runtime = "nodejs";
+
 function fmtDate(v: string | null) {
   if (!v) return "";
   const s = String(v);

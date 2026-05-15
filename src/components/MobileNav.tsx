@@ -37,11 +37,16 @@ export function MobileNav(props: { user: SessionUser }) {
 
   useEffect(() => {
     if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
     document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [open]);
 
   return (
@@ -69,12 +74,12 @@ export function MobileNav(props: { user: SessionUser }) {
       </button>
 
       {open ? (
-        <div className="fixed inset-0 z-[9997] md:hidden">
+        <div className="fixed inset-0 z-[10000] md:hidden">
           <div
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-xl">
+          <div className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-white shadow-xl overflow-y-auto">
             <div className="flex items-start justify-between gap-3 px-5 py-5 border-b border-zinc-200">
               <div>
                 <div className="text-lg font-semibold text-zinc-900">
