@@ -7,18 +7,55 @@ import { findActorSocialByDni, findCoordinadorByDni } from "@/lib/persona";
 
 export const runtime = "nodejs";
 
-function fmtDate(v: string | null) {
-  if (!v) return "";
-  const s = String(v);
-  return s.length >= 10 ? s.slice(0, 10) : s;
+function toDate(v: unknown) {
+  if (!v) return null;
+  if (v instanceof Date && Number.isFinite(v.getTime())) return v;
+  const s = String(v).trim();
+  if (!s) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (m) {
+    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`);
+    return Number.isFinite(d.getTime()) ? d : null;
+  }
+  const d = new Date(s);
+  return Number.isFinite(d.getTime()) ? d : null;
 }
 
-function fmtDateDMY(v: string | null) {
-  const s = fmtDate(v);
-  if (!s || s.length !== 10) return "";
+function fmtDateISO(v: unknown) {
+  const d = toDate(v);
+  if (!d) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+function fmtDateDMY(v: unknown) {
+  const s = fmtDateISO(v);
+  if (!s) return "";
   const [y, m, d] = s.split("-");
   if (!y || !m || !d) return s;
   return `${d}/${m}/${y}`;
+}
+
+function diffAgeParts(birth: Date, asOf: Date) {
+  const b = new Date(Date.UTC(birth.getUTCFullYear(), birth.getUTCMonth(), birth.getUTCDate()));
+  const a = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()));
+  if (a.getTime() < b.getTime()) return null;
+
+  let years = a.getUTCFullYear() - b.getUTCFullYear();
+  let months = a.getUTCMonth() - b.getUTCMonth();
+  let days = a.getUTCDate() - b.getUTCDate();
+
+  if (days < 0) {
+    const prevMonth = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), 0));
+    days += prevMonth.getUTCDate();
+    months -= 1;
+  }
+  if (months < 0) {
+    months += 12;
+    years -= 1;
+  }
+
+  const totalDays = Math.floor((a.getTime() - b.getTime()) / 86400000);
+  return { years, months, days, totalDays };
 }
 
 function ultimaAtencion(r: any) {
@@ -37,141 +74,6 @@ function safeText(v: unknown, fallback = "-") {
   const s = String(v ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim();
   if (!s) return fallback;
   return s.length > 420 ? `${s.slice(0, 417)}...` : s;
-}
-
-function asKeyValuePairs(r: any) {
-  const madre = `${r.nombresmadre ?? ""} ${r.appatmadre ?? ""} ${r.apmatmadre ?? ""}`.trim();
-  return [
-    ["IDPN", r.idpn],
-    ["DNI", r.dni],
-    ["Nombres", r.nombres],
-    ["F. nac.", fmtDate(r.fecha_nac)],
-    ["Rango", r.rango],
-    ["CCPP", r.ccpp],
-    ["Zona", r.zona],
-    ["Mz", r.mz],
-    ["Dirección", r.direccion],
-    ["Referencia", r.referencia],
-    ["Nueva dirección", r.nuevadireccion],
-    ["Nueva referencia", r.nuevareferencia],
-    ["Teléfono", r.telefonopn ?? r.telefono],
-    ["EESS UA", r.eess_ua],
-    ["Cod EESS", r.codeess],
-    ["Departamento", r.departamento],
-    ["Provincia", r.provincia],
-    ["Distrito", r.distrito],
-    ["Ubigeo", r.ubigeo],
-    ["Actor social", r.actorsocial],
-    ["Responsable", r.responsable],
-    ["Estado VD", r.estadovd],
-    ["Estado SVD", r.estadosvd],
-    ["Estado SVD2", r.estadosvd2],
-    ["Estado SVD3", r.estadosvd3],
-    ["Etapa", fmtDate(r.etapa)],
-    ["F. cita", fmtDate(r.fechacita)],
-    ["Nro VD", r.nrovd],
-    ["F. inicio VD", fmtDate(r.fecha_inicio_vd)],
-    ["F. fin VD", fmtDate(r.fecha_fin_vd)],
-    ["Primera VD", fmtDate(r.primera_vd)],
-    ["Segunda VD", fmtDate(r.segunda_vd)],
-    ["Tercera VD", fmtDate(r.tercera_vd)],
-    ["F. modif.", fmtDate(r.fechamodificacion)],
-    ["F. modif.2", fmtDate(r.fechamodificacion2)],
-    ["Madre", madre],
-    ["DNI madre", r.dnimadre],
-    ["Padre", r.nombre_padre],
-    ["DNI padre", r.dni_padre],
-    ["Observación", r.observacion],
-    ["Obs. padrón", r.obspadron],
-    ["Observación 2", r.observacion2],
-    ["Tamisaje", r.tamisaje],
-    ["F. tamisaje", fmtDate(r.fechatamisaje)],
-    ["HB", r.hb],
-    ["Anemia", r.anemia],
-    ["Hierro", r.hierro],
-    ["TSF", r.tsf],
-    ["RSF", r.rsf],
-    ["Resultado", r.resultado],
-    ["Avance", r.avance],
-    ["Tiene PS", r.tieneps],
-    ["Visita DOPS", r.visitadops],
-    ["Sesión DEM", r.sesiondem],
-    ["Modo VD", r.modovd],
-    ["Tipo VD", r.tipovd],
-    ["Cod QR", r.codqr],
-    ["Lat", r.lat],
-    ["Lon", r.lon],
-    ["Lat2", r.lat2],
-    ["Long2", r.long2],
-    ["Lat3", r.lat3],
-    ["Long3", r.long3],
-    ["Programación", fmtDate(r.programacion1)],
-    ["Asignación", r.asignacion],
-    ["Estado intervención", r.estadointervencion],
-    ["Padron nominal", r.padronnominal],
-    ["Adulto", r.adulto],
-    ["Cantidad A", r.cantidada],
-    ["Id distrito", r.iddistrito],
-    ["Discapacidad", r.discapacidad],
-    ["Titular línea", r.titular_linea],
-    ["Código V", r.codigov],
-    ["Img carnet", r.img_carnet],
-    ["Estado verificación", r.estado_verificacion],
-    ["Estado", r.estado],
-    ["Estado verificado", r.estado_verificado],
-    ["Celular app", r.celularseapp],
-    ["Tipo dispositivo", r.tipodispositivo],
-    ["Tipo seguro", r.tiposeguro],
-    ["Estado seguro", r.estadoseguro],
-    ["F. act seguro", fmtDate(r.fecha_act_seguro)],
-    ["Nombre comercial", r.nombre_comercial],
-    ["HB registro", r.hbregistro],
-    ["CCRED", r.ccred],
-    ["Usuario", r.usuario],
-  ] as Array<[string, unknown]>;
-}
-
-function drawKeyValueGrid(params: {
-  doc: InstanceType<typeof PDFDocument>;
-  x: number;
-  y: number;
-  w: number;
-  pairs: Array<[string, unknown]>;
-}) {
-  const { doc, x, y, w, pairs } = params;
-  const colGap = 10;
-  const colW = (w - colGap) / 2;
-  const labelW = 86;
-  const lineH = 9.6;
-
-  let leftY = y;
-  let rightY = y;
-  for (let i = 0; i < pairs.length; i++) {
-    const [k, v] = pairs[i];
-    const col = i % 2;
-    const baseX = col === 0 ? x : x + colW + colGap;
-    const baseY = col === 0 ? leftY : rightY;
-
-    doc.fontSize(7).fillColor("#111827").text(`${k}:`, baseX, baseY, {
-      width: labelW,
-      continued: false,
-    });
-    doc.fontSize(7).fillColor("#374151").text(safeText(v, "-"), baseX + labelW, baseY, {
-      width: colW - labelW,
-      height: lineH,
-    });
-
-    doc.fontSize(7);
-    const used = Math.max(
-      doc.heightOfString(`${k}:`, { width: labelW }),
-      doc.heightOfString(safeText(v, "-"), { width: colW - labelW }),
-      lineH,
-    );
-
-    if (col === 0) leftY = baseY + Math.max(used, lineH);
-    else rightY = baseY + Math.max(used, lineH);
-  }
-  return Math.max(leftY, rightY);
 }
 
 export async function GET(request: Request) {
@@ -257,6 +159,7 @@ export async function GET(request: Request) {
     });
 
     const generatedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const asOfDate = toDate(etapa) ?? new Date();
 
     const title = "Hoja de Ruta - Asignación de Visita Domiciliaria (SinAnemia)";
 
@@ -315,10 +218,9 @@ export async function GET(request: Request) {
         .stroke();
     };
 
-    const rowH = 78;
     const minY = top + 74;
     const maxY = pageH - bottom;
-    const ensureRow = (y: number) => {
+    const ensureRow = (y: number, rowH: number) => {
       if (y + rowH <= maxY) return y;
       doc.addPage();
       headerBlock();
@@ -335,22 +237,16 @@ export async function GET(request: Request) {
     doc.font("Helvetica").fontSize(7).fillColor("#111827");
 
     rows.forEach((r: any, idx: number) => {
-      y = ensureRow(y);
+      const birth = toDate(r.fecha_nac);
+      const age = birth ? diffAgeParts(birth, asOfDate) : null;
+      const ageLine = age
+        ? `Edad: ${age.years}a ${age.months}m ${age.days}d`
+        : "Edad: -";
+      const ageDays = age ? `Días: ${age.totalDays}` : "Días: -";
+
       const yTop = y;
 
       let x = left;
-      doc.save();
-      doc.rect(left, yTop, usableW, rowH).fill(idx % 2 === 0 ? "#FFFFFF" : "#F8FAFC");
-      doc.restore();
-
-      const cell = (w: number, text: string, opts?: { bold?: boolean }) => {
-        doc.font(opts?.bold ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor("#111827");
-        doc.text(text, x + 4, yTop + 4, {
-          width: w - 8,
-          height: rowH - 8,
-        });
-        x += w;
-      };
 
       const rango = safeText(r.rango, "-");
       const menor = safeText(r.nombres, "-");
@@ -364,36 +260,58 @@ export async function GET(request: Request) {
       const ult = safeText(fmtDateDMY(ultimaAtencion(r)), "-");
       const resultado = safeText(r.estadosvd ?? r.estadovd, "-");
 
-      cell(cols[0].w, String(idx + 1));
-      cell(
-        cols[1].w,
-        `${rango}\nNRO VD: ${safeText(r.nrovd, "-")}\nF.N: ${safeText(fmtDateDMY(r.fecha_nac), "-")}`,
-      );
-      cell(cols[2].w, `${safeText(r.dni)}\n(DNI o CUI)`);
-      cell(
-        cols[3].w,
-        `${menor}\n${dir}\nRef: ${ref}\nNueva Dirección: __________________________\nEstado/Resultado: ${resultado}`,
-        { bold: true },
-      );
-      cell(
-        cols[4].w,
-        `EESS: ${safeText(r.eess_ua)}\nF.A: ${ult}`,
-      );
-      cell(
-        cols[5].w,
-        `${madre}\nDNI: ${safeText(r.dnimadre)}\nTel: ${telMadre}`,
-      );
-      cell(
-        cols[6].w,
-        `1ra: ${safeText(fmtDateDMY(r.primera_vd), "___/___/____")}\n2da: ${safeText(
-          fmtDateDMY(r.segunda_vd),
-          "___/___/____",
-        )}\n3ra: ${safeText(fmtDateDMY(r.tercera_vd), "___/___/____")}`,
-      );
+      const dmyNac = fmtDateDMY(r.fecha_nac) || "-";
+      const dmy1 = fmtDateDMY(r.primera_vd) || "___/___/____";
+      const dmy2 = fmtDateDMY(r.segunda_vd) || "___/___/____";
+      const dmy3 = fmtDateDMY(r.tercera_vd) || "___/___/____";
+
+      const rowCells: Array<{ text: string; bold?: boolean; w: number }> = [
+        { w: cols[0].w, text: String(idx + 1) },
+        {
+          w: cols[1].w,
+          text: `${rango}\nNRO VD: ${safeText(r.nrovd, "-")}\nF.N: ${dmyNac}\n${ageLine}\n${ageDays}`,
+        },
+        { w: cols[2].w, text: `${safeText(r.dni)}\n(DNI o CUI)` },
+        {
+          w: cols[3].w,
+          bold: true,
+          text: `${menor}\n${dir}\nRef: ${ref}\nNueva Dirección: __________________________\nEstado/Resultado: ${resultado}`,
+        },
+        { w: cols[4].w, text: `EESS: ${safeText(r.eess_ua)}\nF.A: ${ult}` },
+        { w: cols[5].w, text: `${madre}\nDNI: ${safeText(r.dnimadre)}\nTel: ${telMadre}` },
+        { w: cols[6].w, text: `1ra: ${dmy1}\n2da: ${dmy2}\n3ra: ${dmy3}` },
+      ];
+
+      const paddingY = 2;
+      const paddingX = 3;
+      const lineGap = 0;
+
+      const heights = rowCells.map((c) => {
+        doc.font(c.bold ? "Helvetica-Bold" : "Helvetica").fontSize(7);
+        return doc.heightOfString(c.text, { width: c.w - paddingX * 2, lineGap });
+      });
+      const contentH = Math.max(...heights, 18);
+      const rowH = Math.max(44, Math.ceil(contentH + paddingY * 2));
+
+      y = ensureRow(y, rowH);
+
+      doc.save();
+      doc.rect(left, y, usableW, rowH).fill(idx % 2 === 0 ? "#FFFFFF" : "#F8FAFC");
+      doc.restore();
+
+      let cx = left;
+      for (const c of rowCells) {
+        doc.font(c.bold ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor("#111827");
+        doc.text(c.text, cx + paddingX, y + paddingY, {
+          width: c.w - paddingX * 2,
+          lineGap,
+        });
+        cx += c.w;
+      }
 
       doc
-        .moveTo(left, yTop + rowH)
-        .lineTo(pageW - right, yTop + rowH)
+        .moveTo(left, y + rowH)
+        .lineTo(pageW - right, y + rowH)
         .strokeColor("#93C5FD")
         .stroke();
 
