@@ -290,8 +290,8 @@ export async function GET(request: Request) {
 
     const url = new URL(request.url);
     const tipoRaw = String(url.searchParams.get("tipo") ?? "").trim();
-    const tipo = tipoRaw === "2" ? 2 : tipoRaw === "1" ? 1 : null;
-    if (!tipo) {
+    const tipovd = tipoRaw === "2" ? "2" : tipoRaw === "1" ? "1" : "";
+    if (!tipovd) {
       return NextResponse.json({ error: "invalid_tipo" }, { status: 400 });
     }
 
@@ -315,14 +315,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "missing_ubigeo" }, { status: 400 });
     }
 
-    const rows = await listPadronReporte({ ubigeo, tipo, etapas });
+    const rows = await listPadronReporte({ ubigeo, tipovd, etapas });
 
     const sections = buildSections();
     const allCols = sections.flatMap((s) => s.cols);
 
     const now = new Date();
     const generatedAt = now.toISOString().slice(0, 19).replace("T", " ");
-    const tipoLabel = tipo === 1 ? "Niños" : "Gestantes";
+    const tipoLabel = tipovd === "1" ? "Niños" : "Gestantes";
 
     const etapasLabel = etapas
       .slice()
@@ -375,7 +375,7 @@ export async function GET(request: Request) {
       <tr><td><b>Generado:</b> ${escapeHtml(generatedAt)}</td></tr>
       <tr><td><b>Rol:</b> ${escapeHtml(session.tipo)}</td></tr>
       <tr><td><b>Ubigeo:</b> ${escapeHtml(session.tipo === "SUPER ADMIN" ? "TODOS" : String(ubigeo))}</td></tr>
-      <tr><td><b>Tipo:</b> ${escapeHtml(`${tipoLabel} (tipo=${tipo})`)}</td></tr>
+      <tr><td><b>Tipo:</b> ${escapeHtml(`${tipoLabel} (tipovd=${tipovd})`)}</td></tr>
       <tr><td><b>Etapas:</b> ${escapeHtml(etapas.slice().sort().join(", "))}</td></tr>
       <tr><td><b>Total filas:</b> ${escapeHtml(rows.length)}</td></tr>
     </table>

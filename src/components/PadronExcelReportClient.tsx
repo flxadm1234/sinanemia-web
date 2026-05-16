@@ -79,8 +79,8 @@ export function PadronExcelReportClient(props: {
               disabled={pending}
               className="mt-2 block w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900"
             >
-              <option value="1">Niños (tipo=1)</option>
-              <option value="2">Gestantes (tipo=2)</option>
+              <option value="1">Niños (tipovd=1)</option>
+              <option value="2">Gestantes (tipovd=2)</option>
             </select>
             <div className="mt-2 text-xs text-zinc-500">
               El reporte incluirá toda la información del padrón, más actor social,

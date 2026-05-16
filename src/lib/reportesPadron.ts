@@ -104,7 +104,7 @@ export type PadronReporteRow = {
 
 export async function listPadronReporte(params: {
   ubigeo?: number;
-  tipo: number;
+  tipovd: string | number;
   etapas: string[];
   limit?: number;
 }) {
@@ -118,8 +118,14 @@ export async function listPadronReporte(params: {
   );
   if (!etapas.length) return [];
 
-  const where: string[] = ["pn.tipo = ?", `pn.etapa IN (${etapas.map(() => "?").join(",")})`];
-  const values: any[] = [params.tipo, ...etapas];
+  const tipovd = String(params.tipovd ?? "").trim();
+  if (tipovd !== "1" && tipovd !== "2") return [];
+
+  const where: string[] = [
+    "TRIM(COALESCE(pn.tipovd,'')) = ?",
+    `pn.etapa IN (${etapas.map(() => "?").join(",")})`,
+  ];
+  const values: any[] = [tipovd, ...etapas];
 
   if (typeof params.ubigeo === "number") {
     where.unshift("pn.ubigeo = ?");
