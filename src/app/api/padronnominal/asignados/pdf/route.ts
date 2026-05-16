@@ -13,6 +13,14 @@ function fmtDate(v: string | null) {
   return s.length >= 10 ? s.slice(0, 10) : s;
 }
 
+function fmtDateDMY(v: string | null) {
+  const s = fmtDate(v);
+  if (!s || s.length !== 10) return "";
+  const [y, m, d] = s.split("-");
+  if (!y || !m || !d) return s;
+  return `${d}/${m}/${y}`;
+}
+
 function ultimaAtencion(r: any) {
   return (
     r.fechamodificacion2 ||
@@ -236,7 +244,11 @@ export async function GET(request: Request) {
       `${actor.nombrecompleto ?? ""} ${actor.apellidos ?? ""}`.trim() || actor.dni,
     );
 
-    const doc = new PDFDocument({ size: "A4", margin: 38 });
+    const doc = new PDFDocument({
+      size: "A4",
+      layout: "landscape",
+      margin: 18,
+    });
     const chunks: Buffer[] = [];
     const bufferPromise = new Promise<Buffer>((resolve, reject) => {
       doc.on("data", (c) => chunks.push(c));
@@ -246,73 +258,146 @@ export async function GET(request: Request) {
 
     const generatedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
 
-    const title = "Hoja de Ruta de Intervención - Niños asignados (SinAnemia)";
-    doc.fontSize(14).fillColor("#111827").text(title, { align: "left" });
-    doc.moveDown(0.4);
-    doc.fontSize(9).fillColor("#374151").text(`Generado: ${generatedAt}`);
-    doc.text(`Ubigeo: ${ubigeo}   Etapa: ${etapa}`);
-    doc.text(`Actor social: ${actorNombre} (${safeText(actor.dni, "")})`);
-    doc.text(
-      `Responsable (coordinador): ${coordinadorNombre}${cdr ? ` (${safeText(cdr, "")})` : ""}`,
-    );
-    doc.moveDown(0.8);
+    const title = "Hoja de Ruta - Asignación de Visita Domiciliaria (SinAnemia)";
 
-    doc
-      .moveTo(doc.page.margins.left, doc.y)
-      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
-      .strokeColor("#E5E7EB")
-      .stroke();
-    doc.moveDown(0.8);
+    const pageW = doc.page.width;
+    const pageH = doc.page.height;
+    const left = doc.page.margins.left;
+    const right = doc.page.margins.right;
+    const top = doc.page.margins.top;
+    const bottom = doc.page.margins.bottom;
+    const usableW = pageW - left - right;
 
-    doc.fontSize(10).fillColor("#111827").text(`Total: ${rows.length} registros`);
-    doc.moveDown(0.6);
-
-    const boxPadding = 10;
-    const pageBottom = () => doc.page.height - doc.page.margins.bottom;
-
-    const ensureSpace = (needed: number) => {
-      if (doc.y + needed <= pageBottom()) return;
-      doc.addPage();
+    const headerBlock = () => {
+      doc.font("Helvetica-Bold").fontSize(12).fillColor("#111827").text(title, left, top, {
+        width: usableW,
+      });
+      doc.font("Helvetica").fontSize(8).fillColor("#374151");
+      doc.text(`Generado: ${generatedAt}`, left, top + 16);
+      doc.text(`Ubigeo: ${ubigeo}   Etapa: ${etapa}`, left, top + 28);
+      doc.text(`Actor social: ${actorNombre} (${safeText(actor.dni, "")})`, left, top + 40);
+      doc.text(
+        `Responsable (coordinador): ${coordinadorNombre}${cdr ? ` (${safeText(cdr, "")})` : ""}`,
+        left,
+        top + 52,
+      );
+      doc
+        .moveTo(left, top + 66)
+        .lineTo(pageW - right, top + 66)
+        .strokeColor("#CBD5E1")
+        .stroke();
     };
 
-    rows.forEach((r: any, idx: number) => {
-      const pairs = asKeyValuePairs(r);
-      const headerH = 22;
-      const blockHeight = 312;
-      ensureSpace(blockHeight + 10);
+    const cols = [
+      { key: "n", label: "N°", w: 20 },
+      { key: "form", label: "Form.", w: 70 },
+      { key: "dni", label: "DNI", w: 70 },
+      { key: "menor", label: "NOMBRE Y DIRECCIÓN DEL MENOR", w: 280 },
+      { key: "eess", label: "EESS", w: 120 },
+      { key: "madre", label: "DATOS (MADRE)", w: 150 },
+      { key: "vd", label: "Fechas VD", w: usableW - (20 + 70 + 70 + 280 + 120 + 150) },
+    ];
 
-      const x = doc.page.margins.left;
-      const w = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-      const y = doc.y;
-
+    const drawTableHeader = (y: number) => {
+      let x = left;
+      doc.save();
+      doc.rect(left, y, usableW, 16).fill("#1D4ED8");
+      doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(8);
+      for (const c of cols) {
+        doc.text(c.label, x + 4, y + 4, { width: c.w - 8, lineBreak: false });
+        x += c.w;
+      }
+      doc.restore();
       doc
-        .roundedRect(x, y, w, blockHeight, 10)
-        .fillOpacity(1)
-        .fillAndStroke("#F9FAFB", "#E5E7EB");
+        .moveTo(left, y + 16)
+        .lineTo(pageW - right, y + 16)
+        .strokeColor("#93C5FD")
+        .stroke();
+    };
 
-      doc.fillOpacity(1);
-      doc.fontSize(9).fillColor("#111827").text(
-        `${idx + 1}. ${safeText(r.nombres)} (${safeText(r.dni)})`,
-        x + boxPadding,
-        y + 10,
-        { width: w - boxPadding * 2 },
+    const rowH = 78;
+    const minY = top + 74;
+    const maxY = pageH - bottom;
+    const ensureRow = (y: number) => {
+      if (y + rowH <= maxY) return y;
+      doc.addPage();
+      headerBlock();
+      const newY = minY;
+      drawTableHeader(newY);
+      return newY + 18;
+    };
+
+    headerBlock();
+    let y = minY;
+    drawTableHeader(y);
+    y += 18;
+
+    doc.font("Helvetica").fontSize(7).fillColor("#111827");
+
+    rows.forEach((r: any, idx: number) => {
+      y = ensureRow(y);
+      const yTop = y;
+
+      let x = left;
+      doc.save();
+      doc.rect(left, yTop, usableW, rowH).fill(idx % 2 === 0 ? "#FFFFFF" : "#F8FAFC");
+      doc.restore();
+
+      const cell = (w: number, text: string, opts?: { bold?: boolean }) => {
+        doc.font(opts?.bold ? "Helvetica-Bold" : "Helvetica").fontSize(7).fillColor("#111827");
+        doc.text(text, x + 4, yTop + 4, {
+          width: w - 8,
+          height: rowH - 8,
+        });
+        x += w;
+      };
+
+      const rango = safeText(r.rango, "-");
+      const menor = safeText(r.nombres, "-");
+      const dir = safeText(r.direccion, "-");
+      const ref = safeText(r.referencia, "-");
+      const telMadre = safeText(r.telefonopn ?? r.telefono, "-");
+      const madre = safeText(
+        `${r.nombresmadre ?? ""} ${r.appatmadre ?? ""} ${r.apmatmadre ?? ""}`.trim(),
+        "-",
+      );
+      const ult = safeText(fmtDateDMY(ultimaAtencion(r)), "-");
+      const resultado = safeText(r.estadosvd ?? r.estadovd, "-");
+
+      cell(cols[0].w, String(idx + 1));
+      cell(
+        cols[1].w,
+        `${rango}\nNRO VD: ${safeText(r.nrovd, "-")}\nF.N: ${safeText(fmtDateDMY(r.fecha_nac), "-")}`,
+      );
+      cell(cols[2].w, `${safeText(r.dni)}\n(DNI o CUI)`);
+      cell(
+        cols[3].w,
+        `${menor}\n${dir}\nRef: ${ref}\nNueva Dirección: __________________________\nEstado/Resultado: ${resultado}`,
+        { bold: true },
+      );
+      cell(
+        cols[4].w,
+        `EESS: ${safeText(r.eess_ua)}\nF.A: ${ult}`,
+      );
+      cell(
+        cols[5].w,
+        `${madre}\nDNI: ${safeText(r.dnimadre)}\nTel: ${telMadre}`,
+      );
+      cell(
+        cols[6].w,
+        `1ra: ${safeText(fmtDateDMY(r.primera_vd), "___/___/____")}\n2da: ${safeText(
+          fmtDateDMY(r.segunda_vd),
+          "___/___/____",
+        )}\n3ra: ${safeText(fmtDateDMY(r.tercera_vd), "___/___/____")}`,
       );
 
       doc
-        .moveTo(x + boxPadding, y + headerH)
-        .lineTo(x + w - boxPadding, y + headerH)
-        .strokeColor("#E5E7EB")
+        .moveTo(left, yTop + rowH)
+        .lineTo(pageW - right, yTop + rowH)
+        .strokeColor("#93C5FD")
         .stroke();
 
-      drawKeyValueGrid({
-        doc,
-        x: x + boxPadding,
-        y: y + headerH + 8,
-        w: w - boxPadding * 2,
-        pairs,
-      });
-
-      doc.y = y + blockHeight + 12;
+      y += rowH;
     });
 
     doc.end();
