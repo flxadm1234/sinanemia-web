@@ -5,11 +5,12 @@ import { requireAdminOrSuperAdmin } from "@/lib/auth";
 import {
   createPersona,
   findPersonaById,
-  updatePersonaById,
   updatePersonaEstado,
 } from "@/lib/persona";
+import { getDbPool } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
 
 const estadoSchema = z.object({
   idpersona: z.coerce.number().int().positive(),
@@ -110,6 +111,10 @@ const personaUpdateSchema = z.object({
   email: z.string().trim().optional(),
 });
 
+function qs(v: string) {
+  return encodeURIComponent(v);
+}
+
 export async function updatePersonaAction(formData: FormData) {
   const user = await requireAdminOrSuperAdmin();
   const parsed = personaUpdateSchema.safeParse({
@@ -133,6 +138,7 @@ export async function updatePersonaAction(formData: FormData) {
   }
 
   const patch: any = {};
+  const oldCdr = String(current.cdr ?? "").trim();
 
   if (data.nombrecompleto !== undefined)
     patch.nombrecompleto = data.nombrecompleto ? data.nombrecompleto : null;
@@ -150,9 +156,77 @@ export async function updatePersonaAction(formData: FormData) {
   if (data.direccion !== undefined) patch.direccion = data.direccion.trim();
   if (data.email !== undefined) patch.email = data.email.trim() ? data.email.trim() : null;
 
-  await updatePersonaById(data.idpersona, patch);
-  revalidatePath("/admin/personas");
-  revalidatePath(`/admin/personas/${data.idpersona}`);
-  redirect("/admin/personas");
+  const newCdr = typeof patch.cdr === "string" ? patch.cdr.trim() : "";
+  const needsPadronUpdate = Boolean(newCdr) && newCdr !== oldCdr;
+
+  const ubigeoToUse =
+    typeof user.ubigeo === "number"
+      ? user.ubigeo
+      : typeof current.ubigeo === "number"
+        ? current.ubigeo
+        : null;
+
+  if (needsPadronUpdate && typeof ubigeoToUse !== "number") {
+    redirect(
+      `/admin/personas?err=1&msg=${qs("No se pudo determinar el ubigeo para actualizar padrón nominal.")}`,
+    );
+  }
+
+  const etapaSel =
+    needsPadronUpdate && typeof ubigeoToUse === "number"
+      ? await getEtapaSeleccionadaPorUbigeo(ubigeoToUse)
+      : null;
+  const etapa = etapaSel?.etapa ?? "";
+  if (needsPadronUpdate && !/^\d{4}-\d{2}-\d{2}$/.test(etapa)) {
+    redirect(
+      `/admin/personas?err=1&msg=${qs("No hay un mes seleccionado (seleccion=1) para este ubigeo. Configura el mes actual en Meses.")}`,
+    );
+  }
+
+  const hasChanges = Object.keys(patch).length > 0;
+  if (!hasChanges) {
+    redirect(`/admin/personas?err=1&msg=${qs("No se detectaron cambios para guardar.")}`);
+  }
+
+  const pool = getDbPool();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const keys = Object.keys(patch);
+    if (keys.length) {
+      const set = keys.map((k) => `${k} = ?`).join(", ");
+      const values = keys.map((k) => patch[k]);
+      values.push(data.idpersona);
+      await conn.query(`UPDATE persona SET ${set} WHERE idpersona = ?`, values);
+    }
+
+    let affectedPadron = 0;
+    if (needsPadronUpdate && typeof ubigeoToUse === "number") {
+      const [resPadron] = await conn.query(
+        "UPDATE padronnominal SET responsable = ? WHERE responsable = ? AND ubigeo = ? AND etapa = ?",
+        [newCdr, oldCdr, ubigeoToUse, etapa],
+      );
+      affectedPadron = Number((resPadron as any)?.affectedRows ?? 0);
+    }
+
+    await conn.commit();
+
+    revalidatePath("/admin/personas");
+    revalidatePath(`/admin/personas/${data.idpersona}`);
+
+    const msg = needsPadronUpdate
+      ? `Coordinador (CDR) actualizado. Padrón nominal actualizado en etapa ${etapa}: ${affectedPadron} registros.`
+      : "Usuario actualizado correctamente.";
+    redirect(`/admin/personas?ok=1&msg=${qs(msg)}`);
+  } catch {
+    try {
+      await conn.rollback();
+    } catch {}
+    redirect(
+      `/admin/personas?err=1&msg=${qs("No se pudo guardar los cambios. Revisa la BD e inténtalo nuevamente.")}`,
+    );
+  } finally {
+    conn.release();
+  }
 }
 

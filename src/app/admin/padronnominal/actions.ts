@@ -4,10 +4,15 @@ import { z } from "zod";
 import { requireAdminOrSuperAdmin } from "@/lib/auth";
 import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
 import { updatePadronActorSocial, updatePadronResponsable } from "@/lib/padronnominal";
+import { getDbPool } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 const etapaSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+function qs(v: string) {
+  return encodeURIComponent(v);
+}
 
 const actorSchema = z.object({
   ubigeo: z.coerce.number().int().positive().optional(),
@@ -24,7 +29,9 @@ export async function bulkActorSocialAction(formData: FormData) {
     actorAnterior: String(formData.get("actorAnterior") ?? ""),
     actorNuevo: String(formData.get("actorNuevo") ?? ""),
   });
-  if (!parsed.success) return;
+  if (!parsed.success) {
+    redirect(`/admin/padronnominal?tab=actor&err=1&msg=${qs("Datos inválidos.")}`);
+  }
 
   let ubigeo = user.ubigeo ?? null;
   let etapa = "";
@@ -37,8 +44,15 @@ export async function bulkActorSocialAction(formData: FormData) {
     etapa = sel?.etapa ?? "";
   }
 
-  if (!ubigeo) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(etapa)) return;
+  if (!ubigeo) {
+    redirect(`/admin/padronnominal?tab=actor&err=1&msg=${qs("Falta ubigeo.")}`);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(etapa)) {
+    redirect(`/admin/padronnominal?tab=actor&err=1&msg=${qs("Falta etapa (YYYY-MM-01).")}`);
+  }
+  if (parsed.data.actorAnterior === parsed.data.actorNuevo) {
+    redirect(`/admin/padronnominal?tab=actor&err=1&msg=${qs("El actor anterior y el nuevo no pueden ser iguales.")}`);
+  }
 
   const res = await updatePadronActorSocial({
     ubigeo,
@@ -67,7 +81,9 @@ export async function bulkResponsableAction(formData: FormData) {
     responsableAnterior: String(formData.get("responsableAnterior") ?? ""),
     responsableNuevo: String(formData.get("responsableNuevo") ?? ""),
   });
-  if (!parsed.success) return;
+  if (!parsed.success) {
+    redirect(`/admin/padronnominal?tab=responsable&err=1&msg=${qs("Datos inválidos.")}`);
+  }
 
   let ubigeo = user.ubigeo ?? null;
   let etapa = "";
@@ -80,18 +96,48 @@ export async function bulkResponsableAction(formData: FormData) {
     etapa = sel?.etapa ?? "";
   }
 
-  if (!ubigeo) return;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(etapa)) return;
+  if (!ubigeo) {
+    redirect(`/admin/padronnominal?tab=responsable&err=1&msg=${qs("Falta ubigeo.")}`);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(etapa)) {
+    redirect(`/admin/padronnominal?tab=responsable&err=1&msg=${qs("Falta etapa (YYYY-MM-01).")}`);
+  }
+  if (parsed.data.responsableAnterior === parsed.data.responsableNuevo) {
+    redirect(`/admin/padronnominal?tab=responsable&err=1&msg=${qs("El responsable anterior y el nuevo no pueden ser iguales.")}`);
+  }
 
-  const res = await updatePadronResponsable({
-    ubigeo,
-    etapa,
-    responsableAnterior: parsed.data.responsableAnterior,
-    responsableNuevo: parsed.data.responsableNuevo,
-  });
+  const pool = getDbPool();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [resPadron] = await conn.query(
+      "UPDATE padronnominal SET responsable = ? WHERE etapa = ? AND ubigeo = ? AND responsable = ?",
+      [
+        parsed.data.responsableNuevo,
+        etapa,
+        ubigeo,
+        parsed.data.responsableAnterior,
+      ],
+    );
+    const [resPersona] = await conn.query(
+      "UPDATE persona SET cdr = ? WHERE ubigeo = ? AND cdr = ?",
+      [parsed.data.responsableNuevo, ubigeo, parsed.data.responsableAnterior],
+    );
+    await conn.commit();
 
-  const affected = Number((res as any)?.affectedRows ?? 0);
-  revalidatePath("/admin/padronnominal");
-  redirect(`/admin/padronnominal?tab=responsable&ok=1&rows=${affected}`);
+    const affectedPadron = Number((resPadron as any)?.affectedRows ?? 0);
+    const affectedPersona = Number((resPersona as any)?.affectedRows ?? 0);
+    revalidatePath("/admin/padronnominal");
+    redirect(
+      `/admin/padronnominal?tab=responsable&ok=1&rows=${affectedPadron}&rows2=${affectedPersona}`,
+    );
+  } catch {
+    try {
+      await conn.rollback();
+    } catch {}
+    redirect(`/admin/padronnominal?tab=responsable&err=1&msg=${qs("No se pudo aplicar el cambio. Revisa que la BD esté disponible e inténtalo nuevamente.")}`);
+  } finally {
+    conn.release();
+  }
 }
 

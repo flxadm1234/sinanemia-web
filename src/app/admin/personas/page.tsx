@@ -8,10 +8,10 @@ import { countAsignadosPorActores } from "@/lib/padronnominal";
 import { NinosAsignadosButton } from "@/components/NinosAsignadosButton";
 
 export default async function AdminPersonasPage(props: {
-  searchParams: Promise<{ estado?: string; q?: string; tipo?: string }>;
+  searchParams: Promise<{ estado?: string; q?: string; tipo?: string; ok?: string; err?: string; msg?: string }>;
 }) {
   const user = await requireAdminOrSuperAdmin();
-  const { estado, q, tipo } = await props.searchParams;
+  const { estado, q, tipo, ok, err, msg } = await props.searchParams;
 
   const estadoNum =
     estado === "1" ? 1 : estado === "0" ? 0 : undefined;
@@ -82,6 +82,18 @@ export default async function AdminPersonasPage(props: {
             </Link>
           </div>
         </div>
+
+        {err === "1" ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {msg ? String(msg) : "No se pudo completar la operación."}
+          </div>
+        ) : null}
+
+        {ok === "1" ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            {msg ? String(msg) : "Operación completada correctamente."}
+          </div>
+        ) : null}
 
         <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
           <form className="flex flex-col gap-3 md:flex-row md:items-center">

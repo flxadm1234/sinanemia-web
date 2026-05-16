@@ -9,6 +9,7 @@ export type DashboardMonth = {
   year: number;
   numero_mes: number;
   meses: string;
+  seleccion?: number | null;
   etapa: string;
 };
 
@@ -28,7 +29,7 @@ export async function listDashboardMonthsByUbigeo(ubigeo: string, limit = 24) {
   const pool = getDbPool();
   const lim = Math.min(Math.max(limit, 1), 48);
   const [rows] = await pool.query(
-    `SELECT ubigeo, year, numero_mes, meses
+    `SELECT ubigeo, year, numero_mes, meses, seleccion
      FROM meses
      WHERE ubigeo = ?
      ORDER BY year DESC, numero_mes DESC
@@ -40,7 +41,8 @@ export async function listDashboardMonthsByUbigeo(ubigeo: string, limit = 24) {
     const numero_mes = Number(r.numero_mes ?? 0);
     const meses = String(r.meses ?? "").trim();
     const u = String(r.ubigeo ?? "").trim();
-    return { ubigeo: u, year, numero_mes, meses, etapa: mesToEtapa(year, numero_mes) };
+    const seleccion = r.seleccion == null ? null : Number(r.seleccion);
+    return { ubigeo: u, year, numero_mes, meses, seleccion, etapa: mesToEtapa(year, numero_mes) };
   }) as DashboardMonth[];
 }
 
@@ -63,6 +65,10 @@ function assignedWhere() {
   return "actorsocial IS NOT NULL AND TRIM(actorsocial) <> '' AND TRIM(actorsocial) <> '0'";
 }
 
+function ninosWhere() {
+  return "TRIM(COALESCE(tipovd,'')) = '1'";
+}
+
 export async function countAsignados(params: {
   etapa: string;
   ubigeo?: string;
@@ -70,7 +76,35 @@ export async function countAsignados(params: {
   responsable?: string;
 }) {
   const pool = getDbPool();
-  const where: string[] = ["etapa = ?", assignedWhere()];
+  const where: string[] = ["etapa = ?", ninosWhere(), assignedWhere()];
+  const values: any[] = [params.etapa];
+  if (params.ubigeo) {
+    where.push("ubigeo = ?");
+    values.push(Number(params.ubigeo));
+  }
+  if (params.actor) {
+    where.push("actorsocial = ?");
+    values.push(params.actor);
+  }
+  if (params.responsable) {
+    where.push("responsable = ?");
+    values.push(params.responsable);
+  }
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) as c FROM padronnominal WHERE ${where.join(" AND ")}`,
+    values,
+  );
+  return Number((rows as any[])[0]?.c ?? 0);
+}
+
+export async function countCargados(params: {
+  etapa: string;
+  ubigeo?: string;
+  actor?: string;
+  responsable?: string;
+}) {
+  const pool = getDbPool();
+  const where: string[] = ["etapa = ?", ninosWhere()];
   const values: any[] = [params.etapa];
   if (params.ubigeo) {
     where.push("ubigeo = ?");
@@ -103,7 +137,7 @@ export async function timelineAsignados(params: {
   const pool = getDbPool();
   const etapas = params.months.map((m) => m.etapa);
   const placeholders = etapas.map(() => "?").join(",");
-  const where: string[] = [`etapa IN (${placeholders})`, assignedWhere()];
+  const where: string[] = [`etapa IN (${placeholders})`, ninosWhere(), assignedWhere()];
   const values: any[] = [...etapas];
   if (params.ubigeo) {
     where.push("ubigeo = ?");
@@ -139,6 +173,55 @@ export async function timelineAsignados(params: {
     }));
 }
 
+export type TimelineTotalsPoint = { etapa: string; label: string; total: number; assigned: number };
+
+export async function timelineTotales(params: {
+  months: DashboardMonth[];
+  ubigeo?: string;
+  actor?: string;
+  responsable?: string;
+}) {
+  if (!params.months.length) return [] as TimelineTotalsPoint[];
+  const pool = getDbPool();
+  const etapas = params.months.map((m) => m.etapa);
+  const placeholders = etapas.map(() => "?").join(",");
+  const where: string[] = [`etapa IN (${placeholders})`, ninosWhere()];
+  const values: any[] = [...etapas];
+  if (params.ubigeo) {
+    where.push("ubigeo = ?");
+    values.push(Number(params.ubigeo));
+  }
+  if (params.actor) {
+    where.push("actorsocial = ?");
+    values.push(params.actor);
+  }
+  if (params.responsable) {
+    where.push("responsable = ?");
+    values.push(params.responsable);
+  }
+  const [rows] = await pool.query(
+    `SELECT etapa, COUNT(*) as total, SUM(CASE WHEN ${assignedWhere()} THEN 1 ELSE 0 END) as assigned
+     FROM padronnominal
+     WHERE ${where.join(" AND ")}
+     GROUP BY etapa`,
+    values,
+  );
+  const map = new Map<string, { total: number; assigned: number }>();
+  for (const r of rows as any[]) {
+    const etapa = String(r.etapa ?? "").slice(0, 10);
+    map.set(etapa, { total: Number(r.total ?? 0), assigned: Number(r.assigned ?? 0) });
+  }
+  return params.months
+    .slice()
+    .reverse()
+    .map((m) => ({
+      etapa: m.etapa,
+      label: `${pad2(m.numero_mes)}/${m.year}`,
+      total: map.get(m.etapa)?.total ?? 0,
+      assigned: map.get(m.etapa)?.assigned ?? 0,
+    }));
+}
+
 export type EstadosvdItem = { estado: string; count: number };
 
 export async function estadosvdDistribucion(params: {
@@ -149,7 +232,7 @@ export async function estadosvdDistribucion(params: {
   limit?: number;
 }) {
   const pool = getDbPool();
-  const where: string[] = ["etapa = ?"];
+  const where: string[] = ["etapa = ?", ninosWhere()];
   const values: any[] = [params.etapa];
   if (params.ubigeo) {
     where.push("ubigeo = ?");
@@ -209,5 +292,39 @@ export async function resumenPorProvincia(params: { etapa: string; limit?: numbe
 
 export async function resumenPorDistrito(params: { etapa: string; limit?: number }) {
   return ubigeoAggByPrefix({ etapa: params.etapa, prefixLen: 6, limit: params.limit });
+}
+
+export async function countActoresSocialesActivos(params: { ubigeo?: string; cdr?: string }) {
+  const pool = getDbPool();
+  const where: string[] = ["UPPER(tipo) LIKE 'ACTOR SOCIAL%'", "estado = 1"];
+  const values: any[] = [];
+  if (params.ubigeo) {
+    where.push("ubigeo = ?");
+    values.push(Number(params.ubigeo));
+  }
+  if (params.cdr && params.cdr.trim()) {
+    where.push("cdr = ?");
+    values.push(params.cdr.trim());
+  }
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) as c FROM persona WHERE ${where.join(" AND ")}`,
+    values,
+  );
+  return Number((rows as any[])[0]?.c ?? 0);
+}
+
+export async function countCoordinadoresActivos(params: { ubigeo?: string }) {
+  const pool = getDbPool();
+  const where: string[] = ["UPPER(tipo) = 'COORDINADOR'", "estado = 1"];
+  const values: any[] = [];
+  if (params.ubigeo) {
+    where.push("ubigeo = ?");
+    values.push(Number(params.ubigeo));
+  }
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) as c FROM persona WHERE ${where.join(" AND ")}`,
+    values,
+  );
+  return Number((rows as any[])[0]?.c ?? 0);
 }
 

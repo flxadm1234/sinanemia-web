@@ -1,7 +1,9 @@
 import { requireSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import {
+  countActoresSocialesActivos,
   countAsignados,
+  countCargados,
   estadosvdDistribucion,
   getLatestDashboardMonthAny,
   listDashboardMonthsByUbigeo,
@@ -9,9 +11,11 @@ import {
   resumenPorDepartamento,
   resumenPorDistrito,
   resumenPorProvincia,
-  timelineAsignados,
+  timelineTotales,
+  countCoordinadoresActivos,
   type DashboardMonth,
 } from "@/lib/dashboard";
+import { DashboardLineChart } from "@/components/DashboardLineChart";
 
 function parseSearch(params: Record<string, string | undefined>) {
   const ubigeo = String(params.ubigeo ?? "").trim();
@@ -31,22 +35,9 @@ function findSelectedMonth(months: DashboardMonth[], year: number, numero_mes: n
   return months.find((m) => m.year === year && m.numero_mes === numero_mes) ?? null;
 }
 
-function BarRow(props: { label: string; value: number; max: number }) {
-  const { label, value, max } = props;
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-20 shrink-0 text-xs text-zinc-600">{label}</div>
-      <div className="flex-1">
-        <div className="h-2 rounded-full bg-zinc-100">
-          <div className="h-2 rounded-full bg-blue-600" style={{ width: `${pct}%` }} />
-        </div>
-      </div>
-      <div className="w-16 shrink-0 text-right text-xs font-semibold text-zinc-900">
-        {value}
-      </div>
-    </div>
-  );
+function pickDefaultMonth(months: DashboardMonth[]) {
+  const sel = months.find((m) => Number(m.seleccion ?? 0) === 1);
+  return sel ?? months[0] ?? null;
 }
 
 export default async function DashboardPage(props: {
@@ -79,7 +70,7 @@ export default async function DashboardPage(props: {
 
   let selectedMonth: DashboardMonth | null = null;
   if (months.length) {
-    selectedMonth = findSelectedMonth(months, sp.year, sp.numero_mes) ?? months[0] ?? null;
+    selectedMonth = findSelectedMonth(months, sp.year, sp.numero_mes) ?? pickDefaultMonth(months);
   }
 
   if (!selectedMonth) {
@@ -102,13 +93,11 @@ export default async function DashboardPage(props: {
     return {};
   })();
 
+  const cargadosActual = await countCargados({ etapa, ...scopeFilters });
   const asignadosActual = await countAsignados({ etapa, ...scopeFilters });
+  const sinAsignarActual = Math.max(0, cargadosActual - asignadosActual);
 
-  const timeline = await timelineAsignados({
-    months: months.slice(0, 6),
-    ...scopeFilters,
-  });
-  const maxTimeline = Math.max(0, ...timeline.map((t) => t.assigned));
+  const timeline = await timelineTotales({ months: months.slice(0, 8), ...scopeFilters });
 
   const estados = await estadosvdDistribucion({ etapa, ...scopeFilters, limit: 12 });
 
@@ -116,6 +105,13 @@ export default async function DashboardPage(props: {
   const dept = showGeo ? await resumenPorDepartamento({ etapa, limit: 50 }) : [];
   const prov = showGeo ? await resumenPorProvincia({ etapa, limit: 80 }) : [];
   const dist = showGeo ? await resumenPorDistrito({ etapa, limit: 80 }) : [];
+
+  const ubigeoForCounts = scopeUbigeo ? scopeUbigeo : undefined;
+  const actoresActivos =
+    role === "COORDINADOR"
+      ? await countActoresSocialesActivos({ ubigeo: ubigeoForCounts, cdr: user.dni })
+      : await countActoresSocialesActivos({ ubigeo: ubigeoForCounts });
+  const coordinadoresActivos = await countCoordinadoresActivos({ ubigeo: ubigeoForCounts });
 
   return (
     <AppShell user={user} title="Dashboard">
@@ -175,34 +171,39 @@ export default async function DashboardPage(props: {
           </form>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
-            <div className="text-sm font-semibold text-zinc-900">
-              Niños asignados (periodo)
-            </div>
-            <div className="mt-2 text-3xl font-semibold text-zinc-900">
-              {asignadosActual}
-            </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-6">
+          <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-700 text-white p-5 lg:col-span-2">
+            <div className="text-sm font-semibold opacity-90">Niños cargados (periodo)</div>
+            <div className="mt-2 text-3xl font-semibold">{cargadosActual}</div>
+            <div className="mt-2 text-xs opacity-90">Registros tipovd=1 en la etapa.</div>
+          </div>
+          <div className="rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-700 text-white p-5 lg:col-span-2">
+            <div className="text-sm font-semibold opacity-90">Niños asignados (periodo)</div>
+            <div className="mt-2 text-3xl font-semibold">{asignadosActual}</div>
+            <div className="mt-2 text-xs opacity-90">Registros con actor social asignado.</div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5 lg:col-span-2">
+            <div className="text-sm font-semibold text-zinc-900">Sin asignar (periodo)</div>
+            <div className="mt-2 text-3xl font-semibold text-zinc-900">{sinAsignarActual}</div>
+            <div className="mt-2 text-xs text-zinc-500">Cargados menos asignados.</div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5 lg:col-span-3">
+            <div className="text-sm font-semibold text-zinc-900">Voluntarios (actores sociales) activos</div>
+            <div className="mt-2 text-3xl font-semibold text-zinc-900">{actoresActivos}</div>
             <div className="mt-2 text-xs text-zinc-500">
-              Conteo de registros con actor social asignado.
+              {role === "COORDINADOR" ? "Filtrado por tu CDR." : "Filtrado por ubigeo."}
             </div>
           </div>
-
-          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5 lg:col-span-2">
-            <div className="text-sm font-semibold text-zinc-900">Línea de tiempo</div>
-            <div className="mt-1 text-xs text-zinc-500">
-              Últimos meses según la tabla meses.
-            </div>
-            <div className="mt-4 flex flex-col gap-3">
-              {timeline.map((t) => (
-                <BarRow key={t.etapa} label={t.label} value={t.assigned} max={maxTimeline} />
-              ))}
-              {!timeline.length ? (
-                <div className="text-sm text-zinc-500">Sin datos.</div>
-              ) : null}
-            </div>
+          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5 lg:col-span-3">
+            <div className="text-sm font-semibold text-zinc-900">No voluntarios (coordinadores) activos</div>
+            <div className="mt-2 text-3xl font-semibold text-zinc-900">{coordinadoresActivos}</div>
+            <div className="mt-2 text-xs text-zinc-500">Filtrado por ubigeo.</div>
           </div>
         </div>
+
+        <DashboardLineChart
+          points={timeline.map((t) => ({ label: t.label, total: t.total, assigned: t.assigned }))}
+        />
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">

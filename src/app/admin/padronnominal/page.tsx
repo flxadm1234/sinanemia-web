@@ -7,10 +7,10 @@ import { CoordinatorCombobox } from "@/components/CoordinatorCombobox";
 import { bulkActorSocialAction, bulkResponsableAction } from "./actions";
 
 export default async function PadronNominalAdminPage(props: {
-  searchParams: Promise<{ tab?: string; ok?: string; rows?: string }>;
+  searchParams: Promise<{ tab?: string; ok?: string; rows?: string; rows2?: string; err?: string; msg?: string }>;
 }) {
   const user = await requireAdminOrSuperAdmin();
-  const { tab, ok, rows } = await props.searchParams;
+  const { tab, ok, rows, rows2, err, msg } = await props.searchParams;
   const activeTab = tab === "responsable" ? "responsable" : "actor";
 
   const etapaSel =
@@ -22,6 +22,9 @@ export default async function PadronNominalAdminPage(props: {
   const etapaDefault = etapaSel?.etapa ?? "";
   const showResult = ok === "1";
   const affected = rows && rows.trim() ? Number(rows) : 0;
+  const affected2 = rows2 && rows2.trim() ? Number(rows2) : 0;
+  const showError = err === "1";
+  const errorMsg = msg ? String(msg) : "";
 
   return (
     <AppShell user={user} title="Padrón nominal">
@@ -44,10 +47,23 @@ export default async function PadronNominalAdminPage(props: {
           </Link>
         </div>
 
+        {showError ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {errorMsg || "No se pudo completar la operación."}
+          </div>
+        ) : null}
+
         {showResult ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             Actualización completada. Registros afectados:{" "}
             <span className="font-semibold">{Number.isFinite(affected) ? affected : 0}</span>
+            {activeTab === "responsable" ? (
+              <>
+                {" "}
+                · Personas actualizadas (CDR):{" "}
+                <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span>
+              </>
+            ) : null}
           </div>
         ) : null}
 
