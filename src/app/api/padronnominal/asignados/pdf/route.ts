@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { getSession } from "@/lib/auth";
 import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
-import { listAsignadosPorActor } from "@/lib/padronnominal";
+import { listAsignadosPorActorForPdf } from "@/lib/padronnominal";
 import { findActorSocialByDni, findCoordinadorByDni } from "@/lib/persona";
 
 export const runtime = "nodejs";
@@ -28,7 +28,142 @@ function ultimaAtencion(r: any) {
 function safeText(v: unknown, fallback = "-") {
   const s = String(v ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").trim();
   if (!s) return fallback;
-  return s.length > 260 ? `${s.slice(0, 257)}...` : s;
+  return s.length > 420 ? `${s.slice(0, 417)}...` : s;
+}
+
+function asKeyValuePairs(r: any) {
+  const madre = `${r.nombresmadre ?? ""} ${r.appatmadre ?? ""} ${r.apmatmadre ?? ""}`.trim();
+  return [
+    ["IDPN", r.idpn],
+    ["DNI", r.dni],
+    ["Nombres", r.nombres],
+    ["F. nac.", fmtDate(r.fecha_nac)],
+    ["Rango", r.rango],
+    ["CCPP", r.ccpp],
+    ["Zona", r.zona],
+    ["Mz", r.mz],
+    ["Dirección", r.direccion],
+    ["Referencia", r.referencia],
+    ["Nueva dirección", r.nuevadireccion],
+    ["Nueva referencia", r.nuevareferencia],
+    ["Teléfono", r.telefonopn ?? r.telefono],
+    ["EESS UA", r.eess_ua],
+    ["Cod EESS", r.codeess],
+    ["Departamento", r.departamento],
+    ["Provincia", r.provincia],
+    ["Distrito", r.distrito],
+    ["Ubigeo", r.ubigeo],
+    ["Actor social", r.actorsocial],
+    ["Responsable", r.responsable],
+    ["Estado VD", r.estadovd],
+    ["Estado SVD", r.estadosvd],
+    ["Estado SVD2", r.estadosvd2],
+    ["Estado SVD3", r.estadosvd3],
+    ["Etapa", fmtDate(r.etapa)],
+    ["F. cita", fmtDate(r.fechacita)],
+    ["Nro VD", r.nrovd],
+    ["F. inicio VD", fmtDate(r.fecha_inicio_vd)],
+    ["F. fin VD", fmtDate(r.fecha_fin_vd)],
+    ["Primera VD", fmtDate(r.primera_vd)],
+    ["Segunda VD", fmtDate(r.segunda_vd)],
+    ["Tercera VD", fmtDate(r.tercera_vd)],
+    ["F. modif.", fmtDate(r.fechamodificacion)],
+    ["F. modif.2", fmtDate(r.fechamodificacion2)],
+    ["Madre", madre],
+    ["DNI madre", r.dnimadre],
+    ["Padre", r.nombre_padre],
+    ["DNI padre", r.dni_padre],
+    ["Observación", r.observacion],
+    ["Obs. padrón", r.obspadron],
+    ["Observación 2", r.observacion2],
+    ["Tamisaje", r.tamisaje],
+    ["F. tamisaje", fmtDate(r.fechatamisaje)],
+    ["HB", r.hb],
+    ["Anemia", r.anemia],
+    ["Hierro", r.hierro],
+    ["TSF", r.tsf],
+    ["RSF", r.rsf],
+    ["Resultado", r.resultado],
+    ["Avance", r.avance],
+    ["Tiene PS", r.tieneps],
+    ["Visita DOPS", r.visitadops],
+    ["Sesión DEM", r.sesiondem],
+    ["Modo VD", r.modovd],
+    ["Tipo VD", r.tipovd],
+    ["Cod QR", r.codqr],
+    ["Lat", r.lat],
+    ["Lon", r.lon],
+    ["Lat2", r.lat2],
+    ["Long2", r.long2],
+    ["Lat3", r.lat3],
+    ["Long3", r.long3],
+    ["Programación", fmtDate(r.programacion1)],
+    ["Asignación", r.asignacion],
+    ["Estado intervención", r.estadointervencion],
+    ["Padron nominal", r.padronnominal],
+    ["Adulto", r.adulto],
+    ["Cantidad A", r.cantidada],
+    ["Id distrito", r.iddistrito],
+    ["Discapacidad", r.discapacidad],
+    ["Titular línea", r.titular_linea],
+    ["Código V", r.codigov],
+    ["Img carnet", r.img_carnet],
+    ["Estado verificación", r.estado_verificacion],
+    ["Estado", r.estado],
+    ["Estado verificado", r.estado_verificado],
+    ["Celular app", r.celularseapp],
+    ["Tipo dispositivo", r.tipodispositivo],
+    ["Tipo seguro", r.tiposeguro],
+    ["Estado seguro", r.estadoseguro],
+    ["F. act seguro", fmtDate(r.fecha_act_seguro)],
+    ["Nombre comercial", r.nombre_comercial],
+    ["HB registro", r.hbregistro],
+    ["CCRED", r.ccred],
+    ["Usuario", r.usuario],
+  ] as Array<[string, unknown]>;
+}
+
+function drawKeyValueGrid(params: {
+  doc: InstanceType<typeof PDFDocument>;
+  x: number;
+  y: number;
+  w: number;
+  pairs: Array<[string, unknown]>;
+}) {
+  const { doc, x, y, w, pairs } = params;
+  const colGap = 10;
+  const colW = (w - colGap) / 2;
+  const labelW = 86;
+  const lineH = 9.6;
+
+  let leftY = y;
+  let rightY = y;
+  for (let i = 0; i < pairs.length; i++) {
+    const [k, v] = pairs[i];
+    const col = i % 2;
+    const baseX = col === 0 ? x : x + colW + colGap;
+    const baseY = col === 0 ? leftY : rightY;
+
+    doc.fontSize(7).fillColor("#111827").text(`${k}:`, baseX, baseY, {
+      width: labelW,
+      continued: false,
+    });
+    doc.fontSize(7).fillColor("#374151").text(safeText(v, "-"), baseX + labelW, baseY, {
+      width: colW - labelW,
+      height: lineH,
+    });
+
+    doc.fontSize(7);
+    const used = Math.max(
+      doc.heightOfString(`${k}:`, { width: labelW }),
+      doc.heightOfString(safeText(v, "-"), { width: colW - labelW }),
+      lineH,
+    );
+
+    if (col === 0) leftY = baseY + Math.max(used, lineH);
+    else rightY = baseY + Math.max(used, lineH);
+  }
+  return Math.max(leftY, rightY);
 }
 
 export async function GET(request: Request) {
@@ -90,7 +225,7 @@ export async function GET(request: Request) {
         )
       : safeText(cdr || "", "");
 
-    const rows = await listAsignadosPorActor({
+    const rows = await listAsignadosPorActorForPdf({
       ubigeo,
       etapa,
       actor: actor.dni,
@@ -101,16 +236,20 @@ export async function GET(request: Request) {
       `${actor.nombrecompleto ?? ""} ${actor.apellidos ?? ""}`.trim() || actor.dni,
     );
 
-    const doc = new PDFDocument({ size: "A4", margin: 42 });
+    const doc = new PDFDocument({ size: "A4", margin: 38 });
     const chunks: Buffer[] = [];
-    doc.on("data", (c) => chunks.push(c));
+    const bufferPromise = new Promise<Buffer>((resolve, reject) => {
+      doc.on("data", (c) => chunks.push(c));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", (e) => reject(e));
+    });
 
     const generatedAt = new Date().toISOString().slice(0, 19).replace("T", " ");
 
-    const title = "Hoja de Ruta - Niños asignados (SinAnemia)";
-    doc.fontSize(16).fillColor("#111827").text(title, { align: "left" });
+    const title = "Hoja de Ruta de Intervención - Niños asignados (SinAnemia)";
+    doc.fontSize(14).fillColor("#111827").text(title, { align: "left" });
     doc.moveDown(0.4);
-    doc.fontSize(10).fillColor("#374151").text(`Generado: ${generatedAt}`);
+    doc.fontSize(9).fillColor("#374151").text(`Generado: ${generatedAt}`);
     doc.text(`Ubigeo: ${ubigeo}   Etapa: ${etapa}`);
     doc.text(`Actor social: ${actorNombre} (${safeText(actor.dni, "")})`);
     doc.text(
@@ -125,7 +264,7 @@ export async function GET(request: Request) {
       .stroke();
     doc.moveDown(0.8);
 
-    doc.fontSize(11).fillColor("#111827").text(`Total: ${rows.length} registros`);
+    doc.fontSize(10).fillColor("#111827").text(`Total: ${rows.length} registros`);
     doc.moveDown(0.6);
 
     const boxPadding = 10;
@@ -137,15 +276,10 @@ export async function GET(request: Request) {
     };
 
     rows.forEach((r: any, idx: number) => {
-      const madre = safeText(
-        `${r.nombresmadre ?? ""} ${r.appatmadre ?? ""} ${r.apmatmadre ?? ""}`.trim(),
-        "-",
-      );
-      const padre = safeText(`${r.nombre_padre ?? ""}`.trim(), "-");
-      const ult = safeText(fmtDate(ultimaAtencion(r)), "-");
-
-      const blockHeight = 132;
-      ensureSpace(blockHeight + 6);
+      const pairs = asKeyValuePairs(r);
+      const headerH = 22;
+      const blockHeight = 312;
+      ensureSpace(blockHeight + 10);
 
       const x = doc.page.margins.left;
       const w = doc.page.width - doc.page.margins.left - doc.page.margins.right;
@@ -157,54 +291,32 @@ export async function GET(request: Request) {
         .fillAndStroke("#F9FAFB", "#E5E7EB");
 
       doc.fillOpacity(1);
-      doc.fontSize(11).fillColor("#111827");
-      doc.text(`${idx + 1}. ${safeText(r.nombres)}`, x + boxPadding, y + 10, {
-        width: w - boxPadding * 2,
+      doc.fontSize(9).fillColor("#111827").text(
+        `${idx + 1}. ${safeText(r.nombres)} (${safeText(r.dni)})`,
+        x + boxPadding,
+        y + 10,
+        { width: w - boxPadding * 2 },
+      );
+
+      doc
+        .moveTo(x + boxPadding, y + headerH)
+        .lineTo(x + w - boxPadding, y + headerH)
+        .strokeColor("#E5E7EB")
+        .stroke();
+
+      drawKeyValueGrid({
+        doc,
+        x: x + boxPadding,
+        y: y + headerH + 8,
+        w: w - boxPadding * 2,
+        pairs,
       });
 
-      doc.fontSize(9).fillColor("#374151");
-      doc.text(
-        `DNI: ${safeText(r.dni)}   F. nac: ${safeText(fmtDate(r.fecha_nac), "-")}   Últ. atención: ${ult}`,
-        x + boxPadding,
-        y + 28,
-        { width: w - boxPadding * 2 },
-      );
-
-      doc.text(
-        `Madre: ${madre}   DNI madre: ${safeText(r.dnimadre)}`,
-        x + boxPadding,
-        y + 44,
-        { width: w - boxPadding * 2 },
-      );
-      doc.text(
-        `Padre: ${padre}   DNI padre: ${safeText(r.dni_padre)}`,
-        x + boxPadding,
-        y + 58,
-        { width: w - boxPadding * 2 },
-      );
-
-      doc.text(
-        `EESS: ${safeText(r.eess_ua)}   Teléfono: ${safeText(r.telefonopn ?? r.telefono)}`,
-        x + boxPadding,
-        y + 72,
-        { width: w - boxPadding * 2 },
-      );
-
-      doc.text(`Dirección: ${safeText(r.direccion)}`, x + boxPadding, y + 88, {
-        width: w - boxPadding * 2,
-      });
-      doc.text(`Referencia: ${safeText(r.referencia)}`, x + boxPadding, y + 104, {
-        width: w - boxPadding * 2,
-      });
-
-      doc.y = y + blockHeight + 10;
+      doc.y = y + blockHeight + 12;
     });
 
     doc.end();
-    const buffer = await new Promise<Buffer>((resolve, reject) => {
-      doc.on("end", () => resolve(Buffer.concat(chunks)));
-      doc.on("error", (e) => reject(e));
-    });
+    const buffer = await bufferPromise;
 
     const filename = `hoja_de_ruta_${safeText(actor.dni, "actor")}_${etapa}.pdf`
       .replaceAll(":", "-")
@@ -217,7 +329,8 @@ export async function GET(request: Request) {
         "Cache-Control": "no-store",
       },
     });
-  } catch {
+  } catch (e) {
+    console.error("pdf_failed", e);
     return NextResponse.json({ error: "pdf_failed" }, { status: 500 });
   }
 }

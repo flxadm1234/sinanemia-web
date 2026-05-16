@@ -85,6 +85,134 @@ export async function listAsignadosPorActor(params: {
   return rows as PadronAsignadoRow[];
 }
 
+export type PadronAsignadoPdfRow = {
+  idpn: number;
+  tipo: number | null;
+  rango: string | null;
+  ccpp: string | null;
+  zona: number | null;
+  mz: number | null;
+  direccion: string | null;
+  referencia: string | null;
+  codeess: string | null;
+  tipodoc: string | null;
+  dni: string | null;
+  nombres: string | null;
+  fecha_nac: string | null;
+  dnimadre: string | null;
+  appatmadre: string | null;
+  apmatmadre: string | null;
+  nombresmadre: string | null;
+  dni_padre: string | null;
+  nombre_padre: string | null;
+  idocurrencia: number | null;
+  idocurrencia2: number | null;
+  nuevadireccion: string | null;
+  nuevareferencia: string | null;
+  observacion: string | null;
+  obspadron: string | null;
+  actorsocial: string | null;
+  responsable: string | null;
+  telefono: string | null;
+  telefonopn: string | null;
+  adulto: number | null;
+  cantidada: number | null;
+  etapa: string;
+  estadovd: string | null;
+  fechacita: string | null;
+  nrovd: number | null;
+  eess_ua: string | null;
+  departamento: string | null;
+  provincia: string | null;
+  distrito: string | null;
+  codqr: string | null;
+  modovd: number | null;
+  tipovd: string | null;
+  lat: string | null;
+  lon: string | null;
+  lat2: string | null;
+  long2: string | null;
+  lat3: string | null;
+  long3: string | null;
+  fechamodificacion: string | null;
+  fechamodificacion2: string | null;
+  tamisaje: number | null;
+  hb: number | null;
+  anemia: number | null;
+  hierro: number | null;
+  tsf: number | null;
+  rsf: number | null;
+  visitadops: number | null;
+  sesiondem: number | null;
+  tieneps: string | null;
+  observacion2: string | null;
+  fechatamisaje: string | null;
+  tiposeguro: string | null;
+  tipodocum: string | null;
+  usuario: string | null;
+  ubigeo: number | null;
+  fecha_inicio_vd: string | null;
+  fecha_fin_vd: string | null;
+  estadosvd: string | null;
+  estadosvd2: string | null;
+  estadosvd3: string | null;
+  primera_vd: string | null;
+  segunda_vd: string | null;
+  tercera_vd: string | null;
+  resultado: number | null;
+  avance: number | null;
+  fotos: string | null;
+  programacion1: string | null;
+  padronnominal: string | null;
+  iddistrito: number | null;
+  discapacidad: number | null;
+  titular_linea: string | null;
+  codigov: string | null;
+  img_carnet: string | null;
+  estado_verificacion: string | null;
+  estado: number | null;
+  estado_verificado: number | null;
+  celularseapp: string | null;
+  tipodispositivo: string | null;
+  estadointervencion: string | null;
+  asignacion: string | null;
+  estadoseguro: string | null;
+  fecha_act_seguro: string | null;
+  nombre_comercial: string | null;
+  hbregistro: number | null;
+  ccred: number | null;
+};
+
+export async function listAsignadosPorActorForPdf(params: {
+  ubigeo: number;
+  etapa: string;
+  actor: string;
+  limit?: number;
+}) {
+  const pool = getDbPool();
+  const limit = Math.min(Math.max(params.limit ?? 500, 1), 2000);
+  const [rows] = await pool.query(
+    `SELECT idpn, tipo, rango, ccpp, zona, mz, direccion, referencia, codeess, tipodoc, dni, nombres, fecha_nac,
+            dnimadre, appatmadre, apmatmadre, nombresmadre, dni_padre, nombre_padre,
+            idocurrencia, idocurrencia2, nuevadireccion, nuevareferencia, observacion, obspadron,
+            actorsocial, responsable, telefono, telefonopn, adulto, cantidada, etapa, estadovd, fechacita, nrovd,
+            eess_ua, departamento, provincia, distrito, codqr, modovd, tipovd, lat, lon, lat2, long2, lat3, long3,
+            fechamodificacion, fechamodificacion2, tamisaje, hb, anemia, hierro, tsf, rsf, visitadops, sesiondem,
+            tieneps, observacion2, fechatamisaje, tiposeguro, tipodocum, usuario, ubigeo,
+            fecha_inicio_vd, fecha_fin_vd, estadosvd, estadosvd2, estadosvd3,
+            primera_vd, segunda_vd, tercera_vd, resultado, avance, fotos, programacion1, padronnominal,
+            iddistrito, discapacidad, titular_linea, codigov, img_carnet, estado_verificacion, estado, estado_verificado,
+            celularseapp, tipodispositivo, estadointervencion, asignacion, estadoseguro, fecha_act_seguro,
+            nombre_comercial, hbregistro, ccred
+     FROM padronnominal
+     WHERE ubigeo = ? AND etapa = ? AND actorsocial = ?
+     ORDER BY idpn DESC
+     LIMIT ${limit}`,
+    [params.ubigeo, params.etapa, params.actor],
+  );
+  return rows as PadronAsignadoPdfRow[];
+}
+
 export async function updatePadronResponsable(params: {
   ubigeo: number;
   etapa: string;
