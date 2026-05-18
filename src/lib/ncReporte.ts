@@ -56,10 +56,14 @@ export type NcMatrixRow = {
   eess_ua: string;
   fechacita: string;
   estadosvd: string;
+  rango: string;
   departamento: string;
   provincia: string;
   distrito: string;
   fecha_nac: string;
+  edad_anios: string;
+  edad_meses: string;
+  edad_dias: string;
   tiposeguro: string;
   grupo: "6m" | "12m" | "-";
   en_denominador: "SI" | "NO";
@@ -73,6 +77,28 @@ export type NcMatrixRow = {
   lab1: string;
   resultado: string;
 };
+
+function diffAgeParts(birth: Date, asOf: Date) {
+  const b = new Date(Date.UTC(birth.getUTCFullYear(), birth.getUTCMonth(), birth.getUTCDate()));
+  const a = new Date(Date.UTC(asOf.getUTCFullYear(), asOf.getUTCMonth(), asOf.getUTCDate()));
+  if (a.getTime() < b.getTime()) return null;
+
+  let years = a.getUTCFullYear() - b.getUTCFullYear();
+  let months = a.getUTCMonth() - b.getUTCMonth();
+  let days = a.getUTCDate() - b.getUTCDate();
+
+  if (days < 0) {
+    const prevMonth = new Date(Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), 0));
+    days += prevMonth.getUTCDate();
+    months -= 1;
+  }
+  if (months < 0) {
+    months += 12;
+    years -= 1;
+  }
+  const totalDays = Math.floor((a.getTime() - b.getTime()) / 86400000);
+  return { years, months, days, totalDays };
+}
 
 function toDate(v: unknown) {
   if (!v) return null;
@@ -534,6 +560,7 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
             pn.eess_ua,
             pn.fechacita,
             pn.estadosvd,
+            pn.rango,
             pn.departamento,
             pn.provincia,
             pn.distrito,
@@ -579,6 +606,7 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
     eess_ua: String(r.eess_ua ?? "").trim(),
     fechacita: fmtDateISO(r.fechacita) ?? "",
     estadosvd: String(r.estadosvd ?? "").trim(),
+    rango: String(r.rango ?? "").trim(),
     departamento: String(r.departamento ?? "").trim(),
     provincia: String(r.provincia ?? "").trim(),
     distrito: String(r.distrito ?? "").trim(),
@@ -715,10 +743,14 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
       eess_ua: it.eess_ua,
       fechacita: it.fechacita,
       estadosvd: it.estadosvd,
+      rango: it.rango,
       departamento: it.departamento,
       provincia: it.provincia,
       distrito: it.distrito,
       fecha_nac: it.fecha_nac,
+      edad_anios: "",
+      edad_meses: "",
+      edad_dias: "",
       tiposeguro: it.tiposeguro,
       grupo: den.grupo,
       en_denominador: den.ok ? "SI" : "NO",
@@ -732,6 +764,15 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
       lab1: "",
       resultado: "",
     };
+
+    if (den.birth) {
+      const age = diffAgeParts(den.birth, etapaDate);
+      if (age) {
+        row.edad_anios = String(age.years);
+        row.edad_meses = String(age.months);
+        row.edad_dias = String(age.totalDays);
+      }
+    }
 
     if (den.ok && den.birth) {
       const start =

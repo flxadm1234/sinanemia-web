@@ -109,10 +109,14 @@ export async function GET(req: Request) {
     { label: "EESS UA", key: "eess" },
     { label: "Fecha cita", key: "fechacita" },
     { label: "EstadosVD", key: "estadosvd" },
+    { label: "Rango", key: "rango" },
     { label: "Departamento", key: "dep" },
     { label: "Provincia", key: "prov" },
     { label: "Distrito", key: "dist" },
     { label: "F. Nac.", key: "fnac" },
+    { label: "Edad (años)", key: "edad_anios" },
+    { label: "Edad (meses)", key: "edad_meses" },
+    { label: "Edad (días)", key: "edad_dias" },
     { label: "Tipo seguro", key: "seg" },
     { label: "F. atención (HIS)", key: "fat" },
     { label: "Hemoglobina", key: "hb" },
@@ -155,10 +159,14 @@ export async function GET(req: Request) {
         ${td(r.eess_ua)}
         ${td(r.fechacita)}
         ${td(r.estadosvd)}
+        ${td(r.rango)}
         ${td(r.departamento)}
         ${td(r.provincia)}
         ${td(r.distrito)}
         ${td(r.fecha_nac)}
+        ${td(r.edad_anios)}
+        ${td(r.edad_meses)}
+        ${td(r.edad_dias)}
         ${td(r.tiposeguro)}
         ${td(r.fecha_atencion)}
         ${td(r.hemoglobina)}
