@@ -16,6 +16,8 @@ import {
   type DashboardMonth,
 } from "@/lib/dashboard";
 import { DashboardLineChart } from "@/components/DashboardLineChart";
+import { computeNcMetricsForEtapa } from "@/lib/ncReporte";
+import { NcLineChart } from "@/components/NcLineChart";
 
 function parseSearch(params: Record<string, string | undefined>) {
   const ubigeo = String(params.ubigeo ?? "").trim();
@@ -113,6 +115,34 @@ export default async function DashboardPage(props: {
       : await countActoresSocialesActivos({ ubigeo: ubigeoForCounts });
   const coordinadoresActivos = await countCoordinadoresActivos({ ubigeo: ubigeoForCounts });
 
+  const ncEnabled = role === "ADMINISTRADOR" || role === "SUPER ADMIN";
+  const ncUbigeo = Number(scopeUbigeo);
+  const ncOkUbigeo = ncEnabled && Number.isFinite(ncUbigeo) && ncUbigeo > 0;
+  const ncMonthsSource = months.filter((m) => m.year === selectedMonth.year && m.year >= 2026);
+  const selectedIdx = ncMonthsSource.findIndex(
+    (m) => m.year === selectedMonth.year && m.numero_mes === selectedMonth.numero_mes,
+  );
+  const ncMonthsWindow =
+    ncOkUbigeo && selectedIdx >= 0
+      ? ncMonthsSource.slice(selectedIdx, selectedIdx + 6)
+      : [];
+
+  const ncSeries = [];
+  let ncSelected: Awaited<ReturnType<typeof computeNcMetricsForEtapa>> | null = null;
+  if (ncOkUbigeo && ncMonthsWindow.length) {
+    for (const m of ncMonthsWindow) {
+      const isSelected = m.etapa === selectedMonth.etapa;
+      const metrics = await computeNcMetricsForEtapa({
+        ubigeo: ncUbigeo,
+        etapa: m.etapa,
+        includeDetails: isSelected,
+      });
+      if (!metrics) continue;
+      if (isSelected) ncSelected = metrics;
+      ncSeries.push(metrics);
+    }
+  }
+
   return (
     <AppShell user={user} title="Dashboard">
       <div className="flex flex-col gap-4">
@@ -204,6 +234,156 @@ export default async function DashboardPage(props: {
         <DashboardLineChart
           points={timeline.map((t) => ({ label: t.label, total: t.total, assigned: t.assigned }))}
         />
+
+        {ncEnabled ? (
+          ncOkUbigeo && ncSeries.length && ncSelected ? (
+            <>
+              <NcLineChart
+                points={ncSeries
+                  .slice()
+                  .reverse()
+                  .map((m) => ({ label: m.label, denom: m.denom_total, numer: m.num_total }))}
+              />
+              <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-900">
+                      Detalle del mes seleccionado (NC)
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500">
+                      Etapa: <span className="font-semibold">{ncSelected.etapa}</span>
+                    </div>
+                  </div>
+                  <div className="text-sm text-zinc-700">
+                    NC: <span className="font-semibold">{ncSelected.denom_total}</span> · N:{" "}
+                    <span className="font-semibold">{ncSelected.num_total}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-4">
+                  <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                    <div className="text-xs text-zinc-600">Denominador (NC)</div>
+                    <div className="mt-1 text-2xl font-semibold text-zinc-900">
+                      {ncSelected.denom_total}
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-600">
+                      6m: <span className="font-semibold">{ncSelected.denom_6m}</span> · 12m:{" "}
+                      <span className="font-semibold">{ncSelected.denom_12m}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                    <div className="text-xs text-zinc-600">Numerador (N)</div>
+                    <div className="mt-1 text-2xl font-semibold text-zinc-900">
+                      {ncSelected.num_total}
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-600">
+                      6m: <span className="font-semibold">{ncSelected.num_6m}</span> · 12m:{" "}
+                      <span className="font-semibold">{ncSelected.num_12m}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                    <div className="text-xs text-zinc-600">Seguro</div>
+                    <div className="mt-2 text-xs text-zinc-700">
+                      SIS: <span className="font-semibold">{ncSelected.sis}</span>
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-700">
+                      Sin seguro:{" "}
+                      <span className="font-semibold">{ncSelected.sin_seguro}</span>
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-700">
+                      Otros:{" "}
+                      <span className="font-semibold">{ncSelected.con_otro_seguro}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                    <div className="text-xs text-zinc-600">Cumplimiento</div>
+                    <div className="mt-1 text-2xl font-semibold text-zinc-900">
+                      {ncSelected.denom_total
+                        ? Math.round((ncSelected.num_total / ncSelected.denom_total) * 1000) /
+                          10
+                        : 0}
+                      %
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-600">N / NC</div>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                    <div className="text-sm font-semibold text-zinc-900">Exclusiones</div>
+                    <div className="mt-3 overflow-auto">
+                      <table className="min-w-[520px] text-sm">
+                        <thead className="bg-zinc-50 text-left text-zinc-600">
+                          <tr>
+                            <th className="px-3 py-2">Motivo</th>
+                            <th className="px-3 py-2 text-right">Cantidad</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
+                          {ncSelected.excluciones.map((e) => (
+                            <tr key={e.motivo}>
+                              <td className="px-3 py-2 text-zinc-800">{e.motivo}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-zinc-900">
+                                {e.count}
+                              </td>
+                            </tr>
+                          ))}
+                          {!ncSelected.excluciones.length ? (
+                            <tr>
+                              <td className="px-3 py-6 text-center text-zinc-500" colSpan={2}>
+                                Sin exclusiones registradas.
+                              </td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                    <div className="text-sm font-semibold text-zinc-900">
+                      Detalle de exclusiones (muestra)
+                    </div>
+                    <div className="mt-1 text-xs text-zinc-500">
+                      Se muestran hasta 200 registros.
+                    </div>
+                    <div className="mt-3 overflow-auto">
+                      <table className="min-w-[680px] text-sm">
+                        <thead className="bg-zinc-50 text-left text-zinc-600">
+                          <tr>
+                            <th className="px-3 py-2">DNI</th>
+                            <th className="px-3 py-2">Grupo</th>
+                            <th className="px-3 py-2">Motivo</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-100">
+                          {ncSelected.excl_detalle.map((d) => (
+                            <tr key={`${d.dni}-${d.grupo}-${d.motivo}`}>
+                              <td className="px-3 py-2 font-medium text-zinc-900">{d.dni}</td>
+                              <td className="px-3 py-2 text-zinc-700">{d.grupo}</td>
+                              <td className="px-3 py-2 text-zinc-700">{d.motivo}</td>
+                            </tr>
+                          ))}
+                          {!ncSelected.excl_detalle.length ? (
+                            <tr>
+                              <td className="px-3 py-6 text-center text-zinc-500" colSpan={3}>
+                                Sin detalle.
+                              </td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              No hay datos suficientes para calcular el reporte NC en este mes/ubigeo.
+            </div>
+          )
+        ) : null}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
