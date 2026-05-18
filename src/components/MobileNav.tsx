@@ -25,6 +25,9 @@ function buildLinks(user: SessionUser): NavLink[] {
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
     links.push({ href: "/admin/reportes/padron", label: "Reportes" });
   }
+  if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
+    links.push({ href: "/admin/tamizaje/importar", label: "Tamizaje" });
+  }
   if (user.tipo === "COORDINADOR") {
     links.push({ href: "/coordinador/actores", label: "Actores sociales" });
   }

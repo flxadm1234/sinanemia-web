@@ -65,6 +65,14 @@ export function AppShell(props: {
               Reportes
             </Link>
           ) : null}
+          {user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" ? (
+            <Link
+              href="/admin/tamizaje/importar"
+              className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+            >
+              Tamizaje
+            </Link>
+          ) : null}
           {user.tipo === "COORDINADOR" ? (
             <Link
               href="/coordinador/actores"
