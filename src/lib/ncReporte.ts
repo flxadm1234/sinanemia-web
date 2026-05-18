@@ -99,13 +99,12 @@ function anemiaFromCie10(v: unknown) {
 }
 
 function hbConsistente(hb: number | null, cie10: string | null, lab1: string | null) {
-  if (hb == null || !Number.isFinite(hb)) return { ok: false, motivo: "Sin hemoglobina" };
+  const _lab = normalizeLab(lab1);
+  if (hb == null || !Number.isFinite(hb) || hb <= 0) return { ok: false, motivo: "Sin hemoglobina" };
   if (hb < 6.0 || hb > 18.0) return { ok: false, motivo: "Hemoglobina atípica (<6 o >18)" };
   const anemia = anemiaFromCie10(cie10);
-  const pr = normalizeLab(lab1) === "PR";
   if (hb >= 10.5 && anemia) return { ok: false, motivo: "HB>=10.5 con diagnóstico de anemia" };
-  if (hb < 10.5 && !anemia && !pr)
-    return { ok: false, motivo: "HB<10.5 sin diagnóstico de anemia" };
+  if (hb < 10.5 && !anemia) return { ok: false, motivo: "HB<10.5 sin diagnóstico de anemia" };
   return { ok: true, motivo: "" };
 }
 
@@ -129,10 +128,6 @@ function chunk<T>(arr: T[], size: number) {
   const out: T[][] = [];
   for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
   return out;
-}
-
-function assignedWhereSql() {
-  return "pn.actorsocial IS NOT NULL AND TRIM(pn.actorsocial) <> '' AND TRIM(pn.actorsocial) <> '0'";
 }
 
 export async function computeNcMetricsForEtapa(params: {
@@ -159,8 +154,7 @@ export async function computeNcMetricsForEtapa(params: {
     `SELECT pn.dni, pn.fecha_nac, pn.tiposeguro
      FROM padronnominal pn
      WHERE pn.ubigeo = ? AND pn.etapa = ? AND YEAR(pn.etapa) >= 2026
-       AND TRIM(COALESCE(pn.tipovd,'')) = '1'
-       AND ${assignedWhereSql()}`,
+       AND TRIM(COALESCE(pn.tipovd,'')) = '1'`,
     [params.ubigeo, etapa],
   );
 
@@ -271,10 +265,8 @@ export async function computeNcMetricsForEtapa(params: {
 
   const dnis = Array.from(new Set(candidates.map((c) => c.dni)));
   const birthMap = new Map<string, Date>();
-  const grupoMap = new Map<string, "6m" | "12m">();
   for (const c of candidates) {
     if (!birthMap.has(c.dni)) birthMap.set(c.dni, c.birth);
-    grupoMap.set(c.dni, c.grupo);
   }
 
   const minStart = (() => {
@@ -359,10 +351,15 @@ export async function computeNcMetricsForEtapa(params: {
         continue;
       }
       if (anemiaFromCie10(t.cie_10)) {
-        if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Tamizaje con diagnóstico de anemia (D509/D649)" });
+        if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Diagnóstico de anemia (D509/D649)" });
         continue;
       }
-      num6 += 1;
+      const hb = Number(t.hemoglobina ?? NaN);
+      if (Number.isFinite(hb) && hb >= 10.5) {
+        num6 += 1;
+      } else {
+        if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Hemoglobina < 10.5" });
+      }
     } else {
       const start = isoDate(addDaysUTC(birth, 365));
       const end = isoDate(addDaysUTC(birth, 394));
@@ -376,12 +373,15 @@ export async function computeNcMetricsForEtapa(params: {
         if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: cons.motivo });
         continue;
       }
+      if (anemiaFromCie10(t.cie_10)) {
+        if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: "Diagnóstico de anemia (D509/D649)" });
+        continue;
+      }
       const hb = Number(t.hemoglobina ?? NaN);
-      const pr = normalizeLab(t.lab1) === "PR";
-      if (hb > 10.4 || (hb < 10.5 && pr)) {
+      if (Number.isFinite(hb) && hb >= 10.5) {
         num12 += 1;
       } else {
-        if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: "No cumple criterio de recuperación (HB/LAB)" });
+        if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: "Hemoglobina < 10.5" });
       }
     }
   }
