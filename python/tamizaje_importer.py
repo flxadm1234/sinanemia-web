@@ -229,15 +229,15 @@ def job_update(cur, job_id: str, **fields):
 
 
 def find_header_row(ws):
-    max_scan = min(ws.max_row or 0, 20)
-    for r in range(1, max_scan + 1):
-        values = [ws.cell(row=r, column=c).value for c in range(1, min(ws.max_column or 0, 120) + 1)]
+    max_scan = 40
+    for i, row in enumerate(ws.iter_rows(min_row=1, max_row=max_scan, values_only=True), start=1):
+        values = list(row) if row is not None else []
         norms = [norm_header(str(v)) if v is not None else "" for v in values]
         present = set([n for n in norms if n])
         hits = sum(1 for req in REQUIRED_NORM if req in present)
         if hits >= int(len(REQUIRED_NORM) * 0.7) and REQUIRED_NORM[0] in present:
-            return r, norms
-    return None, None
+            return i, norms, len(values)
+    return None, None, None
 
 
 def build_col_map(header_norms):
@@ -318,7 +318,7 @@ def run_import(job_id: str, file_path: str):
     wb = load_workbook(filename=file_path, read_only=True, data_only=True)
     ws = wb.worksheets[0]
 
-    header_row, header_norms = find_header_row(ws)
+    header_row, header_norms, header_len = find_header_row(ws)
     if not header_row:
         log_line("Header row not found")
         job_update(cur, job_id, status="failed", progress=0, finished_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), message="No se encontró el encabezado. La plantilla no coincide.")
@@ -340,13 +340,7 @@ def run_import(job_id: str, file_path: str):
         db.commit()
         return 2
 
-    total_rows = 0
-    for r in range(header_row + 1, (ws.max_row or 0) + 1):
-        v = ws.cell(row=r, column=1).value
-        if v is None or str(v).strip() == "":
-            continue
-        total_rows += 1
-
+    total_rows = max(0, (ws.max_row or 0) - int(header_row))
     if total_rows <= 0:
         log_line("No data rows detected")
         job_update(
@@ -368,7 +362,7 @@ def run_import(job_id: str, file_path: str):
     db.commit()
 
     batch = []
-    processed = 0
+    scanned = 0
     inserted = 0
     last_update = time.time()
 
@@ -381,76 +375,127 @@ def run_import(job_id: str, file_path: str):
         db.commit()
         batch.clear()
 
-    for r in range(header_row + 1, (ws.max_row or 0) + 1):
-        row_vals = [ws.cell(row=r, column=c).value for c in range(1, (ws.max_column or 0) + 1)]
-        id_cita = to_int(get_cell(row_vals, col_map, norm_header("Id_Cita")))
-        if id_cita is None:
+    idx_id_cita = col_map.get(norm_header("Id_Cita"))
+    idx_lote = col_map.get(norm_header("Lote"))
+    idx_ups = col_map.get(norm_header("UPS"))
+    idx_nombre_personal = col_map.get(norm_header("NOMBRE_PERSONAL"))
+    idx_nombre_registrador = col_map.get(norm_header("Nombre_Registrador"))
+    idx_periodo = col_map.get(norm_header("periodo"))
+    idx_renaes = col_map.get(norm_header("renaes"))
+    idx_red = col_map.get(norm_header("Red"))
+    idx_microred = col_map.get(norm_header("MicroRed"))
+    idx_provincia = col_map.get(norm_header("Provincia"))
+    idx_distrito = col_map.get(norm_header("Distrito"))
+    idx_tipo_documento = col_map.get(norm_header("Tipo_documento"))
+    idx_dni = col_map.get(norm_header("dni"))
+    idx_sexo = col_map.get(norm_header("sexo"))
+    idx_fecha_nacimiento = col_map.get(norm_header("fecha_nacimiento"))
+    idx_fecha_atencion = col_map.get(norm_header("Fecha_Atencion"))
+    idx_peso = col_map.get(norm_header("PESO"))
+    idx_talla = col_map.get(norm_header("TALLA"))
+    idx_hemoglobina = col_map.get(norm_header("HEMOGLOBINA"))
+    idx_gruporiesgo_desc = col_map.get(norm_header("gruporiesgo_desc"))
+    idx_condicion_gestante = col_map.get(norm_header("condicion_gestante"))
+    idx_tipo_edad_pac = col_map.get(norm_header("Tipo_Edad_PAC"))
+    idx_anio_actual_pac = col_map.get(norm_header("ANIO_ACTUAL_PAC"))
+    idx_mes_actual_pac = col_map.get(norm_header("MES_ACTUAL_PAC"))
+    idx_dia_actual_pac = col_map.get(norm_header("DIA_ACTUAL_PAC"))
+    idx_nombre_establecimiento = col_map.get(norm_header("Nombre_Establecimiento"))
+    idx_cie_10 = col_map.get(norm_header("CIE_10"))
+    idx_diagnostico = col_map.get(norm_header("Diagnostico"))
+    idx_lab1 = col_map.get(norm_header("LAB1"))
+    idx_lab2 = col_map.get(norm_header("LAB2"))
+    idx_lab3 = col_map.get(norm_header("LAB3"))
+    idx_resultado = col_map.get(norm_header("RESULTADO"))
+    idx_total = col_map.get(norm_header("TOTAL"))
+
+    def at(row_vals, idx):
+        if idx is None:
+            return None
+        if idx < 0 or idx >= len(row_vals):
+            return None
+        return row_vals[idx]
+
+    empty_streak = 0
+    max_col = int(header_len or 0) if header_len else None
+    for row_vals in ws.iter_rows(min_row=header_row + 1, values_only=True, max_col=max_col):
+        if row_vals is None:
             continue
+        scanned += 1
+        id_cita = to_int(at(row_vals, idx_id_cita))
+        if id_cita is None:
+            if not any(v is not None and str(v).strip() != "" for v in row_vals):
+                empty_streak += 1
+                if empty_streak >= 2000:
+                    break
+            continue
+        empty_streak = 0
 
         rec = (
             id_cita,
-            to_text(get_cell(row_vals, col_map, norm_header("Lote"))),
-            to_text(get_cell(row_vals, col_map, norm_header("UPS"))),
-            to_text(get_cell(row_vals, col_map, norm_header("NOMBRE_PERSONAL"))),
-            to_text(get_cell(row_vals, col_map, norm_header("Nombre_Registrador"))),
-            to_int(get_cell(row_vals, col_map, norm_header("periodo"))),
-            to_text(get_cell(row_vals, col_map, norm_header("renaes"))),
-            to_text(get_cell(row_vals, col_map, norm_header("Red"))),
-            to_text(get_cell(row_vals, col_map, norm_header("MicroRed"))),
-            to_text(get_cell(row_vals, col_map, norm_header("Provincia"))),
-            to_text(get_cell(row_vals, col_map, norm_header("Distrito"))),
-            to_text(get_cell(row_vals, col_map, norm_header("Tipo_documento"))),
-            to_text(get_cell(row_vals, col_map, norm_header("dni"))),
-            to_text(get_cell(row_vals, col_map, norm_header("sexo"))),
-            to_date(get_cell(row_vals, col_map, norm_header("fecha_nacimiento"))),
-            to_date(get_cell(row_vals, col_map, norm_header("Fecha_Atencion"))),
-            to_decimal(get_cell(row_vals, col_map, norm_header("PESO"))),
-            to_decimal(get_cell(row_vals, col_map, norm_header("TALLA"))),
-            to_decimal(get_cell(row_vals, col_map, norm_header("HEMOGLOBINA"))),
-            to_text(get_cell(row_vals, col_map, norm_header("gruporiesgo_desc"))),
-            to_text(get_cell(row_vals, col_map, norm_header("condicion_gestante"))),
-            to_text(get_cell(row_vals, col_map, norm_header("Tipo_Edad_PAC"))),
-            to_int(get_cell(row_vals, col_map, norm_header("ANIO_ACTUAL_PAC"))),
-            to_int(get_cell(row_vals, col_map, norm_header("MES_ACTUAL_PAC"))),
-            to_int(get_cell(row_vals, col_map, norm_header("DIA_ACTUAL_PAC"))),
-            to_text(get_cell(row_vals, col_map, norm_header("Nombre_Establecimiento"))),
-            to_text(get_cell(row_vals, col_map, norm_header("CIE_10"))),
-            to_text(get_cell(row_vals, col_map, norm_header("Diagnostico"))),
-            to_text(get_cell(row_vals, col_map, norm_header("LAB1"))),
-            to_text(get_cell(row_vals, col_map, norm_header("LAB2"))),
-            to_text(get_cell(row_vals, col_map, norm_header("LAB3"))),
-            to_text(get_cell(row_vals, col_map, norm_header("RESULTADO"))),
-            to_int(get_cell(row_vals, col_map, norm_header("TOTAL"))),
+            to_text(at(row_vals, idx_lote)),
+            to_text(at(row_vals, idx_ups)),
+            to_text(at(row_vals, idx_nombre_personal)),
+            to_text(at(row_vals, idx_nombre_registrador)),
+            to_int(at(row_vals, idx_periodo)),
+            to_text(at(row_vals, idx_renaes)),
+            to_text(at(row_vals, idx_red)),
+            to_text(at(row_vals, idx_microred)),
+            to_text(at(row_vals, idx_provincia)),
+            to_text(at(row_vals, idx_distrito)),
+            to_text(at(row_vals, idx_tipo_documento)),
+            to_text(at(row_vals, idx_dni)),
+            to_text(at(row_vals, idx_sexo)),
+            to_date(at(row_vals, idx_fecha_nacimiento)),
+            to_date(at(row_vals, idx_fecha_atencion)),
+            to_decimal(at(row_vals, idx_peso)),
+            to_decimal(at(row_vals, idx_talla)),
+            to_decimal(at(row_vals, idx_hemoglobina)),
+            to_text(at(row_vals, idx_gruporiesgo_desc)),
+            to_text(at(row_vals, idx_condicion_gestante)),
+            to_text(at(row_vals, idx_tipo_edad_pac)),
+            to_int(at(row_vals, idx_anio_actual_pac)),
+            to_int(at(row_vals, idx_mes_actual_pac)),
+            to_int(at(row_vals, idx_dia_actual_pac)),
+            to_text(at(row_vals, idx_nombre_establecimiento)),
+            to_text(at(row_vals, idx_cie_10)),
+            to_text(at(row_vals, idx_diagnostico)),
+            to_text(at(row_vals, idx_lab1)),
+            to_text(at(row_vals, idx_lab2)),
+            to_text(at(row_vals, idx_lab3)),
+            to_text(at(row_vals, idx_resultado)),
+            to_int(at(row_vals, idx_total)),
         )
         batch.append(rec)
-        processed += 1
 
         if len(batch) >= 2000:
             flush()
 
         now = time.time()
         if now - last_update >= 1.2:
-            pct = int(min(99, (processed / float(total_rows)) * 100))
+            denom = float(total_rows) if total_rows > 0 else float(max(scanned, 1))
+            pct = int(min(99, (scanned / denom) * 100))
             job_update(
                 cur,
                 job_id,
                 progress=pct,
-                processed_rows=processed,
+                processed_rows=scanned,
                 inserted_rows=inserted,
-                message=f"Procesando... {processed}/{total_rows}",
+                message=f"Procesando... {scanned}/{total_rows}",
             )
             db.commit()
             last_update = now
 
     flush()
 
-    log_line(f"Import done. processed={processed}, inserted={inserted}")
+    log_line(f"Import done. scanned={scanned}, inserted={inserted}")
     job_update(
         cur,
         job_id,
         status="done",
         progress=100,
-        processed_rows=processed,
+        total_rows=scanned,
+        processed_rows=scanned,
         inserted_rows=inserted,
         finished_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
         message=f"Importación completada. Insertados: {inserted}",
