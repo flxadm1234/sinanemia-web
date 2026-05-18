@@ -5,6 +5,7 @@ import { getDbPool } from "@/lib/db";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs/promises";
+import fsSync from "fs";
 import os from "os";
 import { spawn } from "child_process";
 
@@ -37,11 +38,19 @@ async function startPythonJob(params: { jobId: string; filePath: string }) {
     [`Iniciando proceso Python... Log: ${logPath}`, params.jobId],
   );
 
+  const fd = fsSync.openSync(logPath, "a");
   const child = spawn(pythonBin, [script, "--job", params.jobId, "--file", params.filePath], {
     detached: true,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: { ...process.env, TAMIZAJE_LOG_PATH: logPath },
+    stdio: ["ignore", fd, fd],
+    env: {
+      ...process.env,
+      TAMIZAJE_LOG_PATH: logPath,
+      PYTHONUNBUFFERED: "1",
+    },
   });
+  try {
+    fsSync.closeSync(fd);
+  } catch {}
 
   child.on("error", async (err) => {
     try {
