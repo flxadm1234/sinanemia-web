@@ -57,6 +57,16 @@ def norm_header(s: str) -> str:
 REQUIRED_NORM = [norm_header(h) for h in REQUIRED_HEADERS]
 REQUIRED_MAP = {norm_header(h): h for h in REQUIRED_HEADERS}
 
+def log_line(msg: str):
+    p = os.getenv("TAMIZAJE_LOG_PATH", "").strip()
+    if not p:
+        return
+    try:
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.utcnow().isoformat(timespec='seconds')}Z] {msg}\n")
+    except Exception:
+        pass
+
 
 def to_int(v):
     if v is None:
@@ -288,6 +298,7 @@ def run_import(job_id: str, file_path: str):
     load_dotenv(os.getenv("TAMIZAJE_DOTENV", ".env.local"), override=False)
     load_dotenv(override=False)
 
+    log_line(f"Job {job_id} starting. File: {file_path}")
     db = connect_db()
     cur = db.cursor()
     ensure_tables(cur)
@@ -303,17 +314,20 @@ def run_import(job_id: str, file_path: str):
     )
     db.commit()
 
+    log_line("Opening workbook (read_only=True, data_only=True)")
     wb = load_workbook(filename=file_path, read_only=True, data_only=True)
     ws = wb.worksheets[0]
 
     header_row, header_norms = find_header_row(ws)
     if not header_row:
+        log_line("Header row not found")
         job_update(cur, job_id, status="failed", progress=0, finished_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"), message="No se encontró el encabezado. La plantilla no coincide.")
         db.commit()
         return 2
 
     col_map, missing = build_col_map(header_norms)
     if missing:
+        log_line("Missing columns: " + ", ".join([REQUIRED_MAP.get(m, m) for m in missing[:12]]))
         job_update(
             cur,
             job_id,
@@ -334,6 +348,7 @@ def run_import(job_id: str, file_path: str):
         total_rows += 1
 
     if total_rows <= 0:
+        log_line("No data rows detected")
         job_update(
             cur,
             job_id,
@@ -348,6 +363,7 @@ def run_import(job_id: str, file_path: str):
     job_update(cur, job_id, total_rows=total_rows, message="Limpiando tabla y cargando datos...")
     db.commit()
 
+    log_line(f"TRUNCATE registro_tamizaje, total_rows={total_rows}")
     cur.execute("TRUNCATE TABLE registro_tamizaje")
     db.commit()
 
@@ -428,6 +444,7 @@ def run_import(job_id: str, file_path: str):
 
     flush()
 
+    log_line(f"Import done. processed={processed}, inserted={inserted}")
     job_update(
         cur,
         job_id,

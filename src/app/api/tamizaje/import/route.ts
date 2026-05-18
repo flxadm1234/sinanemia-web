@@ -21,24 +21,41 @@ async function writeUploadToDisk(file: File, jobId: string) {
   return filePath;
 }
 
-function startPythonJob(params: { jobId: string; filePath: string }) {
+async function startPythonJob(params: { jobId: string; filePath: string }) {
   const pythonBin = process.env.TAMIZAJE_PYTHON_BIN || "python3";
   const script = process.env.TAMIZAJE_IMPORT_SCRIPT
     ? String(process.env.TAMIZAJE_IMPORT_SCRIPT)
     : path.join("python", "tamizaje_importer.py");
 
-  try {
-    const child = spawn(
-      pythonBin,
-      [script, "--job", params.jobId, "--file", params.filePath],
-      {
-        detached: true,
-        stdio: "ignore",
-        env: process.env,
-      },
-    );
-    child.unref();
-  } catch {}
+  const logDir = path.join(os.tmpdir(), "sinanemia_uploads", "tamizaje_logs");
+  await fs.mkdir(logDir, { recursive: true });
+  const logPath = path.join(logDir, `${params.jobId}.log`);
+
+  const pool = getDbPool();
+  await pool.query(
+    "UPDATE tamizaje_import_jobs SET status = 'running', started_at = NOW(), message = ? WHERE id = ?",
+    [`Iniciando proceso Python... Log: ${logPath}`, params.jobId],
+  );
+
+  const child = spawn(pythonBin, [script, "--job", params.jobId, "--file", params.filePath], {
+    detached: true,
+    stdio: ["ignore", "ignore", "ignore"],
+    env: { ...process.env, TAMIZAJE_LOG_PATH: logPath },
+  });
+
+  child.on("error", async (err) => {
+    try {
+      await pool.query(
+        "UPDATE tamizaje_import_jobs SET status='failed', progress=0, finished_at=NOW(), message=? WHERE id=?",
+        [
+          `No se pudo ejecutar Python (${pythonBin}). Verifica TAMIZAJE_PYTHON_BIN y dependencias. Error: ${String(err?.message ?? err)}`,
+          params.jobId,
+        ],
+      );
+    } catch {}
+  });
+
+  child.unref();
 }
 
 export async function POST(request: Request) {
@@ -74,7 +91,7 @@ export async function POST(request: Request) {
       [jobId, path.basename(filePath), session.dni],
     );
 
-    startPythonJob({ jobId, filePath });
+    await startPythonJob({ jobId, filePath });
 
     return NextResponse.json({ ok: true, jobId });
   } catch (e) {
