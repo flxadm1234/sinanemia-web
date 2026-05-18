@@ -39,6 +39,9 @@ export type NcMonthMetrics = {
 
 function toDate(v: unknown) {
   if (!v) return null;
+  if (v instanceof Date && Number.isFinite(v.getTime())) {
+    return new Date(Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate()));
+  }
   const s = String(v).trim();
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
@@ -47,7 +50,13 @@ function toDate(v: unknown) {
     return Number.isFinite(d.getTime()) ? d : null;
   }
   const d = new Date(s);
-  return Number.isFinite(d.getTime()) ? d : null;
+  if (!Number.isFinite(d.getTime())) return null;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+function fmtDateISO(v: unknown) {
+  const d = toDate(v);
+  return d ? d.toISOString().slice(0, 10) : null;
 }
 
 function endOfMonthUTC(etapaISO: string) {
@@ -157,7 +166,7 @@ export async function computeNcMetricsForEtapa(params: {
 
   const base = (rowsBase as any[]).map((r) => ({
     dni: r.dni == null ? null : String(r.dni).trim(),
-    fecha_nac: r.fecha_nac == null ? null : String(r.fecha_nac).slice(0, 10),
+    fecha_nac: fmtDateISO(r.fecha_nac),
     tiposeguro: r.tiposeguro == null ? null : String(r.tiposeguro),
   })) as BaseRow[];
 
@@ -301,7 +310,7 @@ export async function computeNcMetricsForEtapa(params: {
       tamizajes.push({
         id: r.id == null ? null : Number(r.id),
         dni: r.dni == null ? null : String(r.dni).trim(),
-        fecha_atencion: r.fecha_atencion == null ? null : String(r.fecha_atencion).slice(0, 10),
+        fecha_atencion: fmtDateISO(r.fecha_atencion),
         cie_10: r.cie_10 == null ? null : String(r.cie_10),
         hemoglobina: r.hemoglobina == null ? null : Number(r.hemoglobina),
         lab1: r.lab1 == null ? null : String(r.lab1),
