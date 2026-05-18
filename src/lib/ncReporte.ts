@@ -17,7 +17,7 @@ type TamizajeRow = {
 
 export type NcExclusionDetail = {
   dni: string;
-  grupo: "6m" | "12m";
+  grupo: "6m" | "12m" | "-";
   motivo: string;
 };
 
@@ -57,6 +57,12 @@ function endOfMonthUTC(etapaISO: string) {
   const m = d.getUTCMonth();
   const last = new Date(Date.UTC(y, m + 1, 0));
   return last;
+}
+
+function overlaps(aMin: number, aMax: number, bMin: number, bMax: number) {
+  const lo = Math.max(aMin, bMin);
+  const hi = Math.min(aMax, bMax);
+  return lo <= hi;
 }
 
 function daysBetweenUTC(a: Date, b: Date) {
@@ -172,6 +178,7 @@ export async function computeNcMetricsForEtapa(params: {
 
   const eom = endOfMonthUTC(etapa);
   if (!eom) return null;
+  const som = etapaDate;
 
   const excl: NcExclusionDetail[] = [];
   const candidates: Array<{
@@ -190,14 +197,24 @@ export async function computeNcMetricsForEtapa(params: {
     if (!dni) continue;
     const b = toDate(r.fecha_nac);
     if (!b) {
-      if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Sin fecha de nacimiento" });
+      if (params.includeDetails) excl.push({ dni, grupo: "-", motivo: "Sin fecha de nacimiento" });
       continue;
     }
-    const age = daysBetweenUTC(b, eom);
+    const ageStart = daysBetweenUTC(b, som);
+    const ageEnd = daysBetweenUTC(b, eom);
     const grupo: "6m" | "12m" | null =
-      age >= 180 && age <= 209 ? "6m" : age >= 365 && age <= 394 ? "12m" : null;
+      overlaps(ageStart, ageEnd, 180, 209)
+        ? "6m"
+        : overlaps(ageStart, ageEnd, 365, 394)
+          ? "12m"
+          : null;
     if (!grupo) {
-      if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Fuera de edad crítica" });
+      if (params.includeDetails)
+        excl.push({
+          dni,
+          grupo: "-",
+          motivo: "Fuera de edad crítica (180-209 o 365-394 días en el mes)",
+        });
       continue;
     }
 
