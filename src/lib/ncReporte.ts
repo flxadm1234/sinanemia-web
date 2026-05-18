@@ -4,6 +4,7 @@ type BaseRow = {
   dni: string | null;
   fecha_nac: string | null;
   tiposeguro: string | null;
+  actorsocial: string | null;
 };
 
 type TamizajeRow = {
@@ -24,6 +25,13 @@ export type NcExclusionDetail = {
 export type NcMonthMetrics = {
   etapa: string;
   label: string;
+  total_cargados: number;
+  total_asignados: number;
+  total_con_edad_critica: number;
+  total_con_permanencia: number;
+  total_con_seguro_valido: number;
+  tamizaje_registros_encontrados: number;
+  tamizaje_ninos_con_registro: number;
   denom_total: number;
   denom_6m: number;
   denom_12m: number;
@@ -33,7 +41,8 @@ export type NcMonthMetrics = {
   sis: number;
   sin_seguro: number;
   con_otro_seguro: number;
-  excluciones: Array<{ motivo: string; count: number }>;
+  excluciones_denominador: Array<{ motivo: string; count: number }>;
+  excluciones_numerador: Array<{ motivo: string; count: number }>;
   excl_detalle: NcExclusionDetail[];
 };
 
@@ -151,18 +160,33 @@ export async function computeNcMetricsForEtapa(params: {
   })();
 
   const [rowsBase] = await pool.query(
-    `SELECT pn.dni, pn.fecha_nac, pn.tiposeguro
+    `SELECT pn.dni, pn.fecha_nac, pn.tiposeguro, pn.actorsocial
      FROM padronnominal pn
      WHERE pn.ubigeo = ? AND pn.etapa = ? AND YEAR(pn.etapa) >= 2026
        AND TRIM(COALESCE(pn.tipovd,'')) = '1'`,
     [params.ubigeo, etapa],
   );
 
-  const base = (rowsBase as any[]).map((r) => ({
+  const baseRows = (rowsBase as any[]).map((r) => ({
     dni: r.dni == null ? null : String(r.dni).trim(),
     fecha_nac: fmtDateISO(r.fecha_nac),
     tiposeguro: r.tiposeguro == null ? null : String(r.tiposeguro),
+    actorsocial: r.actorsocial == null ? null : String(r.actorsocial).trim(),
   })) as BaseRow[];
+
+  const byDni = new Map<string, BaseRow>();
+  for (const r of baseRows) {
+    const dni = String(r.dni ?? "").trim();
+    if (!dni) continue;
+    if (!byDni.has(dni)) byDni.set(dni, r);
+  }
+
+  const totalCargados = byDni.size;
+  let totalAsignados = 0;
+  for (const r of byDni.values()) {
+    const a = String(r.actorsocial ?? "").trim();
+    if (a && a !== "0") totalAsignados += 1;
+  }
 
   const prevSet = new Set<string>();
   if (prevEtapa) {
@@ -184,6 +208,8 @@ export async function computeNcMetricsForEtapa(params: {
   const som = etapaDate;
 
   const excl: NcExclusionDetail[] = [];
+  const exclDenom = new Map<string, number>();
+  const exclNum = new Map<string, number>();
   const candidates: Array<{
     dni: string;
     grupo: "6m" | "12m";
@@ -194,13 +220,17 @@ export async function computeNcMetricsForEtapa(params: {
   let conOtroSeguro = 0;
   let sis = 0;
   let sinSeguro = 0;
+  let totalEdadCritica = 0;
+  let totalPermanencia = 0;
+  let totalSeguroValido = 0;
 
-  for (const r of base) {
+  for (const r of byDni.values()) {
     const dni = String(r.dni ?? "").trim();
     if (!dni) continue;
     const b = toDate(r.fecha_nac);
     if (!b) {
       if (params.includeDetails) excl.push({ dni, grupo: "-", motivo: "Sin fecha de nacimiento" });
+      exclDenom.set("Sin fecha de nacimiento", (exclDenom.get("Sin fecha de nacimiento") ?? 0) + 1);
       continue;
     }
     const ageStart = daysBetweenUTC(b, som);
@@ -218,23 +248,35 @@ export async function computeNcMetricsForEtapa(params: {
           grupo: "-",
           motivo: "Fuera de edad crítica (180-209 o 365-394 días en el mes)",
         });
+      exclDenom.set(
+        "Fuera de edad crítica (180-209 o 365-394 días en el mes)",
+        (exclDenom.get("Fuera de edad crítica (180-209 o 365-394 días en el mes)") ?? 0) + 1,
+      );
       continue;
     }
+    totalEdadCritica += 1;
 
     if (!prevEtapa || !prevSet.has(dni)) {
       if (params.includeDetails) excl.push({ dni, grupo, motivo: "Sin permanencia (2 meses consecutivos)" });
+      exclDenom.set(
+        "Sin permanencia (2 meses consecutivos)",
+        (exclDenom.get("Sin permanencia (2 meses consecutivos)") ?? 0) + 1,
+      );
       continue;
     }
+    totalPermanencia += 1;
 
     const seguro = normalizeSeguro(r.tiposeguro);
     const okSeguro = seguro === "SIS" || seguro === "";
     if (!okSeguro) {
       conOtroSeguro += 1;
       if (params.includeDetails) excl.push({ dni, grupo, motivo: "Seguro no válido (no SIS)" });
+      exclDenom.set("Seguro no válido (no SIS)", (exclDenom.get("Seguro no válido (no SIS)") ?? 0) + 1);
       continue;
     }
     if (seguro === "SIS") sis += 1;
     else sinSeguro += 1;
+    totalSeguroValido += 1;
 
     candidates.push({ dni, grupo, birth: b, seguro });
   }
@@ -244,11 +286,16 @@ export async function computeNcMetricsForEtapa(params: {
   const denomTotal = candidates.length;
 
   if (!denomTotal) {
-    const exclCounts = new Map<string, number>();
-    for (const e of excl) exclCounts.set(e.motivo, (exclCounts.get(e.motivo) ?? 0) + 1);
     return {
       etapa,
       label: monthLabel(etapa),
+      total_cargados: totalCargados,
+      total_asignados: totalAsignados,
+      total_con_edad_critica: totalEdadCritica,
+      total_con_permanencia: totalPermanencia,
+      total_con_seguro_valido: totalSeguroValido,
+      tamizaje_registros_encontrados: 0,
+      tamizaje_ninos_con_registro: 0,
       denom_total: 0,
       denom_6m: 0,
       denom_12m: 0,
@@ -258,7 +305,8 @@ export async function computeNcMetricsForEtapa(params: {
       sis,
       sin_seguro: sinSeguro,
       con_otro_seguro: conOtroSeguro,
-      excluciones: Array.from(exclCounts.entries()).map(([motivo, count]) => ({ motivo, count })),
+      excluciones_denominador: Array.from(exclDenom.entries()).map(([motivo, count]) => ({ motivo, count })),
+      excluciones_numerador: [],
       excl_detalle: params.includeDetails ? excl.slice(0, 200) : [],
     } satisfies NcMonthMetrics;
   }
@@ -310,17 +358,17 @@ export async function computeNcMetricsForEtapa(params: {
     }
   }
 
-  const byDni = new Map<string, TamizajeRow[]>();
+  const byTamizajeDni = new Map<string, TamizajeRow[]>();
   for (const t of tamizajes) {
     const dni = String(t.dni ?? "").trim();
     if (!dni) continue;
-    const arr = byDni.get(dni) ?? [];
+    const arr = byTamizajeDni.get(dni) ?? [];
     arr.push(t);
-    byDni.set(dni, arr);
+    byTamizajeDni.set(dni, arr);
   }
 
   const findLastInRange = (dni: string, startISO: string, endISO: string) => {
-    const arr = byDni.get(dni);
+    const arr = byTamizajeDni.get(dni);
     if (!arr || !arr.length) return null;
     for (const t of arr) {
       const fa = String(t.fecha_atencion ?? "").slice(0, 10);
@@ -332,6 +380,7 @@ export async function computeNcMetricsForEtapa(params: {
 
   let num6 = 0;
   let num12 = 0;
+  let ninosConTamizaje = 0;
 
   for (const c of candidates) {
     const dni = c.dni;
@@ -343,15 +392,22 @@ export async function computeNcMetricsForEtapa(params: {
       const t = findLastInRange(dni, start, end);
       if (!t) {
         if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Sin tamizaje 170-209 días" });
+        exclNum.set("Sin tamizaje 170-209 días", (exclNum.get("Sin tamizaje 170-209 días") ?? 0) + 1);
         continue;
       }
+      ninosConTamizaje += 1;
       const cons = hbConsistente(t.hemoglobina, t.cie_10, t.lab1);
       if (!cons.ok) {
         if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: cons.motivo });
+        exclNum.set(cons.motivo, (exclNum.get(cons.motivo) ?? 0) + 1);
         continue;
       }
       if (anemiaFromCie10(t.cie_10)) {
         if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Diagnóstico de anemia (D509/D649)" });
+        exclNum.set(
+          "Diagnóstico de anemia (D509/D649)",
+          (exclNum.get("Diagnóstico de anemia (D509/D649)") ?? 0) + 1,
+        );
         continue;
       }
       const hb = Number(t.hemoglobina ?? NaN);
@@ -359,6 +415,7 @@ export async function computeNcMetricsForEtapa(params: {
         num6 += 1;
       } else {
         if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Hemoglobina < 10.5" });
+        exclNum.set("Hemoglobina < 10.5", (exclNum.get("Hemoglobina < 10.5") ?? 0) + 1);
       }
     } else {
       const start = isoDate(addDaysUTC(birth, 365));
@@ -366,15 +423,22 @@ export async function computeNcMetricsForEtapa(params: {
       const t = findLastInRange(dni, start, end);
       if (!t) {
         if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: "Sin tamizaje 365-394 días" });
+        exclNum.set("Sin tamizaje 365-394 días", (exclNum.get("Sin tamizaje 365-394 días") ?? 0) + 1);
         continue;
       }
+      ninosConTamizaje += 1;
       const cons = hbConsistente(t.hemoglobina, t.cie_10, t.lab1);
       if (!cons.ok) {
         if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: cons.motivo });
+        exclNum.set(cons.motivo, (exclNum.get(cons.motivo) ?? 0) + 1);
         continue;
       }
       if (anemiaFromCie10(t.cie_10)) {
         if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: "Diagnóstico de anemia (D509/D649)" });
+        exclNum.set(
+          "Diagnóstico de anemia (D509/D649)",
+          (exclNum.get("Diagnóstico de anemia (D509/D649)") ?? 0) + 1,
+        );
         continue;
       }
       const hb = Number(t.hemoglobina ?? NaN);
@@ -382,16 +446,21 @@ export async function computeNcMetricsForEtapa(params: {
         num12 += 1;
       } else {
         if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: "Hemoglobina < 10.5" });
+        exclNum.set("Hemoglobina < 10.5", (exclNum.get("Hemoglobina < 10.5") ?? 0) + 1);
       }
     }
   }
 
-  const exclCounts = new Map<string, number>();
-  for (const e of excl) exclCounts.set(e.motivo, (exclCounts.get(e.motivo) ?? 0) + 1);
-
   return {
     etapa,
     label: monthLabel(etapa),
+    total_cargados: totalCargados,
+    total_asignados: totalAsignados,
+    total_con_edad_critica: totalEdadCritica,
+    total_con_permanencia: totalPermanencia,
+    total_con_seguro_valido: totalSeguroValido,
+    tamizaje_registros_encontrados: tamizajes.length,
+    tamizaje_ninos_con_registro: ninosConTamizaje,
     denom_total: denomTotal,
     denom_6m: denom6,
     denom_12m: denom12,
@@ -401,7 +470,10 @@ export async function computeNcMetricsForEtapa(params: {
     sis,
     sin_seguro: sinSeguro,
     con_otro_seguro: conOtroSeguro,
-    excluciones: Array.from(exclCounts.entries())
+    excluciones_denominador: Array.from(exclDenom.entries())
+      .map(([motivo, count]) => ({ motivo, count }))
+      .sort((a, b) => b.count - a.count),
+    excluciones_numerador: Array.from(exclNum.entries())
       .map(([motivo, count]) => ({ motivo, count }))
       .sort((a, b) => b.count - a.count),
     excl_detalle: params.includeDetails ? excl.slice(0, 200) : [],

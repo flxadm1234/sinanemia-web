@@ -260,7 +260,31 @@ export default async function DashboardPage(props: {
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-4">
+                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-5">
+                  <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                    <div className="text-xs text-zinc-600">Niños cargados (padron)</div>
+                    <div className="mt-1 text-2xl font-semibold text-zinc-900">
+                      {ncSelected.total_cargados}
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-600">
+                      Asignados: <span className="font-semibold">{ncSelected.total_asignados}</span>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                    <div className="text-xs text-zinc-600">Pasan filtros (denominador)</div>
+                    <div className="mt-2 text-xs text-zinc-700">
+                      Edad crítica:{" "}
+                      <span className="font-semibold">{ncSelected.total_con_edad_critica}</span>
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-700">
+                      Permanencia:{" "}
+                      <span className="font-semibold">{ncSelected.total_con_permanencia}</span>
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-700">
+                      Seguro válido:{" "}
+                      <span className="font-semibold">{ncSelected.total_con_seguro_valido}</span>
+                    </div>
+                  </div>
                   <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
                     <div className="text-xs text-zinc-600">Denominador (NC)</div>
                     <div className="mt-1 text-2xl font-semibold text-zinc-900">
@@ -272,7 +296,21 @@ export default async function DashboardPage(props: {
                     </div>
                   </div>
                   <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
-                    <div className="text-xs text-zinc-600">Numerador (N)</div>
+                    <div className="text-xs text-zinc-600">Tamizaje (HIS)</div>
+                    <div className="mt-1 text-2xl font-semibold text-zinc-900">
+                      {ncSelected.tamizaje_ninos_con_registro}
+                    </div>
+                    <div className="mt-2 text-xs text-zinc-600">
+                      Registros:{" "}
+                      <span className="font-semibold">{ncSelected.tamizaje_registros_encontrados}</span>{" "}
+                      · Sin tamizaje:{" "}
+                      <span className="font-semibold">
+                        {Math.max(0, ncSelected.denom_total - ncSelected.tamizaje_ninos_con_registro)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                    <div className="text-xs text-zinc-600">Numerador (N) y cumplimiento</div>
                     <div className="mt-1 text-2xl font-semibold text-zinc-900">
                       {ncSelected.num_total}
                     </div>
@@ -280,37 +318,69 @@ export default async function DashboardPage(props: {
                       6m: <span className="font-semibold">{ncSelected.num_6m}</span> · 12m:{" "}
                       <span className="font-semibold">{ncSelected.num_12m}</span>
                     </div>
-                  </div>
-                  <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
-                    <div className="text-xs text-zinc-600">Seguro</div>
-                    <div className="mt-2 text-xs text-zinc-700">
-                      SIS: <span className="font-semibold">{ncSelected.sis}</span>
-                    </div>
-                    <div className="mt-2 text-xs text-zinc-700">
-                      Sin seguro:{" "}
-                      <span className="font-semibold">{ncSelected.sin_seguro}</span>
-                    </div>
-                    <div className="mt-2 text-xs text-zinc-700">
-                      Otros:{" "}
-                      <span className="font-semibold">{ncSelected.con_otro_seguro}</span>
+                    <div className="mt-2 text-xs text-zinc-600">
+                      %:{" "}
+                      <span className="font-semibold">
+                        {ncSelected.denom_total
+                          ? Math.round((ncSelected.num_total / ncSelected.denom_total) * 1000) / 10
+                          : 0}
+                        %
+                      </span>
                     </div>
                   </div>
-                  <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
-                    <div className="text-xs text-zinc-600">Cumplimiento</div>
-                    <div className="mt-1 text-2xl font-semibold text-zinc-900">
-                      {ncSelected.denom_total
-                        ? Math.round((ncSelected.num_total / ncSelected.denom_total) * 1000) /
-                          10
-                        : 0}
-                      %
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                    <div className="text-sm font-semibold text-zinc-900">Seguro (en NC)</div>
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="rounded-xl bg-zinc-50 ring-1 ring-black/5 p-3">
+                        <div className="text-xs text-zinc-600">SIS</div>
+                        <div className="mt-1 text-lg font-semibold text-zinc-900">{ncSelected.sis}</div>
+                      </div>
+                      <div className="rounded-xl bg-zinc-50 ring-1 ring-black/5 p-3">
+                        <div className="text-xs text-zinc-600">Sin seguro</div>
+                        <div className="mt-1 text-lg font-semibold text-zinc-900">
+                          {ncSelected.sin_seguro}
+                        </div>
+                      </div>
+                      <div className="rounded-xl bg-zinc-50 ring-1 ring-black/5 p-3">
+                        <div className="text-xs text-zinc-600">Otros (excl.)</div>
+                        <div className="mt-1 text-lg font-semibold text-zinc-900">
+                          {ncSelected.con_otro_seguro}
+                        </div>
+                      </div>
                     </div>
-                    <div className="mt-2 text-xs text-zinc-600">N / NC</div>
+                  </div>
+
+                  <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                    <div className="text-sm font-semibold text-zinc-900">Control de totales</div>
+                    <div className="mt-2 text-xs text-zinc-600">
+                      {(() => {
+                        const exclDen = ncSelected.excluciones_denominador.reduce((a, b) => a + b.count, 0);
+                        const exclNum = ncSelected.excluciones_numerador.reduce((a, b) => a + b.count, 0);
+                        return (
+                          <>
+                            <div>
+                              Cargados = Excl. Denom ({exclDen}) + NC ({ncSelected.denom_total}) ={" "}
+                              <span className="font-semibold">{exclDen + ncSelected.denom_total}</span>
+                            </div>
+                            <div className="mt-1">
+                              NC = Excl. Num ({exclNum}) + N ({ncSelected.num_total}) ={" "}
+                              <span className="font-semibold">{exclNum + ncSelected.num_total}</span>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
 
                 <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
                   <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
-                    <div className="text-sm font-semibold text-zinc-900">Exclusiones</div>
+                    <div className="text-sm font-semibold text-zinc-900">
+                      Exclusiones del denominador (desde cargados)
+                    </div>
                     <div className="mt-3 overflow-auto">
                       <table className="min-w-[520px] text-sm">
                         <thead className="bg-zinc-50 text-left text-zinc-600">
@@ -320,7 +390,7 @@ export default async function DashboardPage(props: {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100">
-                          {ncSelected.excluciones.map((e) => (
+                          {ncSelected.excluciones_denominador.map((e) => (
                             <tr key={e.motivo}>
                               <td className="px-3 py-2 text-zinc-800">{e.motivo}</td>
                               <td className="px-3 py-2 text-right font-semibold text-zinc-900">
@@ -328,7 +398,7 @@ export default async function DashboardPage(props: {
                               </td>
                             </tr>
                           ))}
-                          {!ncSelected.excluciones.length ? (
+                          {!ncSelected.excluciones_denominador.length ? (
                             <tr>
                               <td className="px-3 py-6 text-center text-zinc-500" colSpan={2}>
                                 Sin exclusiones registradas.
@@ -342,38 +412,72 @@ export default async function DashboardPage(props: {
 
                   <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
                     <div className="text-sm font-semibold text-zinc-900">
-                      Detalle de exclusiones (muestra)
+                      Exclusiones del numerador (desde NC)
                     </div>
                     <div className="mt-1 text-xs text-zinc-500">
-                      Se muestran hasta 200 registros.
+                      Incluye anemia, hemoglobina inconsistente y falta de tamizaje en ventana.
                     </div>
                     <div className="mt-3 overflow-auto">
-                      <table className="min-w-[680px] text-sm">
+                      <table className="min-w-[520px] text-sm">
                         <thead className="bg-zinc-50 text-left text-zinc-600">
                           <tr>
-                            <th className="px-3 py-2">DNI</th>
-                            <th className="px-3 py-2">Grupo</th>
                             <th className="px-3 py-2">Motivo</th>
+                            <th className="px-3 py-2 text-right">Cantidad</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-zinc-100">
-                          {ncSelected.excl_detalle.map((d) => (
-                            <tr key={`${d.dni}-${d.grupo}-${d.motivo}`}>
-                              <td className="px-3 py-2 font-medium text-zinc-900">{d.dni}</td>
-                              <td className="px-3 py-2 text-zinc-700">{d.grupo}</td>
-                              <td className="px-3 py-2 text-zinc-700">{d.motivo}</td>
+                          {ncSelected.excluciones_numerador.map((e) => (
+                            <tr key={e.motivo}>
+                              <td className="px-3 py-2 text-zinc-800">{e.motivo}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-zinc-900">
+                                {e.count}
+                              </td>
                             </tr>
                           ))}
-                          {!ncSelected.excl_detalle.length ? (
+                          {!ncSelected.excluciones_numerador.length ? (
                             <tr>
-                              <td className="px-3 py-6 text-center text-zinc-500" colSpan={3}>
-                                Sin detalle.
+                              <td className="px-3 py-6 text-center text-zinc-500" colSpan={2}>
+                                Sin exclusiones registradas.
                               </td>
                             </tr>
                           ) : null}
                         </tbody>
                       </table>
                     </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                  <div className="text-sm font-semibold text-zinc-900">
+                    Detalle de exclusiones (muestra)
+                  </div>
+                  <div className="mt-1 text-xs text-zinc-500">Se muestran hasta 200 registros.</div>
+                  <div className="mt-3 overflow-auto">
+                    <table className="min-w-[680px] text-sm">
+                      <thead className="bg-zinc-50 text-left text-zinc-600">
+                        <tr>
+                          <th className="px-3 py-2">DNI</th>
+                          <th className="px-3 py-2">Grupo</th>
+                          <th className="px-3 py-2">Motivo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-100">
+                        {ncSelected.excl_detalle.map((d) => (
+                          <tr key={`${d.dni}-${d.grupo}-${d.motivo}`}>
+                            <td className="px-3 py-2 font-medium text-zinc-900">{d.dni}</td>
+                            <td className="px-3 py-2 text-zinc-700">{d.grupo}</td>
+                            <td className="px-3 py-2 text-zinc-700">{d.motivo}</td>
+                          </tr>
+                        ))}
+                        {!ncSelected.excl_detalle.length ? (
+                          <tr>
+                            <td className="px-3 py-6 text-center text-zinc-500" colSpan={3}>
+                              Sin detalle.
+                            </td>
+                          </tr>
+                        ) : null}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
