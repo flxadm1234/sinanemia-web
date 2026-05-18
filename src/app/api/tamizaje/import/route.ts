@@ -23,7 +23,10 @@ async function writeUploadToDisk(file: File, jobId: string) {
 }
 
 async function startPythonJob(params: { jobId: string; filePath: string }) {
-  const pythonBin = process.env.TAMIZAJE_PYTHON_BIN || "python3";
+  const venvPython = path.join("python", ".venv", "bin", "python3");
+  const pythonBin =
+    process.env.TAMIZAJE_PYTHON_BIN ||
+    (fsSync.existsSync(venvPython) ? venvPython : "python3");
   const script = process.env.TAMIZAJE_IMPORT_SCRIPT
     ? String(process.env.TAMIZAJE_IMPORT_SCRIPT)
     : path.join("python", "tamizaje_importer.py");
@@ -35,10 +38,19 @@ async function startPythonJob(params: { jobId: string; filePath: string }) {
   const pool = getDbPool();
   await pool.query(
     "UPDATE tamizaje_import_jobs SET status = 'running', started_at = NOW(), message = ? WHERE id = ?",
-    [`Iniciando proceso Python... Log: ${logPath}`, params.jobId],
+    [
+      `Iniciando proceso Python... Bin: ${pythonBin} Script: ${script} Log: ${logPath}`,
+      params.jobId,
+    ],
   );
 
   const fd = fsSync.openSync(logPath, "a");
+  try {
+    fsSync.writeSync(
+      fd,
+      `[bootstrap] pythonBin=${pythonBin} script=${script} file=${params.filePath}\n`,
+    );
+  } catch {}
   const child = spawn(pythonBin, [script, "--job", params.jobId, "--file", params.filePath], {
     detached: true,
     stdio: ["ignore", fd, fd],
