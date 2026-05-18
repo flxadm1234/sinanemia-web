@@ -255,8 +255,18 @@ export default async function DashboardPage(props: {
                     </div>
                   </div>
                   <div className="text-sm text-zinc-700">
-                    NC: <span className="font-semibold">{ncSelected.denom_total}</span> · N:{" "}
-                    <span className="font-semibold">{ncSelected.num_total}</span>
+                    <a
+                      className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                      href={`/api/reportes/nc-excel?ubigeo=${encodeURIComponent(scopeUbigeo)}&etapa=${encodeURIComponent(
+                        ncSelected.etapa,
+                      )}`}
+                    >
+                      Descargar Excel
+                    </a>
+                    <span className="ml-3">
+                      NC: <span className="font-semibold">{ncSelected.denom_total}</span> · N:{" "}
+                      <span className="font-semibold">{ncSelected.num_total}</span>
+                    </span>
                   </div>
                 </div>
 

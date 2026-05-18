@@ -13,6 +13,8 @@ type TamizajeRow = {
   cie_10: string | null;
   hemoglobina: number | null;
   lab1: string | null;
+  diagnostico: string | null;
+  resultado: string | null;
   id: number | null;
 };
 
@@ -44,6 +46,32 @@ export type NcMonthMetrics = {
   excluciones_denominador: Array<{ motivo: string; count: number }>;
   excluciones_numerador: Array<{ motivo: string; count: number }>;
   excl_detalle: NcExclusionDetail[];
+};
+
+export type NcMatrixRow = {
+  dni: string;
+  nombrecompleto: string;
+  actorsocial: string;
+  responsable: string;
+  eess_ua: string;
+  fechacita: string;
+  estadosvd: string;
+  departamento: string;
+  provincia: string;
+  distrito: string;
+  fecha_nac: string;
+  tiposeguro: string;
+  grupo: "6m" | "12m" | "-";
+  en_denominador: "SI" | "NO";
+  motivo_exclusion_denominador: string;
+  en_numerador: "SI" | "NO";
+  motivo_exclusion_numerador: string;
+  fecha_atencion: string;
+  hemoglobina: string;
+  cie_10: string;
+  diagnostico: string;
+  lab1: string;
+  resultado: string;
 };
 
 function toDate(v: unknown) {
@@ -338,7 +366,7 @@ export async function computeNcMetricsForEtapa(params: {
   for (const part of chunk(dnis, 900)) {
     const placeholders = part.map(() => "?").join(",");
     const [rowsT] = await pool.query(
-      `SELECT id, dni, fecha_atencion, cie_10, hemoglobina, lab1
+      `SELECT id, dni, fecha_atencion, cie_10, diagnostico, hemoglobina, lab1, resultado
        FROM registro_tamizaje
        WHERE dni IN (${placeholders})
          AND fecha_atencion IS NOT NULL
@@ -352,8 +380,10 @@ export async function computeNcMetricsForEtapa(params: {
         dni: r.dni == null ? null : String(r.dni).trim(),
         fecha_atencion: fmtDateISO(r.fecha_atencion),
         cie_10: r.cie_10 == null ? null : String(r.cie_10),
+        diagnostico: r.diagnostico == null ? null : String(r.diagnostico),
         hemoglobina: r.hemoglobina == null ? null : Number(r.hemoglobina),
         lab1: r.lab1 == null ? null : String(r.lab1),
+        resultado: r.resultado == null ? null : String(r.resultado),
       });
     }
   }
@@ -480,3 +510,269 @@ export async function computeNcMetricsForEtapa(params: {
   } satisfies NcMonthMetrics;
 }
 
+export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: string }) {
+  const etapa = String(params.etapa ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(etapa)) return [];
+  const etapaDate = toDate(etapa);
+  if (!etapaDate) return [];
+  if (etapaDate.getUTCFullYear() < 2026) return [];
+
+  const pool = getDbPool();
+
+  const prevEtapa = (() => {
+    const y = etapaDate.getUTCFullYear();
+    const m = etapaDate.getUTCMonth();
+    const prev = new Date(Date.UTC(y, m - 1, 1));
+    return prev.getUTCFullYear() < 2026 ? "" : isoDate(prev);
+  })();
+
+  const [rowsBase] = await pool.query(
+    `SELECT pn.dni,
+            pn.nombres,
+            pn.actorsocial,
+            pn.responsable,
+            pn.eess_ua,
+            pn.fechacita,
+            pn.estadosvd,
+            pn.departamento,
+            pn.provincia,
+            pn.distrito,
+            pn.fecha_nac,
+            pn.tiposeguro
+     FROM padronnominal pn
+     WHERE pn.ubigeo = ? AND pn.etapa = ? AND YEAR(pn.etapa) >= 2026
+       AND TRIM(COALESCE(pn.tipovd,'')) = '1'`,
+    [params.ubigeo, etapa],
+  );
+
+  const byDni = new Map<string, any>();
+  for (const r of rowsBase as any[]) {
+    const dni = String(r.dni ?? "").trim();
+    if (!dni) continue;
+    if (!byDni.has(dni)) byDni.set(dni, r);
+  }
+
+  const prevSet = new Set<string>();
+  if (prevEtapa) {
+    const [rowsPrev] = await pool.query(
+      `SELECT DISTINCT pn.dni
+       FROM padronnominal pn
+       WHERE pn.ubigeo = ? AND pn.etapa = ? AND YEAR(pn.etapa) >= 2026
+         AND TRIM(COALESCE(pn.tipovd,'')) = '1'`,
+      [params.ubigeo, prevEtapa],
+    );
+    for (const r of rowsPrev as any[]) {
+      const dni = String(r.dni ?? "").trim();
+      if (dni) prevSet.add(dni);
+    }
+  }
+
+  const eom = endOfMonthUTC(etapa);
+  if (!eom) return [];
+  const som = etapaDate;
+
+  const baseItems = Array.from(byDni.entries()).map(([dni, r]) => ({
+    dni,
+    nombrecompleto: String(r.nombres ?? "").trim(),
+    actorsocial: String(r.actorsocial ?? "").trim(),
+    responsable: String(r.responsable ?? "").trim(),
+    eess_ua: String(r.eess_ua ?? "").trim(),
+    fechacita: fmtDateISO(r.fechacita) ?? "",
+    estadosvd: String(r.estadosvd ?? "").trim(),
+    departamento: String(r.departamento ?? "").trim(),
+    provincia: String(r.provincia ?? "").trim(),
+    distrito: String(r.distrito ?? "").trim(),
+    fecha_nac: fmtDateISO(r.fecha_nac) ?? "",
+    tiposeguro: String(r.tiposeguro ?? "").trim(),
+  }));
+
+  const denomInfo = new Map<
+    string,
+    {
+      grupo: "6m" | "12m" | "-";
+      ok: boolean;
+      motivo: string;
+      birth: Date | null;
+    }
+  >();
+
+  for (const it of baseItems) {
+    const b = toDate(it.fecha_nac);
+    if (!b) {
+      denomInfo.set(it.dni, { grupo: "-", ok: false, motivo: "Sin fecha de nacimiento", birth: null });
+      continue;
+    }
+    const ageStart = daysBetweenUTC(b, som);
+    const ageEnd = daysBetweenUTC(b, eom);
+    const grupo: "6m" | "12m" | null =
+      overlaps(ageStart, ageEnd, 180, 209)
+        ? "6m"
+        : overlaps(ageStart, ageEnd, 365, 394)
+          ? "12m"
+          : null;
+    if (!grupo) {
+      denomInfo.set(it.dni, {
+        grupo: "-",
+        ok: false,
+        motivo: "Fuera de edad crítica (180-209 o 365-394 días en el mes)",
+        birth: b,
+      });
+      continue;
+    }
+    if (!prevEtapa || !prevSet.has(it.dni)) {
+      denomInfo.set(it.dni, { grupo, ok: false, motivo: "Sin permanencia (2 meses consecutivos)", birth: b });
+      continue;
+    }
+    const seguro = normalizeSeguro(it.tiposeguro);
+    const okSeguro = seguro === "SIS" || seguro === "";
+    if (!okSeguro) {
+      denomInfo.set(it.dni, { grupo, ok: false, motivo: "Seguro no válido (no SIS)", birth: b });
+      continue;
+    }
+    denomInfo.set(it.dni, { grupo, ok: true, motivo: "", birth: b });
+  }
+
+  const denomDnis = baseItems.filter((x) => denomInfo.get(x.dni)?.ok).map((x) => x.dni);
+  const birthMap = new Map<string, Date>();
+  for (const dni of denomDnis) {
+    const b = denomInfo.get(dni)?.birth;
+    if (b) birthMap.set(dni, b);
+  }
+
+  const tamizajes: TamizajeRow[] = [];
+  if (denomDnis.length) {
+    const minStart = (() => {
+      let min: Date | null = null;
+      for (const b of birthMap.values()) {
+        const d = addDaysUTC(b, 170);
+        if (!min || d.getTime() < min.getTime()) min = d;
+      }
+      return min ? isoDate(min) : "2026-01-01";
+    })();
+    const maxEnd = (() => {
+      let max: Date | null = null;
+      for (const b of birthMap.values()) {
+        const d = addDaysUTC(b, 394);
+        if (!max || d.getTime() > max.getTime()) max = d;
+      }
+      return max ? isoDate(max) : etapa;
+    })();
+
+    for (const part of chunk(denomDnis, 900)) {
+      const placeholders = part.map(() => "?").join(",");
+      const [rowsT] = await pool.query(
+        `SELECT id, dni, fecha_atencion, cie_10, diagnostico, hemoglobina, lab1, resultado
+         FROM registro_tamizaje
+         WHERE dni IN (${placeholders})
+           AND fecha_atencion IS NOT NULL
+           AND fecha_atencion BETWEEN ? AND ?
+         ORDER BY dni ASC, fecha_atencion DESC, id DESC`,
+        [...part, minStart, maxEnd],
+      );
+      for (const r of rowsT as any[]) {
+        tamizajes.push({
+          id: r.id == null ? null : Number(r.id),
+          dni: r.dni == null ? null : String(r.dni).trim(),
+          fecha_atencion: fmtDateISO(r.fecha_atencion),
+          cie_10: r.cie_10 == null ? null : String(r.cie_10),
+          diagnostico: r.diagnostico == null ? null : String(r.diagnostico),
+          hemoglobina: r.hemoglobina == null ? null : Number(r.hemoglobina),
+          lab1: r.lab1 == null ? null : String(r.lab1),
+          resultado: r.resultado == null ? null : String(r.resultado),
+        });
+      }
+    }
+  }
+
+  const byTamizajeDni = new Map<string, TamizajeRow[]>();
+  for (const t of tamizajes) {
+    const dni = String(t.dni ?? "").trim();
+    if (!dni) continue;
+    const arr = byTamizajeDni.get(dni) ?? [];
+    arr.push(t);
+    byTamizajeDni.set(dni, arr);
+  }
+
+  const findLastInRange = (dni: string, startISO: string, endISO: string) => {
+    const arr = byTamizajeDni.get(dni);
+    if (!arr || !arr.length) return null;
+    for (const t of arr) {
+      const fa = String(t.fecha_atencion ?? "").slice(0, 10);
+      if (!fa) continue;
+      if (fa >= startISO && fa <= endISO) return t;
+    }
+    return null;
+  };
+
+  const out: NcMatrixRow[] = [];
+  for (const it of baseItems) {
+    const den = denomInfo.get(it.dni) ?? { grupo: "-", ok: false, motivo: "Sin evaluación", birth: null };
+    const row: NcMatrixRow = {
+      dni: it.dni,
+      nombrecompleto: it.nombrecompleto,
+      actorsocial: it.actorsocial,
+      responsable: it.responsable,
+      eess_ua: it.eess_ua,
+      fechacita: it.fechacita,
+      estadosvd: it.estadosvd,
+      departamento: it.departamento,
+      provincia: it.provincia,
+      distrito: it.distrito,
+      fecha_nac: it.fecha_nac,
+      tiposeguro: it.tiposeguro,
+      grupo: den.grupo,
+      en_denominador: den.ok ? "SI" : "NO",
+      motivo_exclusion_denominador: den.ok ? "" : den.motivo,
+      en_numerador: "NO",
+      motivo_exclusion_numerador: den.ok ? "" : "No aplica (fuera del denominador)",
+      fecha_atencion: "",
+      hemoglobina: "",
+      cie_10: "",
+      diagnostico: "",
+      lab1: "",
+      resultado: "",
+    };
+
+    if (den.ok && den.birth) {
+      const start =
+        den.grupo === "6m"
+          ? isoDate(addDaysUTC(den.birth, 170))
+          : isoDate(addDaysUTC(den.birth, 365));
+      const end =
+        den.grupo === "6m"
+          ? isoDate(addDaysUTC(den.birth, 209))
+          : isoDate(addDaysUTC(den.birth, 394));
+      const t = findLastInRange(it.dni, start, end);
+      if (!t) {
+        row.motivo_exclusion_numerador =
+          den.grupo === "6m" ? "Sin tamizaje 170-209 días" : "Sin tamizaje 365-394 días";
+      } else {
+        row.fecha_atencion = t.fecha_atencion ?? "";
+        row.hemoglobina = t.hemoglobina == null ? "" : String(t.hemoglobina);
+        row.cie_10 = t.cie_10 ?? "";
+        row.diagnostico = t.diagnostico ?? "";
+        row.lab1 = t.lab1 ?? "";
+        row.resultado = t.resultado ?? "";
+
+        const cons = hbConsistente(t.hemoglobina, t.cie_10, t.lab1);
+        if (!cons.ok) {
+          row.motivo_exclusion_numerador = cons.motivo;
+        } else if (anemiaFromCie10(t.cie_10)) {
+          row.motivo_exclusion_numerador = "Diagnóstico de anemia (D509/D649)";
+        } else {
+          const hb = Number(t.hemoglobina ?? NaN);
+          if (Number.isFinite(hb) && hb >= 10.5) {
+            row.en_numerador = "SI";
+            row.motivo_exclusion_numerador = "";
+          } else {
+            row.motivo_exclusion_numerador = "Hemoglobina < 10.5";
+          }
+        }
+      }
+    }
+
+    out.push(row);
+  }
+
+  return out;
+}
