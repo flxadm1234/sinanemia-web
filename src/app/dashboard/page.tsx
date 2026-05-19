@@ -239,6 +239,7 @@ export default async function DashboardPage(props: {
           ncOkUbigeo && ncSeries.length && ncSelected ? (
             <>
               <NcLineChart
+                target={Number((selectedMonth as any).valla_min ?? 60)}
                 points={ncSeries
                   .slice()
                   .reverse()

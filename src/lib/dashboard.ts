@@ -1,4 +1,5 @@
 import { getDbPool } from "@/lib/db";
+import { ensureMesesVallaMinColumn } from "@/lib/meses";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -11,6 +12,7 @@ export type DashboardMonth = {
   meses: string;
   seleccion?: number | null;
   etapa: string;
+  valla_min?: number;
 };
 
 export function mesToEtapa(year: number, numero_mes: number) {
@@ -18,6 +20,7 @@ export function mesToEtapa(year: number, numero_mes: number) {
 }
 
 export async function listDistinctUbigeosFromMeses() {
+  await ensureMesesVallaMinColumn();
   const pool = getDbPool();
   const [rows] = await pool.query(
     "SELECT DISTINCT ubigeo FROM meses WHERE ubigeo IS NOT NULL AND ubigeo <> '' ORDER BY ubigeo ASC",
@@ -26,10 +29,11 @@ export async function listDistinctUbigeosFromMeses() {
 }
 
 export async function listDashboardMonthsByUbigeo(ubigeo: string, limit = 24) {
+  await ensureMesesVallaMinColumn();
   const pool = getDbPool();
   const lim = Math.min(Math.max(limit, 1), 48);
   const [rows] = await pool.query(
-    `SELECT ubigeo, year, numero_mes, meses, seleccion
+    `SELECT ubigeo, year, numero_mes, meses, seleccion, valla_min
      FROM meses
      WHERE ubigeo = ?
      ORDER BY year DESC, numero_mes DESC
@@ -42,14 +46,24 @@ export async function listDashboardMonthsByUbigeo(ubigeo: string, limit = 24) {
     const meses = String(r.meses ?? "").trim();
     const u = String(r.ubigeo ?? "").trim();
     const seleccion = r.seleccion == null ? null : Number(r.seleccion);
-    return { ubigeo: u, year, numero_mes, meses, seleccion, etapa: mesToEtapa(year, numero_mes) };
+    const valla_min = r.valla_min == null ? undefined : Number(r.valla_min);
+    return {
+      ubigeo: u,
+      year,
+      numero_mes,
+      meses,
+      seleccion,
+      etapa: mesToEtapa(year, numero_mes),
+      valla_min: Number.isFinite(valla_min as any) ? (valla_min as any) : undefined,
+    };
   }) as DashboardMonth[];
 }
 
 export async function getLatestDashboardMonthAny() {
+  await ensureMesesVallaMinColumn();
   const pool = getDbPool();
   const [rows] = await pool.query(
-    "SELECT ubigeo, year, numero_mes, meses FROM meses ORDER BY year DESC, numero_mes DESC LIMIT 1",
+    "SELECT ubigeo, year, numero_mes, meses, valla_min FROM meses ORDER BY year DESC, numero_mes DESC LIMIT 1",
   );
   const r = (rows as any[])[0] as any | undefined;
   if (!r) return null;
@@ -58,7 +72,15 @@ export async function getLatestDashboardMonthAny() {
   const meses = String(r.meses ?? "").trim();
   const ubigeo = String(r.ubigeo ?? "").trim();
   if (!ubigeo || !Number.isFinite(year) || !Number.isFinite(numero_mes)) return null;
-  return { ubigeo, year, numero_mes, meses, etapa: mesToEtapa(year, numero_mes) } as DashboardMonth;
+  const valla_min = r.valla_min == null ? undefined : Number(r.valla_min);
+  return {
+    ubigeo,
+    year,
+    numero_mes,
+    meses,
+    etapa: mesToEtapa(year, numero_mes),
+    valla_min: Number.isFinite(valla_min as any) ? (valla_min as any) : undefined,
+  } as DashboardMonth;
 }
 
 function assignedWhere() {

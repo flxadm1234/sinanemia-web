@@ -15,6 +15,7 @@ export function MesForm(props: {
     meses?: string;
     year?: number;
     seleccion?: number | null;
+    valla_min?: number;
   };
 }) {
   const { action, initial, allowUbigeo, defaultUbigeo } = props;
@@ -71,6 +72,20 @@ export function MesForm(props: {
             min={2000}
             max={2100}
             defaultValue={initial?.year ?? ""}
+            className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-zinc-900">
+            Valla mínima (%)
+          </label>
+          <input
+            name="valla_min"
+            type="number"
+            min={0}
+            max={100}
+            required
+            defaultValue={initial?.valla_min ?? 60}
             className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
           />
         </div>

@@ -21,8 +21,9 @@ function formatNum(n: number) {
   return new Intl.NumberFormat("es-PE").format(n);
 }
 
-export function NcLineChart(props: { points: NcLinePoint[] }) {
+export function NcLineChart(props: { points: NcLinePoint[]; target?: number }) {
   const points = props.points ?? [];
+  const target = Number(props.target ?? NaN);
   const [hover, setHover] = useState<number | null>(null);
 
   const chart = useMemo(() => {
@@ -36,7 +37,7 @@ export function NcLineChart(props: { points: NcLinePoint[] }) {
     const innerH = h - padT - padB;
 
     const values = points.map((p) => pct(p.numer, p.denom));
-    const maxV = Math.max(10, ...values, 0);
+    const maxV = Math.max(10, ...values, Number.isFinite(target) ? target : 0, 0);
     const topV = Math.min(100, Math.ceil(maxV / 10) * 10);
 
     const xAt = (i: number) => {
@@ -59,10 +60,10 @@ export function NcLineChart(props: { points: NcLinePoint[] }) {
     };
 
     const linePath = buildPath();
-    const yTicks = [0, 25, 50, 75, 100].filter((t) => t <= topV);
+    const yTicks = [0, 25, 50, 60, 75, 100].filter((t) => t <= topV);
     const grid = yTicks.map((v) => ({ v, y: yAt(v) }));
     return { w, h, padL, padR, padT, padB, innerW, innerH, topV, xAt, yAt, linePath, grid };
-  }, [points]);
+  }, [points, target]);
 
   const hoverIdx = hover == null ? null : clamp(Math.round(hover), 0, Math.max(0, points.length - 1));
   const hp = hoverIdx == null ? null : points[hoverIdx];
@@ -86,7 +87,15 @@ export function NcLineChart(props: { points: NcLinePoint[] }) {
               {pct(hp.numer, hp.denom)}% (N {formatNum(hp.numer)} / NC {formatNum(hp.denom)})
             </>
           ) : (
-            "Pasa el cursor para ver detalle"
+            <>
+              {Number.isFinite(target) ? (
+                <>
+                  Meta: <span className="font-semibold text-red-700">{target}%</span>
+                </>
+              ) : (
+                "Meta no configurada"
+              )}
+            </>
           )}
         </div>
       </div>
@@ -128,7 +137,46 @@ export function NcLineChart(props: { points: NcLinePoint[] }) {
               </g>
             ))}
 
+            {Number.isFinite(target) ? (
+              <>
+                <line
+                  x1={chart.padL}
+                  x2={chart.w - chart.padR}
+                  y1={chart.yAt(target)}
+                  y2={chart.yAt(target)}
+                  stroke="#DC2626"
+                  strokeWidth="2"
+                  strokeDasharray="6 4"
+                />
+                <text
+                  x={chart.w - chart.padR}
+                  y={chart.yAt(target) - 6}
+                  textAnchor="end"
+                  fontSize="11"
+                  fill="#B91C1C"
+                >
+                  Meta {target}%
+                </text>
+              </>
+            ) : null}
+
             <path d={chart.linePath} fill="none" stroke="#7C3AED" strokeWidth="2.5" />
+
+            <g>
+              {points.map((p, i) => {
+                const v = pct(p.numer, p.denom);
+                const x = chart.xAt(i);
+                const y = chart.yAt(v);
+                return (
+                  <g key={`${p.label}-val`}>
+                    <circle cx={x} cy={y} r="3.5" fill="#7C3AED" />
+                    <text x={x} y={y - 8} textAnchor="middle" fontSize="11" fill="#111827">
+                      {v}%
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
 
             {hoverIdx != null && points.length ? (
               <>
@@ -140,12 +188,6 @@ export function NcLineChart(props: { points: NcLinePoint[] }) {
                   stroke="#111827"
                   strokeOpacity="0.2"
                   strokeWidth="1"
-                />
-                <circle
-                  cx={chart.xAt(hoverIdx)}
-                  cy={chart.yAt(pct(points[hoverIdx].numer, points[hoverIdx].denom))}
-                  r="4"
-                  fill="#7C3AED"
                 />
               </>
             ) : null}
