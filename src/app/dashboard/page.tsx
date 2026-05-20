@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
+import { DashboardPdfButton } from "@/components/DashboardPdfButton";
 import {
   estadosvdDistribucion,
   getLatestDashboardMonthAny,
@@ -236,6 +237,57 @@ export default async function DashboardPage(props: {
             <button className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800">
               Ver
             </button>
+            <div className="md:ml-auto">
+              <DashboardPdfButton
+                payload={{
+                  scopeUbigeo: scopeUbigeo,
+                  etapa: selectedMonth.etapa,
+                  periodoLabel: `${selectedMonth.meses} ${selectedMonth.year}`,
+                  userLabel: user.nombre,
+                  role: role,
+                  totals: totalsPoint
+                    ? { total: totalsPoint.total, assigned: totalsPoint.assigned }
+                    : undefined,
+                  nc: ncSelected
+                    ? {
+                        denom: ncSelected.denom_total,
+                        numer: ncSelected.num_total,
+                        pct: ncSelected.denom_total
+                          ? Math.round((ncSelected.num_total / ncSelected.denom_total) * 1000) / 10
+                          : 0,
+                        meta: metaNc ? Number(metaNc.valla_min) : undefined,
+                      }
+                    : undefined,
+                  visitas: visitasDetalle
+                    ? {
+                        denom: visitasDetalle.denom_total,
+                        numer: visitasDetalle.numer_total,
+                        pct: visitasDetalle.denom_total
+                          ? Math.round((visitasDetalle.numer_total / visitasDetalle.denom_total) * 1000) / 10
+                          : 0,
+                        meta: metaVisitas ? Number(metaVisitas.valla_min) : undefined,
+                      }
+                    : undefined,
+                  charts: [
+                    ncOkUbigeo && ncSeries.length
+                      ? {
+                          key: "nc",
+                          title: "Cumplimiento NC (tamizaje) por mes",
+                          svgId: "chart-nc",
+                        }
+                      : null,
+                    visitasOkUbigeo && visitasSeries.length
+                      ? {
+                          key: "visitas",
+                          title:
+                            "Porcentaje de niños de 1 a 12 meses de edad que reciben visitas domiciliarias por actor social de manera oportuna y completa.",
+                          svgId: "chart-visitas",
+                        }
+                      : null,
+                  ].filter(Boolean) as any,
+                }}
+              />
+            </div>
           </form>
         </div>
 
@@ -275,6 +327,7 @@ export default async function DashboardPage(props: {
             <>
               <NcLineChart
                 target={metaNc ? Number(metaNc.valla_min) : undefined}
+                svgId="chart-nc"
                 points={ncSeries
                   .slice()
                   .reverse()
@@ -535,6 +588,7 @@ export default async function DashboardPage(props: {
                       title="Porcentaje de niños de 1 a 12 meses de edad que reciben visitas domiciliarias por actor social de manera oportuna y completa."
                       subtitle="Línea = % (Σ NVₙ / Σ Nₙ) × 100. NVₙ: niños con visitas completas y oportunas. Nₙ: niños asignados con edad 30–389 días y SIS/sin seguro."
                       target={metaVisitas ? Number(metaVisitas.valla_min) : undefined}
+                      svgId="chart-visitas"
                       points={visitasSeries.map((p) => ({
                         label: p.label,
                         denom: p.denom,

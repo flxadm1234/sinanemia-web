@@ -26,6 +26,7 @@ export function NcLineChart(props: {
   target?: number;
   title?: string;
   subtitle?: string;
+  svgId?: string;
 }) {
   const points = props.points ?? [];
   const target = Number(props.target ?? NaN);
@@ -109,6 +110,7 @@ export function NcLineChart(props: {
       <div className="mt-4 overflow-x-auto">
         <div className="min-w-[720px]">
           <svg
+            id={props.svgId}
             viewBox={`0 0 ${chart.w} ${chart.h}`}
             className="h-[240px] w-full"
             onMouseLeave={() => setHover(null)}
