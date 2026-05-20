@@ -13,6 +13,7 @@ import {
 } from "@/lib/dashboard";
 import { computeNcMetricsForEtapa } from "@/lib/ncReporte";
 import { NcLineChart } from "@/components/NcLineChart";
+import { computeVisitasMetaDetalleMes, computeVisitasMetaSeries } from "@/lib/visitasMeta";
 
 function parseSearch(params: Record<string, string | undefined>) {
   const ubigeo = String(params.ubigeo ?? "").trim();
@@ -139,6 +140,35 @@ export default async function DashboardPage(props: {
       ncSeries.push(metrics);
     }
   }
+
+  const visitasEnabled = Boolean(scopeUbigeo) && selectedMonth.year === 2026 && selectedMonth.numero_mes >= 2;
+  const visitasUbigeo = Number(scopeUbigeo);
+  const visitasOkUbigeo = visitasEnabled && Number.isFinite(visitasUbigeo) && visitasUbigeo > 0;
+
+  const visitasMonthsSource = months
+    .filter((m) => m.year === 2026 && m.numero_mes >= 2 && m.numero_mes <= selectedMonth.numero_mes)
+    .slice()
+    .sort((a, b) => a.numero_mes - b.numero_mes);
+
+  const visitasEtapas = visitasMonthsSource.map((m) => m.etapa);
+  const visitasActor = role === "ACTOR SOCIAL" ? user.dni : undefined;
+  const visitasResponsable = role === "COORDINADOR" ? user.dni : undefined;
+  const visitasSeries = visitasOkUbigeo
+    ? await computeVisitasMetaSeries({
+        ubigeo: visitasUbigeo,
+        etapas: visitasEtapas,
+        actor: visitasActor,
+        responsable: visitasResponsable,
+      })
+    : [];
+  const visitasDetalle = visitasOkUbigeo
+    ? await computeVisitasMetaDetalleMes({
+        ubigeo: visitasUbigeo,
+        etapa: selectedMonth.etapa,
+        actor: visitasActor,
+        responsable: visitasResponsable,
+      })
+    : null;
 
   return (
     <AppShell user={user} title="Dashboard">
@@ -328,37 +358,6 @@ export default async function DashboardPage(props: {
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-                  <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4 lg:col-span-2">
-                    <div className="text-sm font-semibold text-zinc-900">
-                      Condiciones previas 1
-                    </div>
-                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-                      <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
-                        <div className="text-xs font-semibold text-zinc-900">
-                          META DE VISITAS COMPLETAS Y OPORTUNAS
-                        </div>
-                        <div className="mt-2 text-xs text-zinc-600">
-                          Sección en mantenimiento (en proceso).
-                        </div>
-                      </div>
-                      <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
-                        <div className="text-xs font-semibold text-zinc-900">
-                          META GEORREFERENCIA
-                        </div>
-                        <div className="mt-2 text-xs text-zinc-600">
-                          Sección en mantenimiento (en proceso).
-                        </div>
-                      </div>
-                      <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
-                        <div className="text-xs font-semibold text-zinc-900">
-                          META ACTUALIZACIÓN TELEFÓNICA
-                        </div>
-                        <div className="mt-2 text-xs text-zinc-600">
-                          Sección en mantenimiento (en proceso).
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                   <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
                     <div className="text-sm font-semibold text-zinc-900">Seguro (en NC)</div>
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -502,6 +501,119 @@ export default async function DashboardPage(props: {
             </div>
           )
         ) : null}
+
+        <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
+          <div className="text-sm font-semibold text-zinc-900">Condiciones previas</div>
+          <div className="mt-1 text-xs text-zinc-500">
+            Se calculan por etapa y ubigeo (periodo: Febrero–Diciembre 2026).
+          </div>
+
+          <div className="mt-4 flex flex-col gap-4">
+            <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+              <div className="text-sm font-semibold text-zinc-900">
+                META DE VISITAS COMPLETAS Y OPORTUNAS
+              </div>
+              <div className="mt-1 text-xs text-zinc-600">
+                Denominador (Nₙ): niños asignados del padrón (etapa) con edad 30–389 días y seguro SIS o sin seguro. Numerador (NVₙ): cumplen visitas completas y oportunas (intervalos 7–10 días) según el Excel cargado.
+              </div>
+
+              {visitasOkUbigeo && visitasSeries.length && visitasDetalle ? (
+                <>
+                  <div className="mt-4">
+                    <NcLineChart
+                      points={visitasSeries.map((p) => ({
+                        label: p.label,
+                        denom: p.denom,
+                        numer: p.numer,
+                      }))}
+                    />
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-4">
+                    <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                      <div className="text-xs text-zinc-600">Asignados (base)</div>
+                      <div className="mt-1 text-2xl font-semibold text-zinc-900">
+                        {visitasDetalle.total_asignados}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                      <div className="text-xs text-zinc-600">Excl. edad (30–389d)</div>
+                      <div className="mt-1 text-2xl font-semibold text-zinc-900">
+                        {visitasDetalle.excl_edad}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                      <div className="text-xs text-zinc-600">Excl. seguro (no SIS)</div>
+                      <div className="mt-1 text-2xl font-semibold text-zinc-900">
+                        {visitasDetalle.excl_seguro}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                      <div className="text-xs text-zinc-600">Resultado del mes</div>
+                      <div className="mt-1 text-sm text-zinc-700">
+                        Nₙ: <span className="font-semibold">{visitasDetalle.denom_total}</span> · NVₙ:{" "}
+                        <span className="font-semibold">{visitasDetalle.numer_total}</span>
+                      </div>
+                      <div className="mt-1 text-sm text-zinc-700">
+                        %:{" "}
+                        <span className="font-semibold">
+                          {visitasDetalle.denom_total
+                            ? Math.round((visitasDetalle.numer_total / visitasDetalle.denom_total) * 1000) / 10
+                            : 0}
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                    <div className="text-sm font-semibold text-zinc-900">Detalle técnico (mes)</div>
+                    <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-3 text-sm text-zinc-700">
+                      <div>
+                        Sin registro de visita (Excel):{" "}
+                        <span className="font-semibold">{visitasDetalle.sin_registro_visita}</span>
+                      </div>
+                      <div>
+                        Con visitas pero no completas:{" "}
+                        <span className="font-semibold">{visitasDetalle.no_completa}</span>
+                      </div>
+                      <div>
+                        Completas pero no oportunas (7–10d):{" "}
+                        <span className="font-semibold">{visitasDetalle.no_oportuna}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                    <div className="text-sm font-semibold text-zinc-900">Descarga</div>
+                    <a
+                      className="mt-3 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                      href={`/api/reportes/visitas-excel?ubigeo=${encodeURIComponent(
+                        String(visitasUbigeo),
+                      )}&etapa=${encodeURIComponent(selectedMonth.etapa)}`}
+                    >
+                      Descargar Excel (detalle del mes)
+                    </a>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-3 text-sm text-zinc-700">
+                  Sección en mantenimiento (en proceso). Primero carga el Excel en “Carga Visitas”.
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+              <div className="text-sm font-semibold text-zinc-900">META GEORREFERENCIA</div>
+              <div className="mt-2 text-sm text-zinc-700">Sección en mantenimiento (en proceso).</div>
+            </div>
+
+            <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+              <div className="text-sm font-semibold text-zinc-900">META ACTUALIZACIÓN TELEFÓNICA</div>
+              <div className="mt-2 text-sm text-zinc-700">Sección en mantenimiento (en proceso).</div>
+            </div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">

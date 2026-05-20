@@ -49,6 +49,12 @@ export function AppShell(props: {
               Carga VD
             </Link>
           ) : null}
+          <Link
+            href="/admin/visitas"
+            className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+          >
+            Carga Visitas
+          </Link>
           {user.tipo === "ADMINISTRADOR" || user.tipo === "COORDINADOR" ? (
             <Link
               href="/asignacion"
