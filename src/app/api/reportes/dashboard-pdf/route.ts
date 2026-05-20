@@ -49,14 +49,20 @@ export async function POST(request: Request) {
       .filter((c: any) => c.title && c.png) as Array<{ title: string; png: Buffer }>;
 
     let narrative = "";
-    if (String(process.env.GEMINI_API_KEY ?? "").trim()) {
+    const hasGeminiKey = Boolean(String(process.env.GEMINI_API_KEY ?? "").trim());
+    if (!hasGeminiKey) {
+      narrative =
+        "IA deshabilitada: falta configurar la variable de entorno GEMINI_API_KEY en el servicio (systemd).";
+    } else {
       try {
         const fichaText = await getFichaTecnicaText();
         narrative = await generateExecutiveNarrative({
           fichaTecnicaText: fichaText,
           contexto: { ubigeo: scopeUbigeo, etapa, periodoLabel },
           data: {
-            totals: totals ? { total: Number(totals.total ?? 0), assigned: Number(totals.assigned ?? 0) } : undefined,
+            totals: totals
+              ? { total: Number(totals.total ?? 0), assigned: Number(totals.assigned ?? 0) }
+              : undefined,
             nc: nc
               ? {
                   denom: Number(nc.denom ?? 0),
@@ -75,7 +81,11 @@ export async function POST(request: Request) {
               : undefined,
           },
         });
-      } catch {}
+      } catch (e) {
+        console.error("dashboard_pdf_ai_failed", e);
+        narrative =
+          "IA no disponible: ocurrió un error generando la redacción. Revisa logs del servicio (journalctl).";
+      }
     }
 
     const doc = new PDFDocument({ size: "A4", layout: "portrait", margin: 36 });
