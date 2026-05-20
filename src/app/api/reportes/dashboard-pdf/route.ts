@@ -81,6 +81,15 @@ export async function POST(request: Request) {
               : undefined,
           },
         });
+        if (!String(narrative ?? "").trim()) {
+          narrative =
+            "IA activada, pero no devolvió texto. Revisa si la API Key tiene permisos y si el modelo respondió correctamente.";
+          console.warn("dashboard_pdf_ai_empty", {
+            ubigeo: scopeUbigeo,
+            etapa,
+            model: String(process.env.GEMINI_MODEL ?? ""),
+          });
+        }
       } catch (e) {
         console.error("dashboard_pdf_ai_failed", e);
         narrative =
