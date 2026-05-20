@@ -14,7 +14,11 @@ import {
 } from "@/lib/dashboard";
 import { computeNcMetricsForEtapa } from "@/lib/ncReporte";
 import { NcLineChart } from "@/components/NcLineChart";
-import { computeVisitasMetaDetalleMes, computeVisitasMetaSeries } from "@/lib/visitasMeta";
+import {
+  computeVisitasGeoSeries,
+  computeVisitasMetaDetalleMes,
+  computeVisitasMetaSeries,
+} from "@/lib/visitasMeta";
 import { ensureMetasC1DefaultsForUbigeo, getMetaC1ByUbigeoTipo } from "@/lib/metasC1";
 
 function parseSearch(params: Record<string, string | undefined>) {
@@ -160,6 +164,9 @@ export default async function DashboardPage(props: {
   const metaVisitas = scopeUbigeo
     ? await getMetaC1ByUbigeoTipo({ ubigeo: scopeUbigeo, tipo: 2 })
     : null;
+  const metaGeo = scopeUbigeo
+    ? await getMetaC1ByUbigeoTipo({ ubigeo: scopeUbigeo, tipo: 3 })
+    : null;
 
   const visitasEnabled = Boolean(scopeUbigeo) && selectedMonth.year === 2026 && selectedMonth.numero_mes >= 2;
   const visitasUbigeo = Number(scopeUbigeo);
@@ -189,6 +196,15 @@ export default async function DashboardPage(props: {
         responsable: visitasResponsable,
       })
     : null;
+  const geoSeries = visitasOkUbigeo
+    ? await computeVisitasGeoSeries({
+        ubigeo: visitasUbigeo,
+        etapas: visitasEtapas,
+        actor: visitasActor,
+        responsable: visitasResponsable,
+      })
+    : [];
+  const geoSelected = geoSeries.find((p) => p.etapa === selectedMonth.etapa) ?? null;
 
   return (
     <AppShell user={user} title="Dashboard">
@@ -316,6 +332,13 @@ export default async function DashboardPage(props: {
                           title:
                             "Porcentaje de niños de 1 a 12 meses de edad que reciben visitas domiciliarias por actor social de manera oportuna y completa.",
                           svgId: "chart-visitas",
+                        }
+                      : null,
+                    visitasOkUbigeo && geoSeries.length
+                      ? {
+                          key: "geo",
+                          title: "Cumplimiento de visitas georreferenciadas",
+                          svgId: "chart-geo",
                         }
                       : null,
                   ].filter(Boolean) as any,
@@ -712,8 +735,52 @@ export default async function DashboardPage(props: {
             </div>
 
             <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
-              <div className="text-sm font-semibold text-zinc-900">META GEORREFERENCIA</div>
-              <div className="mt-2 text-sm text-zinc-700">Sección en mantenimiento (en proceso).</div>
+              <div className="text-sm font-semibold text-zinc-900">
+                CUMPLIMIENTO DE VISITAS GEORREFERENCIADAS
+              </div>
+              <div className="mt-1 text-xs text-zinc-600">
+                Denominador: total de visitas (visitas_raw) de los niños que forman parte del numerador NVₙ
+                (visitas completas y oportunas), excluyendo etapa_text “No Encontrado”. Numerador: visitas con
+                dispositivo “MOVIL”.
+              </div>
+
+              {visitasOkUbigeo && geoSeries.length ? (
+                <>
+                  <div className="mt-4">
+                    <NcLineChart
+                      title="Cumplimiento de visitas georreferenciadas por mes"
+                      subtitle="Línea = % (Visitas georreferenciadas / Total de visitas) × 100, calculado sobre visitas_raw para niños del numerador NVₙ."
+                      target={metaGeo ? Number(metaGeo.valla_min) : undefined}
+                      svgId="chart-geo"
+                      points={geoSeries.map((p) => ({
+                        label: p.label,
+                        denom: p.denom,
+                        numer: p.numer,
+                      }))}
+                    />
+                  </div>
+
+                  {geoSelected ? (
+                    <div className="mt-4 rounded-2xl bg-white ring-1 ring-black/5 p-4">
+                      <div className="text-sm font-semibold text-zinc-900">Resultado del mes</div>
+                      <div className="mt-2 text-sm text-zinc-700">
+                        Total visitas: <span className="font-semibold">{geoSelected.denom}</span> · Visitas
+                        georreferenciadas: <span className="font-semibold">{geoSelected.numer}</span> · %:{" "}
+                        <span className="font-semibold">
+                          {geoSelected.denom
+                            ? Math.round((geoSelected.numer / geoSelected.denom) * 1000) / 10
+                            : 0}
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="mt-3 text-sm text-zinc-700">
+                  Sección en mantenimiento (en proceso). Primero carga el Excel en “Carga Reporte de actividades”.
+                </div>
+              )}
             </div>
 
             <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">

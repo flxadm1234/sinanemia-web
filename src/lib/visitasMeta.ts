@@ -24,6 +24,13 @@ export type VisitasMetaPoint = {
   numer: number;
 };
 
+export type VisitasGeoPoint = {
+  etapa: string;
+  label: string;
+  denom: number;
+  numer: number;
+};
+
 export async function computeVisitasMetaSeries(params: {
   ubigeo: number;
   etapas: string[];
@@ -86,6 +93,78 @@ export async function computeVisitasMetaSeries(params: {
       const label = Number.isFinite(m) && Number.isFinite(y) ? `${String(m).padStart(2, "0")}/${y}` : etapa;
       const v = map.get(etapa) ?? { denom: 0, numer: 0 };
       return { etapa, label, denom: v.denom, numer: v.numer } as VisitasMetaPoint;
+    });
+}
+
+export async function computeVisitasGeoSeries(params: {
+  ubigeo: number;
+  etapas: string[];
+  actor?: string;
+  responsable?: string;
+}) {
+  await ensureVisitasTables();
+  if (!params.etapas.length) return [] as VisitasGeoPoint[];
+
+  const pool = getDbPool();
+  const etapas = params.etapas;
+  const placeholders = etapas.map(() => "?").join(",");
+  const whereExtra: string[] = [];
+  const values: any[] = [...etapas, params.ubigeo];
+  if (params.actor) {
+    whereExtra.push("pn.actorsocial = ?");
+    values.push(params.actor);
+  }
+  if (params.responsable) {
+    whereExtra.push("pn.responsable = ?");
+    values.push(params.responsable);
+  }
+
+  const [rows] = await pool.query(
+    `
+    SELECT
+      DATE_FORMAT(pn.etapa, '%Y-%m-01') AS etapa_mes,
+      COUNT(*) AS denom,
+      SUM(CASE WHEN UPPER(TRIM(vr.dispositivo)) = 'MOVIL' THEN 1 ELSE 0 END) AS numer
+    FROM padronnominal pn
+    INNER JOIN visitas_mensual vm
+      ON vm.ubigeo = pn.ubigeo
+      AND vm.etapa_mes = STR_TO_DATE(DATE_FORMAT(pn.etapa, '%Y-%m-01'), '%Y-%m-%d')
+      AND TRIM(vm.dni_nino) = TRIM(pn.dni)
+      AND vm.cumple = 1
+    INNER JOIN visitas_raw vr
+      ON vr.ubigeo = vm.ubigeo
+      AND vr.etapa_mes = vm.etapa_mes
+      AND TRIM(vr.dni_nino) = TRIM(vm.dni_nino)
+    WHERE
+      DATE_FORMAT(pn.etapa, '%Y-%m-01') IN (${placeholders})
+      AND pn.ubigeo = ?
+      AND ${ninosWhere()}
+      AND ${assignedWhere()}
+      AND ${edadEnRangoWhere()}
+      AND ${seguroValidoWhere()}
+      AND UPPER(TRIM(COALESCE(vr.etapa_text,''))) LIKE 'VISITA%'
+      AND UPPER(TRIM(COALESCE(vr.etapa_text,''))) NOT LIKE '%NO ENCONTRADO%'
+      ${whereExtra.length ? `AND ${whereExtra.join(" AND ")}` : ""}
+    GROUP BY DATE_FORMAT(pn.etapa, '%Y-%m-01')
+    ORDER BY etapa_mes ASC
+    `,
+    values,
+  );
+
+  const map = new Map<string, { denom: number; numer: number }>();
+  for (const r of rows as any[]) {
+    const etapa = String(r.etapa_mes ?? "").slice(0, 10);
+    map.set(etapa, { denom: Number(r.denom ?? 0), numer: Number(r.numer ?? 0) });
+  }
+
+  return etapas
+    .slice()
+    .sort()
+    .map((etapa) => {
+      const [y, m] = etapa.split("-").map((x) => Number(x));
+      const label = Number.isFinite(m) && Number.isFinite(y) ? `${String(m).padStart(2, "0")}/${y}` : etapa;
+      const v = map.get(etapa) ?? { denom: 0, numer: 0 };
+      return { etapa, label, denom: v.denom, numer: v.numer } as VisitasGeoPoint;
     });
 }
 
