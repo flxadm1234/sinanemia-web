@@ -25,21 +25,26 @@ type Payload = {
 };
 
 function svgToPngDataUrl(svgEl: SVGSVGElement, scale = 2): Promise<string> {
-  const serializer = new XMLSerializer();
-  const raw = serializer.serializeToString(svgEl);
-  const svg = raw.includes("http://www.w3.org/2000/svg")
-    ? raw
-    : raw.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+  const vb = svgEl.viewBox?.baseVal;
+  const w = vb?.width ? vb.width : svgEl.clientWidth || 800;
+  const h = vb?.height ? vb.height : svgEl.clientHeight || 240;
 
-  const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
+  const clone = svgEl.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  clone.setAttribute("width", String(w));
+  clone.setAttribute("height", String(h));
+  if (!clone.getAttribute("viewBox")) {
+    clone.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  }
+
+  const serializer = new XMLSerializer();
+  const svg = serializer.serializeToString(clone);
+
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
       try {
-        const vb = svgEl.viewBox?.baseVal;
-        const w = vb?.width ? vb.width : svgEl.clientWidth || 800;
-        const h = vb?.height ? vb.height : svgEl.clientHeight || 240;
         const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(w * scale));
         canvas.height = Math.max(1, Math.round(h * scale));
@@ -49,15 +54,12 @@ function svgToPngDataUrl(svgEl: SVGSVGElement, scale = 2): Promise<string> {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         const out = canvas.toDataURL("image/png");
-        URL.revokeObjectURL(url);
         resolve(out);
       } catch (e) {
-        URL.revokeObjectURL(url);
         reject(new Error("No se pudo convertir el gráfico a imagen. Intenta recargar el Dashboard y vuelve a generar el PDF."));
       }
     };
     img.onerror = () => {
-      URL.revokeObjectURL(url);
       reject(new Error("No se pudo renderizar el gráfico como imagen. Intenta recargar el Dashboard y vuelve a generar el PDF."));
     };
     img.src = url;
