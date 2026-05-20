@@ -48,6 +48,7 @@ export async function POST(request: Request) {
       }))
       .filter((c: any) => c.title && c.png) as Array<{ title: string; png: Buffer }>;
 
+    const reportBuild = "AI-v2";
     let narrative = "";
     const hasGeminiKey = Boolean(String(process.env.GEMINI_API_KEY ?? "").trim());
     if (!hasGeminiKey) {
@@ -96,6 +97,14 @@ export async function POST(request: Request) {
           "IA no disponible: ocurrió un error generando la redacción. Revisa logs del servicio (journalctl).";
       }
     }
+    console.info("dashboard_pdf_ai_status", {
+      build: reportBuild,
+      hasGeminiKey,
+      model: String(process.env.GEMINI_MODEL ?? ""),
+      narrativeLen: String(narrative ?? "").length,
+      ubigeo: scopeUbigeo,
+      etapa,
+    });
 
     const doc = new PDFDocument({ size: "A4", layout: "portrait", margin: 36 });
     const chunks: Buffer[] = [];
@@ -175,7 +184,7 @@ export async function POST(request: Request) {
 
     if (narrative) {
       y = ensureSpace(y, 120);
-      y = sectionTitle(y, "Interpretación ejecutiva (IA)");
+      y = sectionTitle(y, `Interpretación ejecutiva (IA) · ${reportBuild}`);
       doc.font("Helvetica").fontSize(9).fillColor("#111827");
       const h = doc.heightOfString(narrative, { width: usableW, align: "justify" });
       y = ensureSpace(y, Math.min(h + 10, 500));
