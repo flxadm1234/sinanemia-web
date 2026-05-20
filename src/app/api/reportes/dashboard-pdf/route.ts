@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
 import { getSession } from "@/lib/auth";
+import { getFichaTecnicaText } from "@/lib/fichaTecnica";
+import { generateExecutiveNarrative } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 
@@ -46,6 +48,36 @@ export async function POST(request: Request) {
       }))
       .filter((c: any) => c.title && c.png) as Array<{ title: string; png: Buffer }>;
 
+    let narrative = "";
+    if (String(process.env.GEMINI_API_KEY ?? "").trim()) {
+      try {
+        const fichaText = await getFichaTecnicaText();
+        narrative = await generateExecutiveNarrative({
+          fichaTecnicaText: fichaText,
+          contexto: { ubigeo: scopeUbigeo, etapa, periodoLabel },
+          data: {
+            totals: totals ? { total: Number(totals.total ?? 0), assigned: Number(totals.assigned ?? 0) } : undefined,
+            nc: nc
+              ? {
+                  denom: Number(nc.denom ?? 0),
+                  numer: Number(nc.numer ?? 0),
+                  pct: Number(nc.pct ?? 0),
+                  meta: nc.meta == null ? undefined : Number(nc.meta),
+                }
+              : undefined,
+            visitas: visitas
+              ? {
+                  denom: Number(visitas.denom ?? 0),
+                  numer: Number(visitas.numer ?? 0),
+                  pct: Number(visitas.pct ?? 0),
+                  meta: visitas.meta == null ? undefined : Number(visitas.meta),
+                }
+              : undefined,
+          },
+        });
+      } catch {}
+    }
+
     const doc = new PDFDocument({ size: "A4", layout: "portrait", margin: 36 });
     const chunks: Buffer[] = [];
     const bufferPromise = new Promise<Buffer>((resolve, reject) => {
@@ -61,6 +93,12 @@ export async function POST(request: Request) {
     const top = doc.page.margins.top;
     const bottom = doc.page.margins.bottom;
     const usableW = pageW - left - right;
+
+    const ensureSpace = (y: number, needed: number) => {
+      if (y + needed <= pageH - bottom) return y;
+      doc.addPage();
+      return header();
+    };
 
     const header = () => {
       doc.font("Helvetica-Bold").fontSize(16).fillColor("#111827").text("Informe Ejecutivo - SinAnemia", left, top, {
@@ -115,6 +153,16 @@ export async function POST(request: Request) {
     kpi(y, "Meta visitas (%)", `${Number(visitas?.meta ?? 0)}%`, kpiW3);
     doc.restore();
     y += 86;
+
+    if (narrative) {
+      y = ensureSpace(y, 120);
+      y = sectionTitle(y, "Interpretación ejecutiva (IA)");
+      doc.font("Helvetica").fontSize(9).fillColor("#111827");
+      const h = doc.heightOfString(narrative, { width: usableW, align: "justify" });
+      y = ensureSpace(y, Math.min(h + 10, 500));
+      doc.text(narrative, left, y, { width: usableW, align: "justify" });
+      y = doc.y + 14;
+    }
 
     for (const ch of charts) {
       if (y + 280 > pageH - bottom) {
