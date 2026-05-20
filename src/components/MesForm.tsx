@@ -9,6 +9,7 @@ export function MesForm(props: {
   action: any;
   allowUbigeo?: boolean;
   defaultUbigeo?: string;
+  allowSelect?: boolean;
   initial?: {
     idmeses?: number;
     numero_mes?: number;
@@ -18,7 +19,7 @@ export function MesForm(props: {
     valla_min?: number;
   };
 }) {
-  const { action, initial, allowUbigeo, defaultUbigeo } = props;
+  const { action, initial, allowUbigeo, defaultUbigeo, allowSelect } = props;
   const [state, formAction] = useActionState<State, FormData>(action, null);
 
   return (
@@ -102,7 +103,7 @@ export function MesForm(props: {
         </div>
       </div>
 
-      {typeof initial?.idmeses !== "number" ? (
+      {typeof initial?.idmeses !== "number" && allowSelect !== false ? (
         <label className="flex items-center gap-2 text-sm text-zinc-700">
           <input
             type="checkbox"

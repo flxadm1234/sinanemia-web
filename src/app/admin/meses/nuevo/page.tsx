@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { requireAdminOrSuperAdmin } from "@/lib/auth";
+import { requireMesesAccess } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { MesForm } from "@/components/MesForm";
 import { createMesAction } from "../actions";
 
 export default async function AdminMesNuevoPage() {
-  const user = await requireAdminOrSuperAdmin();
+  const user = await requireMesesAccess();
 
   return (
     <AppShell user={user} title="Nuevo mes">
@@ -32,6 +32,7 @@ export default async function AdminMesNuevoPage() {
             action={createMesAction}
             allowUbigeo={user.tipo === "SUPER ADMIN"}
             defaultUbigeo={user.tipo === "SUPER ADMIN" ? "" : String(user.ubigeo ?? "")}
+            allowSelect={user.tipo !== "INVITADO"}
           />
         </div>
       </div>

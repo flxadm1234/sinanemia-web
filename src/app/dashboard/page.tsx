@@ -8,6 +8,7 @@ import {
   resumenPorDepartamento,
   resumenPorDistrito,
   resumenPorProvincia,
+  timelineTotales,
   type DashboardMonth,
 } from "@/lib/dashboard";
 import { computeNcMetricsForEtapa } from "@/lib/ncReporte";
@@ -96,6 +97,15 @@ export default async function DashboardPage(props: {
   })();
 
   const estados = await estadosvdDistribucion({ etapa, ...scopeFilters, limit: 12 });
+  const totalsPoint =
+    (
+      await timelineTotales({
+        months: [selectedMonth],
+        ubigeo: scopeUbigeo || undefined,
+        actor: role === "ACTOR SOCIAL" ? user.dni : undefined,
+        responsable: role === "COORDINADOR" ? user.dni : undefined,
+      })
+    )[0] ?? null;
 
   const showGeo = role === "SUPER ADMIN";
   const dept = showGeo ? await resumenPorDepartamento({ etapa, limit: 50 }) : [];
@@ -187,6 +197,37 @@ export default async function DashboardPage(props: {
             </button>
           </form>
         </div>
+
+        {totalsPoint ? (
+          <div className="rounded-2xl bg-blue-50 ring-1 ring-blue-200 p-5">
+            <div className="text-sm font-semibold text-blue-950">
+              Niños del mes seleccionado
+            </div>
+            <div className="mt-1 text-xs text-blue-900/70">
+              Asignados = registros con Actor Social.
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="rounded-2xl bg-white/70 ring-1 ring-blue-200/60 p-4">
+                <div className="text-xs text-blue-900/70">Niños cargados</div>
+                <div className="mt-1 text-2xl font-semibold text-blue-950">
+                  {totalsPoint.total}
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/70 ring-1 ring-blue-200/60 p-4">
+                <div className="text-xs text-blue-900/70">Niños asignados</div>
+                <div className="mt-1 text-2xl font-semibold text-blue-950">
+                  {totalsPoint.assigned}
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/70 ring-1 ring-blue-200/60 p-4">
+                <div className="text-xs text-blue-900/70">Niños sin asignar</div>
+                <div className="mt-1 text-2xl font-semibold text-blue-950">
+                  {Math.max(0, totalsPoint.total - totalsPoint.assigned)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {ncEnabled ? (
           ncOkUbigeo && ncSeries.length && ncSelected ? (

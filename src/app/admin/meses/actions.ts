@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { requireAdminOrSuperAdmin } from "@/lib/auth";
+import { requireAdminOrSuperAdmin, requireMesesAccess } from "@/lib/auth";
 import {
   createMes,
   setMesSeleccionadoById,
@@ -46,7 +46,7 @@ function revalidateMeses() {
 }
 
 export async function createMesAction(_: any, formData: FormData) {
-  const user = await requireAdminOrSuperAdmin();
+  const user = await requireMesesAccess();
   const parsed = createSchema.safeParse({
     numero_mes: formData.get("numero_mes"),
     meses: formData.get("meses"),
@@ -62,7 +62,7 @@ export async function createMesAction(_: any, formData: FormData) {
       : String(user.ubigeo ?? "");
   if (!ubigeo) return { ok: false, message: "Tu usuario no tiene ubigeo." };
 
-  const sel = String(formData.get("seleccion") ?? "") === "1";
+  const sel = user.tipo === "INVITADO" ? false : String(formData.get("seleccion") ?? "") === "1";
 
   const res = await createMes({
     ubigeo,

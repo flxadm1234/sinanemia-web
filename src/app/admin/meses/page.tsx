@@ -14,6 +14,7 @@ export default async function AdminMesesPage() {
   const user = await requireMesesAccess();
   const ubigeo = user.ubigeo ?? null;
   const canManage = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
+  const canCreate = canManage || user.tipo === "INVITADO";
 
   if ((user.tipo === "ADMINISTRADOR" || user.tipo === "INVITADO") && !ubigeo) {
     return (
@@ -71,7 +72,7 @@ export default async function AdminMesesPage() {
                 Importar Excel
               </Link>
             ) : null}
-            {canManage ? (
+            {canCreate ? (
               <Link
                 href="/admin/meses/nuevo"
                 className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
