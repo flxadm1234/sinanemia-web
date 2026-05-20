@@ -276,6 +276,32 @@ export default async function DashboardPage(props: {
                         meta: metaVisitas ? Number(metaVisitas.valla_min) : undefined,
                       }
                     : undefined,
+                  series: {
+                    nc: ncSeries.length
+                      ? ncSeries.map((m: any) => ({
+                          etapa: String(m.etapa ?? ""),
+                          label: String(m.label ?? ""),
+                          denom: Number(m.denom_total ?? 0),
+                          numer: Number(m.num_total ?? 0),
+                          pct: Number(m.denom_total ?? 0)
+                            ? Math.round((Number(m.num_total ?? 0) / Number(m.denom_total ?? 0)) * 1000) / 10
+                            : 0,
+                          meta: metaNc ? Number(metaNc.valla_min) : undefined,
+                        }))
+                      : undefined,
+                    visitas: visitasSeries.length
+                      ? visitasSeries.map((p: any) => ({
+                          etapa: String(p.etapa ?? ""),
+                          label: String(p.label ?? ""),
+                          denom: Number(p.denom ?? 0),
+                          numer: Number(p.numer ?? 0),
+                          pct: Number(p.denom ?? 0)
+                            ? Math.round((Number(p.numer ?? 0) / Number(p.denom ?? 0)) * 1000) / 10
+                            : 0,
+                          meta: metaVisitas ? Number(metaVisitas.valla_min) : undefined,
+                        }))
+                      : undefined,
+                  },
                   charts: [
                     ncOkUbigeo && ncSeries.length
                       ? {

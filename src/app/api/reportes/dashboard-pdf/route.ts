@@ -22,6 +22,29 @@ function dataUrlToBuffer(dataUrl: string) {
   }
 }
 
+function limaDateISO(d: Date) {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Lima",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return fmt.format(d);
+}
+
+function parseEtapa(etapaISO: string) {
+  const m = /^(\d{4})-(\d{2})-\d{2}$/.exec(etapaISO);
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mm = Number(m[2]);
+  if (!Number.isFinite(y) || !Number.isFinite(mm) || mm < 1 || mm > 12) return null;
+  return { year: y, month: mm };
+}
+
+function daysInMonthUTC(year: number, month: number) {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getSession();
@@ -40,6 +63,7 @@ export async function POST(request: Request) {
     const totals = body?.totals ?? null;
     const nc = body?.nc ?? null;
     const visitas = body?.visitas ?? null;
+    const series = body?.series ?? null;
 
     const chartsIn = Array.isArray(body?.charts) ? body.charts : [];
     const charts = chartsIn
@@ -57,10 +81,28 @@ export async function POST(request: Request) {
         "IA deshabilitada: falta configurar la variable de entorno GEMINI_API_KEY en el servicio (systemd).";
     } else {
       try {
+        const asOfDate = limaDateISO(new Date());
+        const etapaParts = parseEtapa(etapa);
+        const asOfParts = parseEtapa(asOfDate);
+        const isCurrentMonth = Boolean(
+          etapaParts &&
+            asOfParts &&
+            etapaParts.year === asOfParts.year &&
+            etapaParts.month === asOfParts.month,
+        );
+        const dayOfMonth = Number(asOfDate.slice(8, 10));
+        const dim =
+          etapaParts && Number.isFinite(etapaParts.year) && Number.isFinite(etapaParts.month)
+            ? daysInMonthUTC(etapaParts.year, etapaParts.month)
+            : 0;
+        const isPartialMonth = Boolean(isCurrentMonth && dim > 0 && dayOfMonth < dim);
+        const daysRemaining =
+          isPartialMonth && dim > 0 && dayOfMonth > 0 ? Math.max(0, dim - dayOfMonth) : 0;
+
         const fichaText = await getFichaTecnicaText();
         narrative = await generateExecutiveNarrative({
           fichaTecnicaText: fichaText,
-          contexto: { ubigeo: scopeUbigeo, etapa, periodoLabel },
+          contexto: { ubigeo: scopeUbigeo, etapa, periodoLabel, asOfDate },
           data: {
             totals: totals
               ? { total: Number(totals.total ?? 0), assigned: Number(totals.assigned ?? 0) }
@@ -81,6 +123,38 @@ export async function POST(request: Request) {
                   meta: visitas.meta == null ? undefined : Number(visitas.meta),
                 }
               : undefined,
+            series: series
+              ? {
+                  nc: Array.isArray(series.nc)
+                    ? series.nc.map((p: any) => ({
+                        etapa: safeText(p?.etapa),
+                        label: safeText(p?.label),
+                        denom: Number(p?.denom ?? 0),
+                        numer: Number(p?.numer ?? 0),
+                        pct: Number(p?.pct ?? 0),
+                        meta: p?.meta == null ? undefined : Number(p?.meta),
+                      }))
+                    : undefined,
+                  visitas: Array.isArray(series.visitas)
+                    ? series.visitas.map((p: any) => ({
+                        etapa: safeText(p?.etapa),
+                        label: safeText(p?.label),
+                        denom: Number(p?.denom ?? 0),
+                        numer: Number(p?.numer ?? 0),
+                        pct: Number(p?.pct ?? 0),
+                        meta: p?.meta == null ? undefined : Number(p?.meta),
+                      }))
+                    : undefined,
+                }
+              : undefined,
+            periodStatus: {
+              isCurrentMonth,
+              isPartialMonth,
+              asOfDate,
+              daysInMonth: dim,
+              dayOfMonth: Number.isFinite(dayOfMonth) ? dayOfMonth : 0,
+              daysRemaining,
+            },
           },
         });
         if (!String(narrative ?? "").trim()) {
@@ -249,4 +323,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "dashboard_pdf_failed" }, { status: 500 });
   }
 }
-

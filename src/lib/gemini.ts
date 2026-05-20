@@ -18,11 +18,38 @@ export async function generateExecutiveNarrative(params: {
     ubigeo: string;
     etapa: string;
     periodoLabel: string;
+    asOfDate?: string;
   };
   data: {
     totals?: { total: number; assigned: number };
     nc?: { denom: number; numer: number; pct: number; meta?: number };
     visitas?: { denom: number; numer: number; pct: number; meta?: number };
+    series?: {
+      nc?: Array<{
+        etapa: string;
+        label: string;
+        denom: number;
+        numer: number;
+        pct: number;
+        meta?: number;
+      }>;
+      visitas?: Array<{
+        etapa: string;
+        label: string;
+        denom: number;
+        numer: number;
+        pct: number;
+        meta?: number;
+      }>;
+    };
+    periodStatus?: {
+      isCurrentMonth: boolean;
+      isPartialMonth: boolean;
+      asOfDate: string;
+      daysInMonth: number;
+      dayOfMonth: number;
+      daysRemaining: number;
+    };
   };
 }) {
   const apiKey = requireEnv("GEMINI_API_KEY");
@@ -49,6 +76,8 @@ export async function generateExecutiveNarrative(params: {
     "- No inventes datos, no exageres, no hagas promesas.",
     "- Explica brevemente la interpretación técnica de los resultados y el nivel de cumplimiento vs meta.",
     "- Menciona el denominador y numerador cuando existan.",
+    "- Analiza la tendencia de los meses previos usando data.series (si está disponible): describe si mejora, empeora o se mantiene.",
+    "- Si data.periodStatus.isPartialMonth es true (mes en curso), aclara que es un avance parcial al corte (asOfDate) y que el resultado puede variar al cierre del mes. No proyectes con números.",
     "- Entrega el resultado en texto plano con secciones cortas:",
     "  1) Resumen ejecutivo (3-5 líneas)",
     "  2) Indicador 1.1 (NC tamizaje): resultado, meta, lectura técnica, alertas",

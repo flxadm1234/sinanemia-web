@@ -21,6 +21,24 @@ type Payload = {
     pct: number;
     meta?: number;
   };
+  series?: {
+    nc?: Array<{
+      etapa: string;
+      label: string;
+      denom: number;
+      numer: number;
+      pct: number;
+      meta?: number;
+    }>;
+    visitas?: Array<{
+      etapa: string;
+      label: string;
+      denom: number;
+      numer: number;
+      pct: number;
+      meta?: number;
+    }>;
+  };
   charts: Array<{ key: string; title: string; svgId: string }>;
 };
 
