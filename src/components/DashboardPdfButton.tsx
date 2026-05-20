@@ -27,8 +27,9 @@ type Payload = {
 function svgToPngDataUrl(svgEl: SVGSVGElement, scale = 2): Promise<string> {
   const serializer = new XMLSerializer();
   const raw = serializer.serializeToString(svgEl);
-  const svg =
-    raw.includes("http://www.w3.org/2000/svg") ? raw : raw.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+  const svg = raw.includes("http://www.w3.org/2000/svg")
+    ? raw
+    : raw.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
 
   const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -52,12 +53,12 @@ function svgToPngDataUrl(svgEl: SVGSVGElement, scale = 2): Promise<string> {
         resolve(out);
       } catch (e) {
         URL.revokeObjectURL(url);
-        reject(e);
+        reject(new Error("No se pudo convertir el gráfico a imagen. Intenta recargar el Dashboard y vuelve a generar el PDF."));
       }
     };
-    img.onerror = (e) => {
+    img.onerror = () => {
       URL.revokeObjectURL(url);
-      reject(e);
+      reject(new Error("No se pudo renderizar el gráfico como imagen. Intenta recargar el Dashboard y vuelve a generar el PDF."));
     };
     img.src = url;
   });
