@@ -24,6 +24,7 @@ export async function generateExecutiveNarrative(params: {
     totals?: { total: number; assigned: number };
     nc?: { denom: number; numer: number; pct: number; meta?: number };
     visitas?: { denom: number; numer: number; pct: number; meta?: number };
+    geo?: { denom: number; numer: number; pct: number; meta?: number };
     series?: {
       nc?: Array<{
         etapa: string;
@@ -34,6 +35,14 @@ export async function generateExecutiveNarrative(params: {
         meta?: number;
       }>;
       visitas?: Array<{
+        etapa: string;
+        label: string;
+        denom: number;
+        numer: number;
+        pct: number;
+        meta?: number;
+      }>;
+      geo?: Array<{
         etapa: string;
         label: string;
         denom: number;
@@ -78,11 +87,30 @@ export async function generateExecutiveNarrative(params: {
     "- Menciona el denominador y numerador cuando existan.",
     "- Analiza la tendencia de los meses previos usando data.series (si está disponible): describe si mejora, empeora o se mantiene.",
     "- Si data.periodStatus.isPartialMonth es true (mes en curso), aclara que es un avance parcial al corte (asOfDate) y que el resultado puede variar al cierre del mes. No proyectes con números.",
-    "- Entrega el resultado en texto plano con secciones cortas:",
-    "  1) Resumen ejecutivo (3-5 líneas)",
-    "  2) Indicador 1.1 (NC tamizaje): resultado, meta, lectura técnica, alertas",
-    "  3) Meta de Visitas completas y oportunas: resultado, meta, lectura técnica, alertas",
-    "  4) Recomendaciones operativas (3-6 viñetas)",
+    "- Formato de salida obligatorio (sin markdown, sin **):",
+    "  1) Resumen ejecutivo",
+    "  - ...",
+    "  2) Indicador 1.1 (NC tamizaje)",
+    "  - Resultado: ...",
+    "  - Meta: ...",
+    "  - Lectura técnica: ...",
+    "  - Alertas: ...",
+    "  3) Visitas completas y oportunas (Condición previa)",
+    "  - Resultado: ...",
+    "  - Meta: ...",
+    "  - Lectura técnica: ...",
+    "  - Alertas: ...",
+    "  4) Cumplimiento de visitas georreferenciadas",
+    "  - Resultado: ...",
+    "  - Meta: ...",
+    "  - Lectura técnica: ...",
+    "  - Alertas: ...",
+    "  5) Recomendaciones operativas",
+    "  - ...",
+    "  6) Conclusión",
+    "  1. ...",
+    "  2. ...",
+    "  3. ...",
     "",
     "Ficha Técnica (extracto):",
     ficha,

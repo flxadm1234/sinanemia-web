@@ -292,6 +292,16 @@ export default async function DashboardPage(props: {
                         meta: metaVisitas ? Number(metaVisitas.valla_min) : undefined,
                       }
                     : undefined,
+                  geo: geoSelected
+                    ? {
+                        denom: geoSelected.denom,
+                        numer: geoSelected.numer,
+                        pct: geoSelected.denom
+                          ? Math.round((geoSelected.numer / geoSelected.denom) * 1000) / 10
+                          : 0,
+                        meta: metaGeo ? Number(metaGeo.valla_min) : undefined,
+                      }
+                    : undefined,
                   series: {
                     nc: ncSeries.length
                       ? ncSeries.map((m: any) => ({
@@ -315,6 +325,18 @@ export default async function DashboardPage(props: {
                             ? Math.round((Number(p.numer ?? 0) / Number(p.denom ?? 0)) * 1000) / 10
                             : 0,
                           meta: metaVisitas ? Number(metaVisitas.valla_min) : undefined,
+                        }))
+                      : undefined,
+                    geo: geoSeries.length
+                      ? geoSeries.map((p: any) => ({
+                          etapa: String(p.etapa ?? ""),
+                          label: String(p.label ?? ""),
+                          denom: Number(p.denom ?? 0),
+                          numer: Number(p.numer ?? 0),
+                          pct: Number(p.denom ?? 0)
+                            ? Math.round((Number(p.numer ?? 0) / Number(p.denom ?? 0)) * 1000) / 10
+                            : 0,
+                          meta: metaGeo ? Number(metaGeo.valla_min) : undefined,
                         }))
                       : undefined,
                   },

@@ -21,6 +21,12 @@ type Payload = {
     pct: number;
     meta?: number;
   };
+  geo?: {
+    denom: number;
+    numer: number;
+    pct: number;
+    meta?: number;
+  };
   series?: {
     nc?: Array<{
       etapa: string;
@@ -31,6 +37,14 @@ type Payload = {
       meta?: number;
     }>;
     visitas?: Array<{
+      etapa: string;
+      label: string;
+      denom: number;
+      numer: number;
+      pct: number;
+      meta?: number;
+    }>;
+    geo?: Array<{
       etapa: string;
       label: string;
       denom: number;

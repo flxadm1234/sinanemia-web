@@ -45,6 +45,14 @@ function daysInMonthUTC(year: number, month: number) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
+function normalizeNarrativeText(s: string) {
+  return String(s ?? "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\u0000/g, "")
+    .trim();
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getSession();
@@ -63,6 +71,7 @@ export async function POST(request: Request) {
     const totals = body?.totals ?? null;
     const nc = body?.nc ?? null;
     const visitas = body?.visitas ?? null;
+    const geo = body?.geo ?? null;
     const series = body?.series ?? null;
 
     const chartsIn = Array.isArray(body?.charts) ? body.charts : [];
@@ -123,6 +132,14 @@ export async function POST(request: Request) {
                   meta: visitas.meta == null ? undefined : Number(visitas.meta),
                 }
               : undefined,
+            geo: geo
+              ? {
+                  denom: Number(geo.denom ?? 0),
+                  numer: Number(geo.numer ?? 0),
+                  pct: Number(geo.pct ?? 0),
+                  meta: geo.meta == null ? undefined : Number(geo.meta),
+                }
+              : undefined,
             series: series
               ? {
                   nc: Array.isArray(series.nc)
@@ -137,6 +154,16 @@ export async function POST(request: Request) {
                     : undefined,
                   visitas: Array.isArray(series.visitas)
                     ? series.visitas.map((p: any) => ({
+                        etapa: safeText(p?.etapa),
+                        label: safeText(p?.label),
+                        denom: Number(p?.denom ?? 0),
+                        numer: Number(p?.numer ?? 0),
+                        pct: Number(p?.pct ?? 0),
+                        meta: p?.meta == null ? undefined : Number(p?.meta),
+                      }))
+                    : undefined,
+                  geo: Array.isArray(series.geo)
+                    ? series.geo.map((p: any) => ({
                         etapa: safeText(p?.etapa),
                         label: safeText(p?.label),
                         denom: Number(p?.denom ?? 0),
@@ -238,6 +265,58 @@ export async function POST(request: Request) {
       return y + 26;
     };
 
+    const renderNarrative = (input: string, y0: number) => {
+      const text = normalizeNarrativeText(input);
+      if (!text) return y0;
+
+      const lines = text.split("\n").map((l) => l.trimEnd());
+      let y = y0;
+      doc.fontSize(9);
+
+      for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) {
+          y += 6;
+          continue;
+        }
+
+        const mTitle = /^(\d+)\)\s*(.+)$/.exec(line);
+        if (mTitle) {
+          y = ensureSpace(y, 40);
+          y = sectionTitle(y, `${mTitle[1]}) ${mTitle[2]}`);
+          continue;
+        }
+
+        const mBullet = /^-\s+(.*)$/.exec(line);
+        if (mBullet) {
+          y = ensureSpace(y, 24);
+          doc
+            .font("Helvetica")
+            .fillColor("#111827")
+            .text(`• ${mBullet[1]}`, left + 6, y, { width: usableW - 6 });
+          y = doc.y + 2;
+          continue;
+        }
+
+        const mNum = /^(\d+)\.\s+(.*)$/.exec(line);
+        if (mNum) {
+          y = ensureSpace(y, 24);
+          doc
+            .font("Helvetica")
+            .fillColor("#111827")
+            .text(`${mNum[1]}. ${mNum[2]}`, left + 6, y, { width: usableW - 6 });
+          y = doc.y + 2;
+          continue;
+        }
+
+        y = ensureSpace(y, 24);
+        doc.font("Helvetica").fillColor("#111827").text(line, left, y, { width: usableW });
+        y = doc.y + 2;
+      }
+
+      return y + 8;
+    };
+
     const kpi = (y: number, label: string, value: string, w: number) => {
       doc.save();
       doc
@@ -281,16 +360,6 @@ export async function POST(request: Request) {
     doc.restore();
     y += 86;
 
-    if (narrative) {
-      y = ensureSpace(y, 120);
-      y = sectionTitle(y, `Interpretación ejecutiva (IA) · ${reportBuild}`);
-      doc.font("Helvetica").fontSize(9).fillColor("#111827");
-      const h = doc.heightOfString(narrative, { width: usableW, align: "justify" });
-      y = ensureSpace(y, Math.min(h + 10, 500));
-      doc.text(narrative, left, y, { width: usableW, align: "justify" });
-      y = doc.y + 14;
-    }
-
     for (const ch of charts) {
       if (y + 280 > pageH - bottom) {
         doc.addPage();
@@ -301,6 +370,15 @@ export async function POST(request: Request) {
       const imgH = 240;
       doc.image(ch.png, left, y, { fit: [imgW, imgH], align: "center" });
       y += imgH + 18;
+    }
+
+    if (narrative) {
+      if (y + 120 > pageH - bottom) {
+        doc.addPage();
+        y = header();
+      }
+      y = sectionTitle(y, `Interpretación ejecutiva (IA) · ${reportBuild}`);
+      y = renderNarrative(narrative, y);
     }
 
     doc.end();
