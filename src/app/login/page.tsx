@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useMemo, useState } from "react";
 import { loginAction } from "./actions";
+import { FormSubmitButton } from "@/components/FormSubmitButton";
 
 type LoginState = { ok: false; error: string } | null;
 
@@ -143,13 +144,12 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={pending}
+              <FormSubmitButton
+                label="Ingresar"
+                pendingLabel="Ingresando..."
+                overlayLabel="Iniciando sesión..."
                 className="w-full rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-800 disabled:opacity-60 disabled:hover:bg-blue-700"
-              >
-                {pending ? "Ingresando..." : "Ingresar"}
-              </button>
+              />
             </form>
           </div>
 

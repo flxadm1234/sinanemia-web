@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { FullScreenLoader } from "@/components/FullScreenLoader";
 
 type Payload = {
   scopeUbigeo: string;
@@ -155,6 +156,7 @@ export function DashboardPdfButton(props: { payload: Payload }) {
 
   return (
     <div className="flex flex-col items-end gap-2">
+      {loading ? <FullScreenLoader label="Generando informe PDF..." /> : null}
       <button
         type="button"
         disabled={!canGenerate || loading}

@@ -14,6 +14,7 @@ import {
 } from "@/lib/dashboard";
 import { computeNcMetricsForEtapa } from "@/lib/ncReporte";
 import { NcLineChart } from "@/components/NcLineChart";
+import { DownloadFileButton } from "@/components/DownloadFileButton";
 import {
   computeVisitasGeoSeries,
   computeVisitasMetaDetalleMes,
@@ -626,14 +627,15 @@ export default async function DashboardPage(props: {
                       La exportación de Excel se encuentra deshabilitada para tu rol.
                     </div>
                   ) : (
-                    <a
-                      className="mt-3 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                    <DownloadFileButton
                       href={`/api/reportes/nc-excel?ubigeo=${encodeURIComponent(
                         scopeUbigeo,
                       )}&etapa=${encodeURIComponent(ncSelected.etapa)}`}
-                    >
-                      Descargar Excel
-                    </a>
+                      filename={`nc_${scopeUbigeo}_${ncSelected.etapa}.xls`}
+                      label="Descargar Excel"
+                      overlayLabel="Generando Excel..."
+                      className="mt-3 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                    />
                   )}
                 </div>
               </div>
@@ -738,14 +740,15 @@ export default async function DashboardPage(props: {
                         La exportación de Excel se encuentra deshabilitada para tu rol.
                       </div>
                     ) : (
-                      <a
-                        className="mt-3 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                      <DownloadFileButton
                         href={`/api/reportes/visitas-excel?ubigeo=${encodeURIComponent(
                           String(visitasUbigeo),
                         )}&etapa=${encodeURIComponent(selectedMonth.etapa)}`}
-                      >
-                        Descargar Excel (detalle del mes)
-                      </a>
+                        filename={`visitas_${String(visitasUbigeo)}_${selectedMonth.etapa}.xls`}
+                        label="Descargar Excel (detalle del mes)"
+                        overlayLabel="Generando Excel..."
+                        className="mt-3 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      />
                     )}
                   </div>
                 </>
