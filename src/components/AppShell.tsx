@@ -55,6 +55,12 @@ export function AppShell(props: {
           >
             Carga Visitas
           </Link>
+          <Link
+            href="/admin/metas"
+            className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+          >
+            Metas
+          </Link>
           {user.tipo === "ADMINISTRADOR" || user.tipo === "COORDINADOR" ? (
             <Link
               href="/asignacion"

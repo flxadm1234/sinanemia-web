@@ -21,7 +21,12 @@ function formatNum(n: number) {
   return new Intl.NumberFormat("es-PE").format(n);
 }
 
-export function NcLineChart(props: { points: NcLinePoint[]; target?: number }) {
+export function NcLineChart(props: {
+  points: NcLinePoint[];
+  target?: number;
+  title?: string;
+  subtitle?: string;
+}) {
   const points = props.points ?? [];
   const target = Number(props.target ?? NaN);
   const [hover, setHover] = useState<number | null>(null);
@@ -73,10 +78,11 @@ export function NcLineChart(props: { points: NcLinePoint[]; target?: number }) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-sm font-semibold text-zinc-900">
-            Cumplimiento NC (tamizaje) por mes
+            {props.title ?? "Cumplimiento NC (tamizaje) por mes"}
           </div>
           <div className="mt-1 text-xs text-zinc-500">
-            Línea = % (Numerador / Denominador) según reglas de edad, permanencia, seguro y tamizaje.
+            {props.subtitle ??
+              "Línea = % (Numerador / Denominador) según reglas de edad, permanencia, seguro y tamizaje."}
           </div>
         </div>
         <div className="text-xs text-zinc-600">

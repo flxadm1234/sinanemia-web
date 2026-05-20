@@ -93,7 +93,6 @@ export default async function AdminMesesPage() {
                   <th className="px-4 py-3">Mes</th>
                   <th className="px-4 py-3">N°</th>
                   <th className="px-4 py-3">Año</th>
-                  <th className="px-4 py-3">Valla mínima (%)</th>
                   <th className="px-4 py-3">Niños (tipovd=1)</th>
                   <th className="px-4 py-3">Estado</th>
                   <th className="px-4 py-3">Eliminar padrón</th>
@@ -105,7 +104,6 @@ export default async function AdminMesesPage() {
                   const isSelected = Number(r.seleccion ?? 0) === 1;
                   const etapa = `${r.year}-${pad2(Number(r.numero_mes ?? 0))}-01`;
                   const count = countsMap.get(`${Number(r.ubigeo)}|${etapa}`) ?? 0;
-                  const valla = Number((r as any).valla_min ?? 60);
                   return (
                     <tr key={r.idmeses} className="hover:bg-zinc-50/50">
                       <td className="px-4 py-3 text-zinc-700">{r.idmeses}</td>
@@ -115,7 +113,6 @@ export default async function AdminMesesPage() {
                       </td>
                       <td className="px-4 py-3 text-zinc-700">{r.numero_mes}</td>
                       <td className="px-4 py-3 text-zinc-700">{r.year}</td>
-                      <td className="px-4 py-3 text-zinc-700">{Number.isFinite(valla) ? valla : 60}</td>
                       <td className="px-4 py-3 text-zinc-700">{count}</td>
                       <td className="px-4 py-3">
                         <span
@@ -170,7 +167,7 @@ export default async function AdminMesesPage() {
                   <tr>
                     <td
                       className="px-4 py-10 text-center text-zinc-500"
-                      colSpan={10}
+                      colSpan={9}
                     >
                       No hay meses registrados.
                     </td>

@@ -14,6 +14,7 @@ import {
 import { computeNcMetricsForEtapa } from "@/lib/ncReporte";
 import { NcLineChart } from "@/components/NcLineChart";
 import { computeVisitasMetaDetalleMes, computeVisitasMetaSeries } from "@/lib/visitasMeta";
+import { ensureMetasC1DefaultsForUbigeo, getMetaC1ByUbigeoTipo } from "@/lib/metasC1";
 
 function parseSearch(params: Record<string, string | undefined>) {
   const ubigeo = String(params.ubigeo ?? "").trim();
@@ -87,6 +88,9 @@ export default async function DashboardPage(props: {
   }
 
   const etapa = selectedMonth.etapa;
+  if (scopeUbigeo) {
+    await ensureMetasC1DefaultsForUbigeo(scopeUbigeo);
+  }
 
   const scopeFilters = (() => {
     if (role === "COORDINADOR") return { ubigeo: scopeUbigeo, responsable: user.dni };
@@ -140,6 +144,13 @@ export default async function DashboardPage(props: {
       ncSeries.push(metrics);
     }
   }
+
+  const metaNc = scopeUbigeo
+    ? await getMetaC1ByUbigeoTipo({ ubigeo: scopeUbigeo, tipo: 1 })
+    : null;
+  const metaVisitas = scopeUbigeo
+    ? await getMetaC1ByUbigeoTipo({ ubigeo: scopeUbigeo, tipo: 2 })
+    : null;
 
   const visitasEnabled = Boolean(scopeUbigeo) && selectedMonth.year === 2026 && selectedMonth.numero_mes >= 2;
   const visitasUbigeo = Number(scopeUbigeo);
@@ -263,7 +274,7 @@ export default async function DashboardPage(props: {
           ncOkUbigeo && ncSeries.length && ncSelected ? (
             <>
               <NcLineChart
-                target={Number((selectedMonth as any).valla_min ?? 60)}
+                target={metaNc ? Number(metaNc.valla_min) : undefined}
                 points={ncSeries
                   .slice()
                   .reverse()
@@ -521,6 +532,9 @@ export default async function DashboardPage(props: {
                 <>
                   <div className="mt-4">
                     <NcLineChart
+                      title="Porcentaje de niños de 1 a 12 meses de edad que reciben visitas domiciliarias por actor social de manera oportuna y completa."
+                      subtitle="Línea = % (Σ NVₙ / Σ Nₙ) × 100. NVₙ: niños con visitas completas y oportunas. Nₙ: niños asignados con edad 30–389 días y SIS/sin seguro."
+                      target={metaVisitas ? Number(metaVisitas.valla_min) : undefined}
                       points={visitasSeries.map((p) => ({
                         label: p.label,
                         denom: p.denom,

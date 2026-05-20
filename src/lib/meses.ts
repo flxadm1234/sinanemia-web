@@ -8,7 +8,6 @@ export type MesRow = {
   seleccion: number | null;
   tramo?: number;
   ubigeo: string;
-  valla_min?: number;
 };
 
 function normalizeUbigeo(v: number | string) {
@@ -17,28 +16,7 @@ function normalizeUbigeo(v: number | string) {
   return s.length >= 6 ? s : s.padStart(6, "0");
 }
 
-let ensuredValla = false;
-async function ensureVallaMinColumn() {
-  if (ensuredValla) return;
-  const pool = getDbPool();
-  try {
-    await pool.query("ALTER TABLE meses ADD COLUMN valla_min INT NOT NULL DEFAULT 60");
-  } catch (e: any) {
-    const code = String(e?.code ?? "");
-    if (code !== "ER_DUP_FIELDNAME") throw e;
-  }
-  try {
-    await pool.query("UPDATE meses SET valla_min = 60 WHERE valla_min IS NULL");
-  } catch {}
-  ensuredValla = true;
-}
-
-export async function ensureMesesVallaMinColumn() {
-  await ensureVallaMinColumn();
-}
-
 export async function getEtapaSeleccionadaPorUbigeo(ubigeo: number | string) {
-  await ensureVallaMinColumn();
   const pool = getDbPool();
   const ubigeoStr = normalizeUbigeo(ubigeo);
   const [rows] = await pool.query(
@@ -54,21 +32,19 @@ export async function getEtapaSeleccionadaPorUbigeo(ubigeo: number | string) {
 }
 
 export async function listMesesByUbigeo(ubigeo: number | string): Promise<MesRow[]> {
-  await ensureVallaMinColumn();
   const pool = getDbPool();
   const ubigeoStr = normalizeUbigeo(ubigeo);
   const [rows] = await pool.query(
-    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo, valla_min FROM meses WHERE ubigeo = ? ORDER BY year DESC, numero_mes DESC, idmeses DESC",
+    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo FROM meses WHERE ubigeo = ? ORDER BY year DESC, numero_mes DESC, idmeses DESC",
     [ubigeoStr],
   );
   return rows as MesRow[];
 }
 
 export async function listMesesAll(): Promise<MesRow[]> {
-  await ensureVallaMinColumn();
   const pool = getDbPool();
   const [rows] = await pool.query(
-    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo, valla_min FROM meses ORDER BY ubigeo ASC, year DESC, numero_mes DESC, idmeses DESC",
+    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo FROM meses ORDER BY ubigeo ASC, year DESC, numero_mes DESC, idmeses DESC",
   );
   return rows as MesRow[];
 }
@@ -77,21 +53,19 @@ export async function findMesById(params: {
   ubigeo: number | string;
   idmeses: number;
 }): Promise<MesRow | null> {
-  await ensureVallaMinColumn();
   const pool = getDbPool();
   const ubigeoStr = normalizeUbigeo(params.ubigeo);
   const [rows] = await pool.query(
-    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo, valla_min FROM meses WHERE ubigeo = ? AND idmeses = ? LIMIT 1",
+    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo FROM meses WHERE ubigeo = ? AND idmeses = ? LIMIT 1",
     [ubigeoStr, params.idmeses],
   );
   return ((rows as any[])[0] as MesRow | undefined) ?? null;
 }
 
 export async function findMesByIdAny(idmeses: number): Promise<MesRow | null> {
-  await ensureVallaMinColumn();
   const pool = getDbPool();
   const [rows] = await pool.query(
-    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo, valla_min FROM meses WHERE idmeses = ? LIMIT 1",
+    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo FROM meses WHERE idmeses = ? LIMIT 1",
     [idmeses],
   );
   return ((rows as any[])[0] as MesRow | undefined) ?? null;
@@ -103,13 +77,11 @@ export async function createMes(input: {
   meses: string;
   year: number;
   seleccion?: number | null;
-  valla_min: number;
 }): Promise<any> {
-  await ensureVallaMinColumn();
   const pool = getDbPool();
   const ubigeoStr = normalizeUbigeo(input.ubigeo);
   const [res] = await pool.query(
-    "INSERT INTO meses (numero_mes, meses, year, seleccion, tramo, ubigeo, valla_min) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO meses (numero_mes, meses, year, seleccion, tramo, ubigeo) VALUES (?, ?, ?, ?, ?, ?)",
     [
       input.numero_mes,
       input.meses,
@@ -117,7 +89,6 @@ export async function createMes(input: {
       input.seleccion ?? 0,
       0,
       ubigeoStr,
-      input.valla_min,
     ],
   );
   return res as any;
@@ -130,10 +101,8 @@ export async function updateMesById(input: {
     numero_mes: number;
     meses: string;
     year: number;
-    valla_min: number;
   }>;
 }): Promise<any> {
-  await ensureVallaMinColumn();
   const keys = Object.keys(input.patch) as (keyof typeof input.patch)[];
   if (!keys.length) return;
   const pool = getDbPool();
@@ -154,10 +123,8 @@ export async function updateMesByIdAny(input: {
     meses: string;
     year: number;
     ubigeo: string;
-    valla_min: number;
   }>;
 }): Promise<any> {
-  await ensureVallaMinColumn();
   const keys = Object.keys(input.patch) as (keyof typeof input.patch)[];
   if (!keys.length) return;
   const pool = getDbPool();
@@ -174,7 +141,6 @@ export async function setMesSeleccionadoById(input: {
   ubigeo: number | string;
   idmeses: number;
 }): Promise<void> {
-  await ensureVallaMinColumn();
   const pool = getDbPool();
   const ubigeoStr = normalizeUbigeo(input.ubigeo);
   const conn = await pool.getConnection();

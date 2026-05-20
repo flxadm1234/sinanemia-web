@@ -20,6 +20,7 @@ function buildLinks(user: SessionUser): NavLink[] {
     links.push({ href: "/admin/carga-vd", label: "Carga VD" });
   }
   links.push({ href: "/admin/visitas", label: "Carga Visitas" });
+  links.push({ href: "/admin/metas", label: "Metas" });
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "COORDINADOR") {
     links.push({ href: "/asignacion", label: "Asignación" });
   }

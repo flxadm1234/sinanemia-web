@@ -54,7 +54,6 @@ export default async function AdminMesEditPage(props: {
               meses: row.meses,
               year: row.year,
               seleccion: row.seleccion,
-              valla_min: Number((row as any).valla_min ?? 60),
             }}
           />
         </div>

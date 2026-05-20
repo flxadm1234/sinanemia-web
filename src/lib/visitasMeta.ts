@@ -210,7 +210,7 @@ export async function listVisitasDetallePorMes(params: {
       pn.ubigeo,
       DATE_FORMAT(pn.etapa, '%Y-%m-01') AS etapa_mes,
       pn.dni,
-      pn.nombrecompleto,
+      pn.nombres AS nombrecompleto,
       pn.actorsocial,
       pn.responsable,
       pn.tiposeguro,

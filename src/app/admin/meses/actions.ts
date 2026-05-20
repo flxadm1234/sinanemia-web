@@ -21,7 +21,6 @@ const createSchema = z.object({
   numero_mes: z.coerce.number().int().min(1).max(12),
   meses: z.string().trim().min(2).max(40),
   year: z.coerce.number().int().min(2000).max(2100),
-  valla_min: z.coerce.number().int().min(0).max(100),
   ubigeo: ubigeoSchema.optional(),
 });
 
@@ -51,7 +50,6 @@ export async function createMesAction(_: any, formData: FormData) {
     numero_mes: formData.get("numero_mes"),
     meses: formData.get("meses"),
     year: formData.get("year"),
-    valla_min: formData.get("valla_min"),
     ubigeo: formData.get("ubigeo"),
   });
   if (!parsed.success) return { ok: false, message: "Datos inválidos." };
@@ -70,7 +68,6 @@ export async function createMesAction(_: any, formData: FormData) {
     meses: parsed.data.meses,
     year: parsed.data.year,
     seleccion: sel ? 1 : 0,
-    valla_min: parsed.data.valla_min,
   });
 
   if (sel) {
@@ -89,7 +86,6 @@ export async function updateMesAction(_: any, formData: FormData) {
     numero_mes: formData.get("numero_mes"),
     meses: formData.get("meses"),
     year: formData.get("year"),
-    valla_min: formData.get("valla_min"),
     ubigeo: formData.get("ubigeo"),
   });
   if (!parsed.success) return { ok: false, message: "Datos inválidos." };
@@ -104,7 +100,6 @@ export async function updateMesAction(_: any, formData: FormData) {
         meses: parsed.data.meses,
         year: parsed.data.year,
         ubigeo,
-        valla_min: parsed.data.valla_min,
       },
     });
   } else {
@@ -117,7 +112,6 @@ export async function updateMesAction(_: any, formData: FormData) {
         numero_mes: parsed.data.numero_mes,
         meses: parsed.data.meses,
         year: parsed.data.year,
-        valla_min: parsed.data.valla_min,
       },
     });
   }
