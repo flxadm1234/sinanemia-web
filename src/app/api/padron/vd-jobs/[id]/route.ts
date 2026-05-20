@@ -10,7 +10,8 @@ export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) 
   if (
     session.tipo !== "ADMINISTRADOR" &&
     session.tipo !== "SUPER ADMIN" &&
-    session.tipo !== "INVITADO"
+    session.tipo !== "INVITADO" &&
+    session.tipo !== "SUPERVISOR"
   ) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }

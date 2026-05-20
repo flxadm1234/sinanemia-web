@@ -69,7 +69,11 @@ export async function createPersonaAction(formData: FormData) {
   if (!parsed.success) return;
 
   const tipoUpper = parsed.data.tipo.trim().toUpperCase();
-  if (user.tipo === "ADMINISTRADOR" && tipoUpper === "SUPER ADMIN") return;
+  if (
+    user.tipo === "ADMINISTRADOR" &&
+    (tipoUpper === "SUPER ADMIN" || tipoUpper === "SUPERVISOR")
+  )
+    return;
 
   const ubigeoFinal =
     user.tipo === "SUPER ADMIN"

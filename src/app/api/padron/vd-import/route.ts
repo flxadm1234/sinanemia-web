@@ -87,7 +87,8 @@ export async function POST(request: Request) {
     if (
       session.tipo !== "ADMINISTRADOR" &&
       session.tipo !== "SUPER ADMIN" &&
-      session.tipo !== "INVITADO"
+      session.tipo !== "INVITADO" &&
+      session.tipo !== "SUPERVISOR"
     ) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }

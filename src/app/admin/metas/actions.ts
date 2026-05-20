@@ -46,7 +46,7 @@ export async function saveMetasC1Action(_: any, formData: FormData) {
   if (!parsed.success) return { ok: false, message: "Datos inválidos." };
 
   const ubigeo =
-    user.tipo === "SUPER ADMIN"
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
       ? parsed.data.ubigeo ?? ""
       : String(user.ubigeo ?? "");
   if (!ubigeo) return { ok: false, message: "Tu usuario no tiene ubigeo." };

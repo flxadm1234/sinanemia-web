@@ -8,10 +8,11 @@ export default async function CargaVdPage() {
   if (
     user.tipo !== "ADMINISTRADOR" &&
     user.tipo !== "SUPER ADMIN" &&
-    user.tipo !== "INVITADO"
+    user.tipo !== "INVITADO" &&
+    user.tipo !== "SUPERVISOR"
   ) {
     return (
-      <AppShell user={user} title="Carga VD">
+      <AppShell user={user} title="Padrón de niños">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           No tienes permisos para acceder a esta sección.
         </div>
@@ -22,8 +23,10 @@ export default async function CargaVdPage() {
   await ensurePadronVdTables();
 
   return (
-    <AppShell user={user} title="Carga VD">
-      <PadronVdExcelImportClient canEditConfig={user.tipo !== "INVITADO"} />
+    <AppShell user={user} title="Padrón de niños">
+      <PadronVdExcelImportClient
+        canEditConfig={user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN"}
+      />
     </AppShell>
   );
 }

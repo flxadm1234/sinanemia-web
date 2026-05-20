@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { requireAdminOrSuperAdmin, requireMesesAccess } from "@/lib/auth";
+import { requireAdminOrSuperAdmin, requireMesesAccess, requireMesesManage } from "@/lib/auth";
 import {
   createMes,
   setMesSeleccionadoById,
@@ -55,12 +55,15 @@ export async function createMesAction(_: any, formData: FormData) {
   if (!parsed.success) return { ok: false, message: "Datos inválidos." };
 
   const ubigeo =
-    user.tipo === "SUPER ADMIN"
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
       ? parsed.data.ubigeo ?? ""
       : String(user.ubigeo ?? "");
   if (!ubigeo) return { ok: false, message: "Tu usuario no tiene ubigeo." };
 
-  const sel = user.tipo === "INVITADO" ? false : String(formData.get("seleccion") ?? "") === "1";
+  const sel =
+    user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN"
+      ? String(formData.get("seleccion") ?? "") === "1"
+      : false;
 
   const res = await createMes({
     ubigeo,
@@ -80,7 +83,7 @@ export async function createMesAction(_: any, formData: FormData) {
 }
 
 export async function updateMesAction(_: any, formData: FormData) {
-  const user = await requireAdminOrSuperAdmin();
+  const user = await requireMesesManage();
   const parsed = updateSchema.safeParse({
     idmeses: formData.get("idmeses"),
     numero_mes: formData.get("numero_mes"),
@@ -90,7 +93,7 @@ export async function updateMesAction(_: any, formData: FormData) {
   });
   if (!parsed.success) return { ok: false, message: "Datos inválidos." };
 
-  if (user.tipo === "SUPER ADMIN") {
+  if (user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR") {
     const ubigeo = parsed.data.ubigeo ?? "";
     if (!ubigeo) return { ok: false, message: "Ubigeo requerido." };
     await updateMesByIdAny({

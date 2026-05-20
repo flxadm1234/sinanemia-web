@@ -13,13 +13,23 @@ function buildLinks(user: SessionUser): NavLink[] {
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
     links.push({ href: "/admin/personas", label: "Usuarios" });
   }
-  if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "INVITADO") {
+  if (
+    user.tipo === "ADMINISTRADOR" ||
+    user.tipo === "SUPER ADMIN" ||
+    user.tipo === "INVITADO" ||
+    user.tipo === "SUPERVISOR"
+  ) {
     links.push({ href: "/admin/meses", label: "Meses" });
   }
-  if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "INVITADO") {
-    links.push({ href: "/admin/carga-vd", label: "Carga VD" });
+  if (
+    user.tipo === "ADMINISTRADOR" ||
+    user.tipo === "SUPER ADMIN" ||
+    user.tipo === "INVITADO" ||
+    user.tipo === "SUPERVISOR"
+  ) {
+    links.push({ href: "/admin/carga-vd", label: "Padrón de niños" });
   }
-  links.push({ href: "/admin/visitas", label: "Carga Visitas" });
+  links.push({ href: "/admin/visitas", label: "Carga Reporte de actividades" });
   links.push({ href: "/admin/metas", label: "Metas" });
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "COORDINADOR") {
     links.push({ href: "/asignacion", label: "Asignación" });

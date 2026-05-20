@@ -30,7 +30,8 @@ export async function POST(request: Request) {
     const body = (await request.json()) as any;
     const scopeUbigeo = safeText(body?.scopeUbigeo);
     const etapa = safeText(body?.etapa);
-    if (!scopeUbigeo || !etapa) return NextResponse.json({ error: "invalid_params" }, { status: 400 });
+    if (!scopeUbigeo || !etapa)
+      return NextResponse.json({ error: "invalid_params" }, { status: 400 });
 
     const periodoLabel = safeText(body?.periodoLabel);
     const userLabel = safeText(body?.userLabel);
@@ -129,33 +130,57 @@ export async function POST(request: Request) {
     };
 
     const header = () => {
-      doc.font("Helvetica-Bold").fontSize(16).fillColor("#111827").text("Informe Ejecutivo - SinAnemia", left, top, {
-        width: usableW,
-      });
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(16)
+        .fillColor("#111827")
+        .text("Informe Ejecutivo - SinAnemia", left, top, { width: usableW });
       doc.font("Helvetica").fontSize(9).fillColor("#374151");
-      doc.text(`Generado: ${new Date().toISOString().slice(0, 19).replace("T", " ")}`, left, top + 22);
+      doc.text(
+        `Generado: ${new Date().toISOString().slice(0, 19).replace("T", " ")}`,
+        left,
+        top + 22,
+      );
       doc.text(`Periodo: ${periodoLabel}`, left, top + 36);
       doc.text(`Ubigeo: ${scopeUbigeo}   Etapa: ${etapa}`, left, top + 50);
       doc.text(`Usuario: ${userLabel}   Rol: ${role}`, left, top + 64);
-      doc.moveTo(left, top + 78).lineTo(pageW - right, top + 78).strokeColor("#CBD5E1").stroke();
+      doc
+        .moveTo(left, top + 78)
+        .lineTo(pageW - right, top + 78)
+        .strokeColor("#CBD5E1")
+        .stroke();
       return top + 92;
     };
 
     const sectionTitle = (y: number, title: string) => {
       doc.save();
       doc.rect(left, y, usableW, 18).fill("#111827");
-      doc.fillColor("#FFFFFF").font("Helvetica-Bold").fontSize(10).text(title, left + 10, y + 5, {
-        width: usableW - 20,
-      });
+      doc
+        .fillColor("#FFFFFF")
+        .font("Helvetica-Bold")
+        .fontSize(10)
+        .text(title, left + 10, y + 5, { width: usableW - 20 });
       doc.restore();
       return y + 26;
     };
 
     const kpi = (y: number, label: string, value: string, w: number) => {
       doc.save();
-      doc.roundedRect(left, y, w, 56, 10).fill("#F8FAFC").strokeColor("#E2E8F0").stroke();
-      doc.fillColor("#334155").font("Helvetica").fontSize(9).text(label, left + 12, y + 10, { width: w - 24 });
-      doc.fillColor("#0F172A").font("Helvetica-Bold").fontSize(18).text(value, left + 12, y + 26, { width: w - 24 });
+      doc
+        .roundedRect(left, y, w, 56, 10)
+        .fill("#F8FAFC")
+        .strokeColor("#E2E8F0")
+        .stroke();
+      doc
+        .fillColor("#334155")
+        .font("Helvetica")
+        .fontSize(9)
+        .text(label, left + 12, y + 10, { width: w - 24 });
+      doc
+        .fillColor("#0F172A")
+        .font("Helvetica-Bold")
+        .fontSize(18)
+        .text(value, left + 12, y + 26, { width: w - 24 });
       doc.restore();
     };
 
@@ -207,7 +232,10 @@ export async function POST(request: Request) {
     doc.end();
     const buffer = await bufferPromise;
 
-    const filename = `informe_dashboard_${scopeUbigeo}_${etapa}.pdf`.replace(/[^\w\-.,() ]+/g, "_");
+    const filename = `informe_dashboard_${scopeUbigeo}_${etapa}.pdf`.replace(
+      /[^\w\-.,() ]+/g,
+      "_",
+    );
     return new NextResponse(buffer as any, {
       status: 200,
       headers: {

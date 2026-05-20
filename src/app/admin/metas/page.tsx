@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/AppShell";
 import { requireSession } from "@/lib/auth";
+import { listDistinctUbigeosFromMeses } from "@/lib/dashboard";
 import {
   ensureMetasC1DefaultsForUbigeo,
   listMetasC1ByUbigeo,
@@ -11,8 +12,15 @@ import { saveMetasC1Action } from "./actions";
 export default async function MetasPage(props: { searchParams: Promise<{ ubigeo?: string }> }) {
   const user = await requireSession();
   const sp = await props.searchParams;
-  const ubigeo =
-    user.tipo === "SUPER ADMIN" ? String(sp.ubigeo ?? "").trim() : String(user.ubigeo ?? "");
+  let ubigeo =
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
+      ? String(sp.ubigeo ?? "").trim()
+      : String(user.ubigeo ?? "");
+
+  if (!ubigeo && (user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR")) {
+    const list = await listDistinctUbigeosFromMeses();
+    ubigeo = String(list[0] ?? "").trim();
+  }
 
   if (!ubigeo) {
     return (

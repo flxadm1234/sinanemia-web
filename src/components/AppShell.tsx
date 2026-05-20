@@ -33,7 +33,10 @@ export function AppShell(props: {
               Usuarios
             </Link>
           ) : null}
-          {user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "INVITADO" ? (
+          {user.tipo === "ADMINISTRADOR" ||
+          user.tipo === "SUPER ADMIN" ||
+          user.tipo === "INVITADO" ||
+          user.tipo === "SUPERVISOR" ? (
             <Link
               href="/admin/meses"
               className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
@@ -41,19 +44,22 @@ export function AppShell(props: {
               Meses
             </Link>
           ) : null}
-          {user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "INVITADO" ? (
+          {user.tipo === "ADMINISTRADOR" ||
+          user.tipo === "SUPER ADMIN" ||
+          user.tipo === "INVITADO" ||
+          user.tipo === "SUPERVISOR" ? (
             <Link
               href="/admin/carga-vd"
               className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
             >
-              Carga VD
+              Padrón de niños
             </Link>
           ) : null}
           <Link
             href="/admin/visitas"
             className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
           >
-            Carga Visitas
+            Carga Reporte de actividades
           </Link>
           <Link
             href="/admin/metas"

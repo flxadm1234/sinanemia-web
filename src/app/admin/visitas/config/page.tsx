@@ -25,7 +25,7 @@ export default async function VisitasConfigPage() {
   };
 
   return (
-    <AppShell user={user} title="Configurar columnas (Visitas)">
+    <AppShell user={user} title="Configurar columnas (Reporte de actividades)">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
           <div>

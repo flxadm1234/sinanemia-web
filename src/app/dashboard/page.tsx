@@ -56,16 +56,19 @@ export default async function DashboardPage(props: {
     role === "INVITADO"
   ) {
     scopeUbigeo = String(user.ubigeo ?? "");
-  } else if (role === "SUPER ADMIN") {
+  } else if (role === "SUPER ADMIN" || role === "SUPERVISOR") {
     scopeUbigeo = sp.ubigeo;
   }
 
-  const ubigeos = role === "SUPER ADMIN" ? await listDistinctUbigeosFromMeses() : [];
+  const ubigeos =
+    role === "SUPER ADMIN" || role === "SUPERVISOR"
+      ? await listDistinctUbigeosFromMeses()
+      : [];
 
   let months: DashboardMonth[] = [];
   if (scopeUbigeo) {
     months = await listDashboardMonthsByUbigeo(scopeUbigeo, 12);
-  } else if (role === "SUPER ADMIN") {
+  } else if (role === "SUPER ADMIN" || role === "SUPERVISOR") {
     const latest = await getLatestDashboardMonthAny();
     if (latest) {
       scopeUbigeo = latest.ubigeo;
@@ -97,7 +100,8 @@ export default async function DashboardPage(props: {
     if (role === "COORDINADOR") return { ubigeo: scopeUbigeo, responsable: user.dni };
     if (role === "ACTOR SOCIAL") return { ubigeo: scopeUbigeo, actor: user.dni };
     if (role === "ADMINISTRADOR") return { ubigeo: scopeUbigeo };
-    if (role === "SUPER ADMIN") return scopeUbigeo ? { ubigeo: scopeUbigeo } : {};
+    if (role === "SUPER ADMIN" || role === "SUPERVISOR")
+      return scopeUbigeo ? { ubigeo: scopeUbigeo } : {};
     if (role === "INVITADO") return { ubigeo: scopeUbigeo };
     return {};
   })();
@@ -113,12 +117,16 @@ export default async function DashboardPage(props: {
       })
     )[0] ?? null;
 
-  const showGeo = role === "SUPER ADMIN";
+  const showGeo = role === "SUPER ADMIN" || role === "SUPERVISOR";
   const dept = showGeo ? await resumenPorDepartamento({ etapa, limit: 50 }) : [];
   const prov = showGeo ? await resumenPorProvincia({ etapa, limit: 80 }) : [];
   const dist = showGeo ? await resumenPorDistrito({ etapa, limit: 80 }) : [];
 
-  const ncEnabled = role === "ADMINISTRADOR" || role === "SUPER ADMIN" || role === "INVITADO";
+  const ncEnabled =
+    role === "ADMINISTRADOR" ||
+    role === "SUPER ADMIN" ||
+    role === "INVITADO" ||
+    role === "SUPERVISOR";
   const ncUbigeo = Number(scopeUbigeo);
   const ncOkUbigeo = ncEnabled && Number.isFinite(ncUbigeo) && ncUbigeo > 0;
   const ncMonthsSource = months.filter((m) => m.year === selectedMonth.year && m.year >= 2026);
@@ -200,7 +208,7 @@ export default async function DashboardPage(props: {
           </div>
 
           <form className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
-            {role === "SUPER ADMIN" ? (
+            {role === "SUPER ADMIN" || role === "SUPERVISOR" ? (
               <div className="flex-1">
                 <label className="block text-sm font-medium text-zinc-900">
                   Ubigeo
@@ -542,7 +550,7 @@ export default async function DashboardPage(props: {
                   <div className="text-sm font-semibold text-zinc-900">
                     Descarga
                   </div>
-                  {role === "INVITADO" ? (
+                  {role === "INVITADO" || role === "SUPERVISOR" ? (
                     <div className="mt-2 text-xs text-zinc-600">
                       La exportación de Excel se encuentra deshabilitada para tu rol.
                     </div>
@@ -654,19 +662,25 @@ export default async function DashboardPage(props: {
 
                   <div className="mt-4 rounded-2xl bg-white ring-1 ring-black/5 p-4">
                     <div className="text-sm font-semibold text-zinc-900">Descarga</div>
-                    <a
-                      className="mt-3 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                      href={`/api/reportes/visitas-excel?ubigeo=${encodeURIComponent(
-                        String(visitasUbigeo),
-                      )}&etapa=${encodeURIComponent(selectedMonth.etapa)}`}
-                    >
-                      Descargar Excel (detalle del mes)
-                    </a>
+                    {role === "INVITADO" || role === "SUPERVISOR" ? (
+                      <div className="mt-2 text-xs text-zinc-600">
+                        La exportación de Excel se encuentra deshabilitada para tu rol.
+                      </div>
+                    ) : (
+                      <a
+                        className="mt-3 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                        href={`/api/reportes/visitas-excel?ubigeo=${encodeURIComponent(
+                          String(visitasUbigeo),
+                        )}&etapa=${encodeURIComponent(selectedMonth.etapa)}`}
+                      >
+                        Descargar Excel (detalle del mes)
+                      </a>
+                    )}
                   </div>
                 </>
               ) : (
                 <div className="mt-3 text-sm text-zinc-700">
-                  Sección en mantenimiento (en proceso). Primero carga el Excel en “Carga Visitas”.
+                  Sección en mantenimiento (en proceso). Primero carga el Excel en “Carga Reporte de actividades”.
                 </div>
               )}
             </div>
@@ -827,7 +841,7 @@ export default async function DashboardPage(props: {
                 Resumen por ubicación
               </div>
               <div className="mt-1 text-sm text-zinc-600">
-                Disponible para SUPER ADMIN.
+                Disponible para SUPER ADMIN / SUPERVISOR.
               </div>
             </div>
           )}

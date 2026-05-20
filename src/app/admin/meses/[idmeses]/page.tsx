@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireAdminOrSuperAdmin } from "@/lib/auth";
+import { requireMesesManage } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { MesForm } from "@/components/MesForm";
 import { findMesById, findMesByIdAny } from "@/lib/meses";
@@ -9,7 +9,7 @@ import { updateMesAction } from "../actions";
 export default async function AdminMesEditPage(props: {
   params: Promise<{ idmeses: string }>;
 }) {
-  const user = await requireAdminOrSuperAdmin();
+  const user = await requireMesesManage();
   const ubigeo = user.ubigeo ?? null;
   if (user.tipo === "ADMINISTRADOR" && !ubigeo) notFound();
 
@@ -18,7 +18,7 @@ export default async function AdminMesEditPage(props: {
   if (!Number.isFinite(id) || id <= 0) notFound();
 
   const row =
-    user.tipo === "SUPER ADMIN"
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
       ? await findMesByIdAny(id)
       : await findMesById({ ubigeo: ubigeo as number, idmeses: id });
   if (!row) notFound();
@@ -46,7 +46,7 @@ export default async function AdminMesEditPage(props: {
         <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
           <MesForm
             action={updateMesAction}
-            allowUbigeo={user.tipo === "SUPER ADMIN"}
+            allowUbigeo={user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"}
             defaultUbigeo={String(row.ubigeo ?? "")}
             initial={{
               idmeses: row.idmeses,

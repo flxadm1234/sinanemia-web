@@ -10,7 +10,7 @@ export default async function VisitasPage() {
   const canEditConfig = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
 
   return (
-    <AppShell user={user} title="Carga Visitas">
+    <AppShell user={user} title="Carga Reporte de actividades">
       <VisitasExcelImportClient canEditConfig={canEditConfig} />
     </AppShell>
   );

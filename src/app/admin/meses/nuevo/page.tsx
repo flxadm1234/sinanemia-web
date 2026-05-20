@@ -30,9 +30,13 @@ export default async function AdminMesNuevoPage() {
         <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
           <MesForm
             action={createMesAction}
-            allowUbigeo={user.tipo === "SUPER ADMIN"}
-            defaultUbigeo={user.tipo === "SUPER ADMIN" ? "" : String(user.ubigeo ?? "")}
-            allowSelect={user.tipo !== "INVITADO"}
+            allowUbigeo={user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"}
+            defaultUbigeo={
+              user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
+                ? ""
+                : String(user.ubigeo ?? "")
+            }
+            allowSelect={user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN"}
           />
         </div>
       </div>

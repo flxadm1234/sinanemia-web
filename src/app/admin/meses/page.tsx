@@ -13,8 +13,11 @@ function pad2(n: number) {
 export default async function AdminMesesPage() {
   const user = await requireMesesAccess();
   const ubigeo = user.ubigeo ?? null;
-  const canManage = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
-  const canCreate = canManage || user.tipo === "INVITADO";
+  const canEdit =
+    user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR";
+  const canSelect = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
+  const canDeletePadron = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
+  const canCreate = canEdit || user.tipo === "INVITADO";
 
   if ((user.tipo === "ADMINISTRADOR" || user.tipo === "INVITADO") && !ubigeo) {
     return (
@@ -27,11 +30,11 @@ export default async function AdminMesesPage() {
   }
 
   const rows =
-    user.tipo === "SUPER ADMIN"
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
       ? await listMesesAll()
       : await listMesesByUbigeo(ubigeo as number);
   const selected =
-    user.tipo === "SUPER ADMIN"
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
       ? null
       : rows.find((r) => Number(r.seleccion ?? 0) === 1) ?? null;
 
@@ -50,9 +53,11 @@ export default async function AdminMesesPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="text-lg font-semibold text-zinc-900">
-              {user.tipo === "SUPER ADMIN" ? "Meses (todos los ubigeos)" : `Meses (ubigeo ${ubigeo})`}
+              {user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
+                ? "Meses (todos los ubigeos)"
+                : `Meses (ubigeo ${ubigeo})`}
             </div>
-            {user.tipo !== "SUPER ADMIN" ? (
+            {user.tipo !== "SUPER ADMIN" && user.tipo !== "SUPERVISOR" ? (
               <div className="mt-1 text-sm text-zinc-600">
                 Mes seleccionado:{" "}
                 <span className="font-semibold">
@@ -64,7 +69,7 @@ export default async function AdminMesesPage() {
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            {canManage && user.tipo === "SUPER ADMIN" ? (
+            {canEdit && user.tipo === "SUPER ADMIN" ? (
               <Link
                 href="/admin/meses/importar"
                 className="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
@@ -127,7 +132,7 @@ export default async function AdminMesesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {canManage ? (
+                        {canDeletePadron ? (
                           <DeletePadronButton
                             action={deletePadronMesAction}
                             ubigeo={String(r.ubigeo)}
@@ -138,7 +143,7 @@ export default async function AdminMesesPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
-                          {canManage ? (
+                          {canEdit ? (
                             <>
                               <Link
                                 href={`/admin/meses/${r.idmeses}`}
@@ -146,16 +151,18 @@ export default async function AdminMesesPage() {
                               >
                                 Editar
                               </Link>
-                              <form action={seleccionarMesAction}>
-                                <input type="hidden" name="idmeses" value={String(r.idmeses)} />
-                                <input type="hidden" name="ubigeo" value={String(r.ubigeo ?? "")} />
-                                <button
-                                  disabled={isSelected}
-                                  className="rounded-xl bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
-                                >
-                                  Seleccionar
-                                </button>
-                              </form>
+                              {canSelect ? (
+                                <form action={seleccionarMesAction}>
+                                  <input type="hidden" name="idmeses" value={String(r.idmeses)} />
+                                  <input type="hidden" name="ubigeo" value={String(r.ubigeo ?? "")} />
+                                  <button
+                                    disabled={isSelected}
+                                    className="rounded-xl bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
+                                  >
+                                    Seleccionar
+                                  </button>
+                                </form>
+                              ) : null}
                             </>
                           ) : null}
                         </div>

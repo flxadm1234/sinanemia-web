@@ -7,6 +7,7 @@ export const PersonaTipo = z.enum([
   "COORDINADOR",
   "ACTOR SOCIAL",
   "INVITADO",
+  "SUPERVISOR",
 ]);
 
 export type PersonaRole = z.infer<typeof PersonaTipo>;
@@ -31,6 +32,13 @@ function normalizeTipo(tipo: string | null | undefined) {
   if (t === "COORDINADOR") return "COORDINADOR";
   if (t.startsWith("ACTOR SOCIAL")) return "ACTOR SOCIAL";
   if (t === "INVITADO") return "INVITADO";
+  if (
+    t === "SUPERVISOR" ||
+    t === "INVITADO VIP" ||
+    t === "INVITADOVIP" ||
+    t === "INVITADO_VIP"
+  )
+    return "SUPERVISOR";
   return null;
 }
 

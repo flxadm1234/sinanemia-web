@@ -40,7 +40,7 @@ export default async function ConfigCargaVdPage() {
   };
 
   return (
-    <AppShell user={user} title="Configurar columnas (Carga VD)">
+    <AppShell user={user} title="Configurar columnas (Padrón de niños)">
       <div className="rounded-2xl bg-white ring-1 ring-black/5 p-6">
         <div className="text-lg font-semibold text-zinc-900">Configuración de columnas</div>
         <div className="mt-1 text-sm text-zinc-600">

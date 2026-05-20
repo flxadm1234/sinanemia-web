@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 
 export type SessionUser = {
   dni: string;
-  tipo: "SUPER ADMIN" | "ADMINISTRADOR" | "COORDINADOR" | "ACTOR SOCIAL" | "INVITADO";
+  tipo:
+    | "SUPER ADMIN"
+    | "ADMINISTRADOR"
+    | "COORDINADOR"
+    | "ACTOR SOCIAL"
+    | "INVITADO"
+    | "SUPERVISOR";
   ubigeo: number | null;
   nombre: string;
 };
@@ -60,7 +66,7 @@ export async function getSession(): Promise<SessionUser | null> {
   try {
     const { payload } = await jwtVerify(value, getJwtSecret());
     const dni = String(payload.dni ?? "");
-    const tipo = String(payload.tipo ?? "");
+    const tipoRaw = String(payload.tipo ?? "");
     const nombre = String(payload.nombre ?? "");
     const ubigeoRaw = payload.ubigeo;
     const ubigeo =
@@ -71,17 +77,28 @@ export async function getSession(): Promise<SessionUser | null> {
           : null;
 
     if (!dni || !nombre) return null;
+
+    let tipo = tipoRaw.trim().toUpperCase();
+    if (tipo === "SUPERADMIN") tipo = "SUPER ADMIN";
+    if (tipo === "INVITADO VIP" || tipo === "INVITADOVIP" || tipo === "INVITADO_VIP")
+      tipo = "SUPERVISOR";
+
     if (
       tipo !== "SUPER ADMIN" &&
       tipo !== "ADMINISTRADOR" &&
       tipo !== "COORDINADOR" &&
       tipo !== "ACTOR SOCIAL" &&
-      tipo !== "INVITADO"
-    ) {
+      tipo !== "INVITADO" &&
+      tipo !== "SUPERVISOR"
+    )
       return null;
-    }
 
-    return { dni, tipo, ubigeo: Number.isFinite(ubigeo) ? ubigeo : null, nombre };
+    return {
+      dni,
+      tipo: tipo as SessionUser["tipo"],
+      ubigeo: Number.isFinite(ubigeo) ? ubigeo : null,
+      nombre,
+    };
   } catch {
     return null;
   }
@@ -127,7 +144,19 @@ export async function requireCoordinador() {
 
 export async function requireMesesAccess() {
   const s = await requireSession();
-  if (s.tipo !== "ADMINISTRADOR" && s.tipo !== "SUPER ADMIN" && s.tipo !== "INVITADO")
+  if (
+    s.tipo !== "ADMINISTRADOR" &&
+    s.tipo !== "SUPER ADMIN" &&
+    s.tipo !== "INVITADO" &&
+    s.tipo !== "SUPERVISOR"
+  )
+    redirect(routeForRole(s.tipo));
+  return s;
+}
+
+export async function requireMesesManage() {
+  const s = await requireSession();
+  if (s.tipo !== "ADMINISTRADOR" && s.tipo !== "SUPER ADMIN" && s.tipo !== "SUPERVISOR")
     redirect(routeForRole(s.tipo));
   return s;
 }
@@ -136,6 +165,7 @@ export function routeForRole(tipo: SessionUser["tipo"]) {
   if (tipo === "SUPER ADMIN") return "/admin/personas";
   if (tipo === "ADMINISTRADOR") return "/admin/personas";
   if (tipo === "COORDINADOR") return "/coordinador/actores";
+  if (tipo === "SUPERVISOR") return "/dashboard";
   if (tipo === "INVITADO") return "/dashboard";
   return "/actor";
 }

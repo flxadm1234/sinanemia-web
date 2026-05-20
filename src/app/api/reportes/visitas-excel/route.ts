@@ -59,6 +59,8 @@ export async function GET(request: Request) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (session.tipo === "INVITADO" || session.tipo === "SUPERVISOR")
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
     const url = new URL(request.url);
     const etapa = String(url.searchParams.get("etapa") ?? "").trim();

@@ -28,7 +28,7 @@ export function MetasC1FormClient(props: {
         </div>
       ) : null}
 
-      {props.userTipo === "SUPER ADMIN" ? (
+      {props.userTipo === "SUPER ADMIN" || props.userTipo === "SUPERVISOR" ? (
         <div>
           <label className="block text-sm font-medium text-zinc-900">Ubigeo</label>
           <input

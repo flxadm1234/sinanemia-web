@@ -26,7 +26,14 @@ export function PersonaCreateForm(props: Props) {
 
   const allowedTipos = useMemo(() => {
     if (role === "SUPER ADMIN")
-      return ["ACTOR SOCIAL", "COORDINADOR", "ADMINISTRADOR", "SUPER ADMIN"];
+      return [
+        "ACTOR SOCIAL",
+        "COORDINADOR",
+        "ADMINISTRADOR",
+        "INVITADO",
+        "SUPERVISOR",
+        "SUPER ADMIN",
+      ];
     if (role === "ADMINISTRADOR")
       return ["ACTOR SOCIAL", "COORDINADOR", "ADMINISTRADOR"];
     return ["ACTOR SOCIAL"];
