@@ -328,6 +328,37 @@ export default async function DashboardPage(props: {
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4 lg:col-span-2">
+                    <div className="text-sm font-semibold text-zinc-900">
+                      Condiciones previas 1
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                      <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                        <div className="text-xs font-semibold text-zinc-900">
+                          META DE VISITAS COMPLETAS Y OPORTUNAS
+                        </div>
+                        <div className="mt-2 text-xs text-zinc-600">
+                          Sección en mantenimiento (en proceso).
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                        <div className="text-xs font-semibold text-zinc-900">
+                          META GEORREFERENCIA
+                        </div>
+                        <div className="mt-2 text-xs text-zinc-600">
+                          Sección en mantenimiento (en proceso).
+                        </div>
+                      </div>
+                      <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+                        <div className="text-xs font-semibold text-zinc-900">
+                          META ACTUALIZACIÓN TELEFÓNICA
+                        </div>
+                        <div className="mt-2 text-xs text-zinc-600">
+                          Sección en mantenimiento (en proceso).
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                   <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
                     <div className="text-sm font-semibold text-zinc-900">Seguro (en NC)</div>
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">

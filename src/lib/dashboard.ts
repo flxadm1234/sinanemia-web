@@ -98,7 +98,7 @@ export async function countAsignados(params: {
   responsable?: string;
 }) {
   const pool = getDbPool();
-  const where: string[] = ["etapa = ?", ninosWhere(), assignedWhere()];
+  const where: string[] = ["DATE_FORMAT(etapa, '%Y-%m-01') = ?", ninosWhere(), assignedWhere()];
   const values: any[] = [params.etapa];
   if (params.ubigeo) {
     where.push("ubigeo = ?");
@@ -126,7 +126,7 @@ export async function countCargados(params: {
   responsable?: string;
 }) {
   const pool = getDbPool();
-  const where: string[] = ["etapa = ?", ninosWhere()];
+  const where: string[] = ["DATE_FORMAT(etapa, '%Y-%m-01') = ?", ninosWhere()];
   const values: any[] = [params.etapa];
   if (params.ubigeo) {
     where.push("ubigeo = ?");
@@ -207,7 +207,7 @@ export async function timelineTotales(params: {
   const pool = getDbPool();
   const etapas = params.months.map((m) => m.etapa);
   const placeholders = etapas.map(() => "?").join(",");
-  const where: string[] = [`etapa IN (${placeholders})`, ninosWhere()];
+  const where: string[] = [`DATE_FORMAT(etapa, '%Y-%m-01') IN (${placeholders})`, ninosWhere()];
   const values: any[] = [...etapas];
   if (params.ubigeo) {
     where.push("ubigeo = ?");
@@ -222,10 +222,10 @@ export async function timelineTotales(params: {
     values.push(params.responsable);
   }
   const [rows] = await pool.query(
-    `SELECT etapa, COUNT(*) as total, SUM(CASE WHEN ${assignedWhere()} THEN 1 ELSE 0 END) as assigned
+    `SELECT DATE_FORMAT(etapa, '%Y-%m-01') as etapa, COUNT(*) as total, SUM(CASE WHEN ${assignedWhere()} THEN 1 ELSE 0 END) as assigned
      FROM padronnominal
      WHERE ${where.join(" AND ")}
-     GROUP BY etapa`,
+     GROUP BY DATE_FORMAT(etapa, '%Y-%m-01')`,
     values,
   );
   const map = new Map<string, { total: number; assigned: number }>();
@@ -254,7 +254,7 @@ export async function estadosvdDistribucion(params: {
   limit?: number;
 }) {
   const pool = getDbPool();
-  const where: string[] = ["etapa = ?", ninosWhere()];
+  const where: string[] = ["DATE_FORMAT(etapa, '%Y-%m-01') = ?", ninosWhere()];
   const values: any[] = [params.etapa];
   if (params.ubigeo) {
     where.push("ubigeo = ?");
@@ -292,7 +292,7 @@ async function ubigeoAggByPrefix(params: { etapa: string; prefixLen: 2 | 4 | 6; 
   const [rows] = await pool.query(
     `SELECT LEFT(LPAD(CAST(ubigeo AS CHAR), 6, '0'), ${params.prefixLen}) as code, COUNT(*) as c
      FROM padronnominal
-     WHERE etapa = ? AND ${assignedWhere()}
+     WHERE DATE_FORMAT(etapa, '%Y-%m-01') = ? AND ${assignedWhere()}
      GROUP BY LEFT(LPAD(CAST(ubigeo AS CHAR), 6, '0'), ${params.prefixLen})
      ORDER BY c DESC
      LIMIT ${limit}`,
