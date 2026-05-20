@@ -154,7 +154,10 @@ export default function LoginPage() {
           </div>
 
           <div className="mt-4 text-center text-xs text-zinc-500">
-            Si no recuerdas tu clave, solicita soporte al administrador.
+            <div>Si no recuerdas tu clave, solicita soporte al administrador.</div>
+            <a href="/registro" className="mt-1 inline-block text-blue-700 hover:text-blue-900">
+              Crear cuenta invitado
+            </a>
           </div>
         </div>
       </div>

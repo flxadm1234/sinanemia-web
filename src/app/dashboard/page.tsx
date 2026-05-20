@@ -1,9 +1,6 @@
 import { requireSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import {
-  countActoresSocialesActivos,
-  countAsignados,
-  countCargados,
   estadosvdDistribucion,
   getLatestDashboardMonthAny,
   listDashboardMonthsByUbigeo,
@@ -11,11 +8,8 @@ import {
   resumenPorDepartamento,
   resumenPorDistrito,
   resumenPorProvincia,
-  timelineTotales,
-  countCoordinadoresActivos,
   type DashboardMonth,
 } from "@/lib/dashboard";
-import { DashboardLineChart } from "@/components/DashboardLineChart";
 import { computeNcMetricsForEtapa } from "@/lib/ncReporte";
 import { NcLineChart } from "@/components/NcLineChart";
 
@@ -51,7 +45,12 @@ export default async function DashboardPage(props: {
   const role = user.tipo;
 
   let scopeUbigeo = "";
-  if (role === "ADMINISTRADOR" || role === "COORDINADOR" || role === "ACTOR SOCIAL") {
+  if (
+    role === "ADMINISTRADOR" ||
+    role === "COORDINADOR" ||
+    role === "ACTOR SOCIAL" ||
+    role === "INVITADO"
+  ) {
     scopeUbigeo = String(user.ubigeo ?? "");
   } else if (role === "SUPER ADMIN") {
     scopeUbigeo = sp.ubigeo;
@@ -92,14 +91,9 @@ export default async function DashboardPage(props: {
     if (role === "ACTOR SOCIAL") return { ubigeo: scopeUbigeo, actor: user.dni };
     if (role === "ADMINISTRADOR") return { ubigeo: scopeUbigeo };
     if (role === "SUPER ADMIN") return scopeUbigeo ? { ubigeo: scopeUbigeo } : {};
+    if (role === "INVITADO") return { ubigeo: scopeUbigeo };
     return {};
   })();
-
-  const cargadosActual = await countCargados({ etapa, ...scopeFilters });
-  const asignadosActual = await countAsignados({ etapa, ...scopeFilters });
-  const sinAsignarActual = Math.max(0, cargadosActual - asignadosActual);
-
-  const timeline = await timelineTotales({ months: months.slice(0, 8), ...scopeFilters });
 
   const estados = await estadosvdDistribucion({ etapa, ...scopeFilters, limit: 12 });
 
@@ -108,14 +102,7 @@ export default async function DashboardPage(props: {
   const prov = showGeo ? await resumenPorProvincia({ etapa, limit: 80 }) : [];
   const dist = showGeo ? await resumenPorDistrito({ etapa, limit: 80 }) : [];
 
-  const ubigeoForCounts = scopeUbigeo ? scopeUbigeo : undefined;
-  const actoresActivos =
-    role === "COORDINADOR"
-      ? await countActoresSocialesActivos({ ubigeo: ubigeoForCounts, cdr: user.dni })
-      : await countActoresSocialesActivos({ ubigeo: ubigeoForCounts });
-  const coordinadoresActivos = await countCoordinadoresActivos({ ubigeo: ubigeoForCounts });
-
-  const ncEnabled = role === "ADMINISTRADOR" || role === "SUPER ADMIN";
+  const ncEnabled = role === "ADMINISTRADOR" || role === "SUPER ADMIN" || role === "INVITADO";
   const ncUbigeo = Number(scopeUbigeo);
   const ncOkUbigeo = ncEnabled && Number.isFinite(ncUbigeo) && ncUbigeo > 0;
   const ncMonthsSource = months.filter((m) => m.year === selectedMonth.year && m.year >= 2026);
@@ -201,40 +188,6 @@ export default async function DashboardPage(props: {
           </form>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-6">
-          <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-700 text-white p-5 lg:col-span-2">
-            <div className="text-sm font-semibold opacity-90">Niños cargados (periodo)</div>
-            <div className="mt-2 text-3xl font-semibold">{cargadosActual}</div>
-            <div className="mt-2 text-xs opacity-90">Registros tipovd=1 en la etapa.</div>
-          </div>
-          <div className="rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-700 text-white p-5 lg:col-span-2">
-            <div className="text-sm font-semibold opacity-90">Niños asignados (periodo)</div>
-            <div className="mt-2 text-3xl font-semibold">{asignadosActual}</div>
-            <div className="mt-2 text-xs opacity-90">Registros con actor social asignado.</div>
-          </div>
-          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5 lg:col-span-2">
-            <div className="text-sm font-semibold text-zinc-900">Sin asignar (periodo)</div>
-            <div className="mt-2 text-3xl font-semibold text-zinc-900">{sinAsignarActual}</div>
-            <div className="mt-2 text-xs text-zinc-500">Cargados menos asignados.</div>
-          </div>
-          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5 lg:col-span-3">
-            <div className="text-sm font-semibold text-zinc-900">Voluntarios (actores sociales) activos</div>
-            <div className="mt-2 text-3xl font-semibold text-zinc-900">{actoresActivos}</div>
-            <div className="mt-2 text-xs text-zinc-500">
-              {role === "COORDINADOR" ? "Filtrado por tu CDR." : "Filtrado por ubigeo."}
-            </div>
-          </div>
-          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5 lg:col-span-3">
-            <div className="text-sm font-semibold text-zinc-900">No voluntarios (coordinadores) activos</div>
-            <div className="mt-2 text-3xl font-semibold text-zinc-900">{coordinadoresActivos}</div>
-            <div className="mt-2 text-xs text-zinc-500">Filtrado por ubigeo.</div>
-          </div>
-        </div>
-
-        <DashboardLineChart
-          points={timeline.map((t) => ({ label: t.label, total: t.total, assigned: t.assigned }))}
-        />
-
         {ncEnabled ? (
           ncOkUbigeo && ncSeries.length && ncSelected ? (
             <>
@@ -256,14 +209,6 @@ export default async function DashboardPage(props: {
                     </div>
                   </div>
                   <div className="text-sm text-zinc-700">
-                    <a
-                      className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
-                      href={`/api/reportes/nc-excel?ubigeo=${encodeURIComponent(scopeUbigeo)}&etapa=${encodeURIComponent(
-                        ncSelected.etapa,
-                      )}`}
-                    >
-                      Descargar Excel
-                    </a>
                     <span className="ml-3">
                       NC: <span className="font-semibold">{ncSelected.denom_total}</span> · N:{" "}
                       <span className="font-semibold">{ncSelected.num_total}</span>
@@ -460,36 +405,22 @@ export default async function DashboardPage(props: {
 
                 <div className="mt-4 rounded-2xl bg-white ring-1 ring-black/5 p-4">
                   <div className="text-sm font-semibold text-zinc-900">
-                    Detalle de exclusiones (muestra)
+                    Descarga
                   </div>
-                  <div className="mt-1 text-xs text-zinc-500">Se muestran hasta 200 registros.</div>
-                  <div className="mt-3 overflow-auto">
-                    <table className="min-w-[680px] text-sm">
-                      <thead className="bg-zinc-50 text-left text-zinc-600">
-                        <tr>
-                          <th className="px-3 py-2">DNI</th>
-                          <th className="px-3 py-2">Grupo</th>
-                          <th className="px-3 py-2">Motivo</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-zinc-100">
-                        {ncSelected.excl_detalle.map((d) => (
-                          <tr key={`${d.dni}-${d.grupo}-${d.motivo}`}>
-                            <td className="px-3 py-2 font-medium text-zinc-900">{d.dni}</td>
-                            <td className="px-3 py-2 text-zinc-700">{d.grupo}</td>
-                            <td className="px-3 py-2 text-zinc-700">{d.motivo}</td>
-                          </tr>
-                        ))}
-                        {!ncSelected.excl_detalle.length ? (
-                          <tr>
-                            <td className="px-3 py-6 text-center text-zinc-500" colSpan={3}>
-                              Sin detalle.
-                            </td>
-                          </tr>
-                        ) : null}
-                      </tbody>
-                    </table>
-                  </div>
+                  {role === "INVITADO" ? (
+                    <div className="mt-2 text-xs text-zinc-600">
+                      La exportación de Excel se encuentra deshabilitada para tu rol.
+                    </div>
+                  ) : (
+                    <a
+                      className="mt-3 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700"
+                      href={`/api/reportes/nc-excel?ubigeo=${encodeURIComponent(
+                        scopeUbigeo,
+                      )}&etapa=${encodeURIComponent(ncSelected.etapa)}`}
+                    >
+                      Descargar Excel
+                    </a>
+                  )}
                 </div>
               </div>
             </>

@@ -13,8 +13,11 @@ function buildLinks(user: SessionUser): NavLink[] {
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
     links.push({ href: "/admin/personas", label: "Usuarios" });
   }
-  if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
+  if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "INVITADO") {
     links.push({ href: "/admin/meses", label: "Meses" });
+  }
+  if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "INVITADO") {
+    links.push({ href: "/admin/carga-vd", label: "Carga VD" });
   }
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "COORDINADOR") {
     links.push({ href: "/asignacion", label: "Asignación" });

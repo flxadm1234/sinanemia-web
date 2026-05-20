@@ -6,6 +6,7 @@ export const PersonaTipo = z.enum([
   "ADMINISTRADOR",
   "COORDINADOR",
   "ACTOR SOCIAL",
+  "INVITADO",
 ]);
 
 export type PersonaRole = z.infer<typeof PersonaTipo>;
@@ -29,6 +30,7 @@ function normalizeTipo(tipo: string | null | undefined) {
   if (t === "ADMINISTRADOR") return "ADMINISTRADOR";
   if (t === "COORDINADOR") return "COORDINADOR";
   if (t.startsWith("ACTOR SOCIAL")) return "ACTOR SOCIAL";
+  if (t === "INVITADO") return "INVITADO";
   return null;
 }
 
@@ -60,6 +62,15 @@ export async function findPersonaForLogin(dni: string, clave: string) {
     | undefined;
   if (!row) return null;
   return row;
+}
+
+export async function findPersonaByDni(dni: string) {
+  const pool = getDbPool();
+  const [rows] = await pool.query(
+    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono FROM persona WHERE dni = ? ORDER BY idpersona DESC LIMIT 1",
+    [dni],
+  );
+  return ((rows as any[])[0] as PersonaSafe | undefined) ?? null;
 }
 
 export async function listPersonas(params: {

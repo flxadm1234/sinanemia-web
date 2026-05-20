@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireAdminOrSuperAdmin } from "@/lib/auth";
+import { requireMesesAccess } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { listMesesAll, listMesesByUbigeo } from "@/lib/meses";
 import { seleccionarMesAction, deletePadronMesAction } from "./actions";
@@ -11,10 +11,11 @@ function pad2(n: number) {
 }
 
 export default async function AdminMesesPage() {
-  const user = await requireAdminOrSuperAdmin();
+  const user = await requireMesesAccess();
   const ubigeo = user.ubigeo ?? null;
+  const canManage = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
 
-  if (user.tipo === "ADMINISTRADOR" && !ubigeo) {
+  if ((user.tipo === "ADMINISTRADOR" || user.tipo === "INVITADO") && !ubigeo) {
     return (
       <AppShell user={user} title="Meses">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -62,7 +63,7 @@ export default async function AdminMesesPage() {
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            {user.tipo === "SUPER ADMIN" ? (
+            {canManage && user.tipo === "SUPER ADMIN" ? (
               <Link
                 href="/admin/meses/importar"
                 className="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 hover:bg-zinc-50"
@@ -70,12 +71,14 @@ export default async function AdminMesesPage() {
                 Importar Excel
               </Link>
             ) : null}
-            <Link
-              href="/admin/meses/nuevo"
-              className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
-            >
-              Nuevo mes
-            </Link>
+            {canManage ? (
+              <Link
+                href="/admin/meses/nuevo"
+                className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
+              >
+                Nuevo mes
+              </Link>
+            ) : null}
           </div>
         </div>
 
@@ -126,39 +129,37 @@ export default async function AdminMesesPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <DeletePadronButton
-                          action={deletePadronMesAction}
-                          ubigeo={String(r.ubigeo)}
-                          etapa={etapa}
-                          count={count}
-                        />
+                        {canManage ? (
+                          <DeletePadronButton
+                            action={deletePadronMesAction}
+                            ubigeo={String(r.ubigeo)}
+                            etapa={etapa}
+                            count={count}
+                          />
+                        ) : null}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
-                          <Link
-                            href={`/admin/meses/${r.idmeses}`}
-                            className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
-                          >
-                            Editar
-                          </Link>
-                          <form action={seleccionarMesAction}>
-                            <input
-                              type="hidden"
-                              name="idmeses"
-                              value={String(r.idmeses)}
-                            />
-                            <input
-                              type="hidden"
-                              name="ubigeo"
-                              value={String(r.ubigeo ?? "")}
-                            />
-                            <button
-                              disabled={isSelected}
-                              className="rounded-xl bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
-                            >
-                              Seleccionar
-                            </button>
-                          </form>
+                          {canManage ? (
+                            <>
+                              <Link
+                                href={`/admin/meses/${r.idmeses}`}
+                                className="rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                              >
+                                Editar
+                              </Link>
+                              <form action={seleccionarMesAction}>
+                                <input type="hidden" name="idmeses" value={String(r.idmeses)} />
+                                <input type="hidden" name="ubigeo" value={String(r.ubigeo ?? "")} />
+                                <button
+                                  disabled={isSelected}
+                                  className="rounded-xl bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
+                                >
+                                  Seleccionar
+                                </button>
+                              </form>
+                            </>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
