@@ -8,6 +8,7 @@ import fs from "fs/promises";
 import fsSync from "fs";
 import os from "os";
 import { spawn } from "child_process";
+import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
 
@@ -16,9 +17,23 @@ async function writeUploadToDisk(file: File, jobId: string) {
   const dir = path.join(os.tmpdir(), "sinanemia_uploads", "tamizaje");
   await fs.mkdir(dir, { recursive: true });
   const ext = path.extname(file.name || "").toLowerCase();
-  const safeExt = ext === ".xls" || ext === ".xlsx" ? ext : ".xlsx";
-  const filePath = path.join(dir, `${jobId}${safeExt}`);
-  await fs.writeFile(filePath, buf);
+  if (ext !== ".xls" && ext !== ".xlsx") {
+    throw new Error("invalid_excel_extension");
+  }
+  if (ext === ".xlsx") {
+    const filePath = path.join(dir, `${jobId}.xlsx`);
+    await fs.writeFile(filePath, buf);
+    return filePath;
+  }
+  let wb: XLSX.WorkBook;
+  try {
+    wb = XLSX.read(buf, { type: "buffer" });
+  } catch {
+    throw new Error("invalid_xls");
+  }
+  const out = XLSX.write(wb, { bookType: "xlsx", type: "buffer" }) as Buffer;
+  const filePath = path.join(dir, `${jobId}.xlsx`);
+  await fs.writeFile(filePath, out);
   return filePath;
 }
 
@@ -102,7 +117,19 @@ export async function POST(request: Request) {
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-    const filePath = await writeUploadToDisk(file, jobId);
+    let filePath = "";
+    try {
+      filePath = await writeUploadToDisk(file, jobId);
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (msg === "invalid_excel_extension") {
+        return NextResponse.json({ error: "Solo se permiten archivos .xlsx o .xls." }, { status: 400 });
+      }
+      if (msg === "invalid_xls") {
+        return NextResponse.json({ error: "No se pudo leer el archivo .xls. Intenta guardarlo como .xlsx e inténtalo nuevamente." }, { status: 400 });
+      }
+      return NextResponse.json({ error: "No se pudo procesar el Excel. Intenta guardarlo como .xlsx." }, { status: 400 });
+    }
 
     const pool = getDbPool();
     await pool.query(
