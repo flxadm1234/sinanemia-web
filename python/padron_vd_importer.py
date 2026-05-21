@@ -44,6 +44,25 @@ def to_text(v):
     return s if s else None
 
 
+def normalize_dni(v):
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        s = str(v)
+    elif isinstance(v, float):
+        if v != v:
+            return None
+        s = str(int(v)) if float(int(v)) == float(v) else str(v)
+    else:
+        s = str(v).strip()
+    if not s:
+        return None
+    s = re.sub(r"[^\d]+", "", s)
+    return s if s else None
+
+
 def to_int(v):
     if v is None:
         return None
@@ -243,7 +262,7 @@ def run_import(job_id: str, file_path: str, config_id: int):
 
     records = []
     for row_vals in ws.iter_rows(min_row=start_row, values_only=True):
-        dni = to_text(get_cell(row_vals, cfg.get("col_dni")))
+        dni = normalize_dni(get_cell(row_vals, cfg.get("col_dni")))
         if not dni:
             continue
         ubigeo = to_int(get_cell(row_vals, cfg.get("col_ubigeo")))
@@ -257,7 +276,7 @@ def run_import(job_id: str, file_path: str, config_id: int):
                 "rango": to_text(get_cell(row_vals, cfg.get("col_rango"))),
                 "ccpp": to_text(get_cell(row_vals, cfg.get("col_ccpp"))),
                 "direccion": to_text(get_cell(row_vals, cfg.get("col_direccion"))),
-                "dnimadre": to_text(get_cell(row_vals, cfg.get("col_dnimadre"))),
+                "dnimadre": normalize_dni(get_cell(row_vals, cfg.get("col_dnimadre"))),
                 "telefono": to_text(get_cell(row_vals, cfg.get("col_telefono"))),
                 "actorsocial": to_text(get_cell(row_vals, cfg.get("col_actorsocial"))),
                 "responsable": to_text(get_cell(row_vals, cfg.get("col_responsable"))),
@@ -309,7 +328,7 @@ def run_import(job_id: str, file_path: str, config_id: int):
         groups = {}
 
         for r in batch:
-            dni = str(r.get("dni") or "").strip()
+            dni = normalize_dni(r.get("dni"))
             if not dni:
                 continue
             ubigeo = r.get("ubigeo")
