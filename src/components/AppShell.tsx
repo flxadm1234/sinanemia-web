@@ -35,6 +35,7 @@ export function AppShell(props: {
           ) : null}
           {user.tipo === "ADMINISTRADOR" ||
           user.tipo === "SUPER ADMIN" ||
+          user.tipo === "COORDINADOR" ||
           user.tipo === "INVITADO" ||
           user.tipo === "SUPERVISOR" ? (
             <Link
@@ -80,7 +81,7 @@ export function AppShell(props: {
               href="/admin/padronnominal"
               className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
             >
-              Padrón nominal
+              Configurar actor social y CVD
             </Link>
           ) : null}
           {user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" ? (

@@ -1,7 +1,12 @@
 "use server";
 
 import { z } from "zod";
-import { requireAdminOrSuperAdmin, requireMesesAccess, requireMesesManage } from "@/lib/auth";
+import {
+  requireMesesAccess,
+  requireMesesDeletePadron,
+  requireMesesManage,
+  requireMesesSelect,
+} from "@/lib/auth";
 import {
   createMes,
   setMesSeleccionadoById,
@@ -46,6 +51,7 @@ function revalidateMeses() {
 
 export async function createMesAction(_: any, formData: FormData) {
   const user = await requireMesesAccess();
+  if (user.tipo === "COORDINADOR") return { ok: false, message: "No tienes permisos." };
   const parsed = createSchema.safeParse({
     numero_mes: formData.get("numero_mes"),
     meses: formData.get("meses"),
@@ -124,7 +130,7 @@ export async function updateMesAction(_: any, formData: FormData) {
 }
 
 export async function seleccionarMesAction(formData: FormData) {
-  const user = await requireAdminOrSuperAdmin();
+  const user = await requireMesesSelect();
 
   const parsed = selectSchema.safeParse({
     idmeses: formData.get("idmeses"),
@@ -143,23 +149,25 @@ export async function seleccionarMesAction(formData: FormData) {
 }
 
 export async function deletePadronMesAction(formData: FormData) {
-  const user = await requireAdminOrSuperAdmin();
+  const user = await requireMesesDeletePadron();
   const parsed = deletePadronSchema.safeParse({
     ubigeo: formData.get("ubigeo"),
     etapa: formData.get("etapa"),
   });
-  if (!parsed.success) return;
+  if (!parsed.success) return { ok: false, message: "Datos inválidos." };
 
   if (user.tipo === "ADMINISTRADOR") {
     const own = String(user.ubigeo ?? "");
-    if (!own) return;
-    if (parsed.data.ubigeo !== own) return;
+    if (!own) return { ok: false, message: "Tu usuario no tiene ubigeo." };
+    if (parsed.data.ubigeo !== own) return { ok: false, message: "No permitido." };
   }
 
-  await deletePadronByUbigeoEtapa({
+  const res = await deletePadronByUbigeoEtapa({
     ubigeo: Number(parsed.data.ubigeo),
     etapa: parsed.data.etapa,
   });
   revalidateMeses();
+  const affected = Number((res as any)?.affectedRows ?? (res as any)?.rowCount ?? 0);
+  return { ok: true, message: `Padrón eliminado (${affected}).` };
 }
 

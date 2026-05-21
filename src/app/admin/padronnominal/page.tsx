@@ -52,7 +52,7 @@ export default async function PadronNominalAdminPage(props: {
   const errorMsg = msg ? String(msg) : "";
 
   return (
-    <AppShell user={user} title="Padrón nominal">
+    <AppShell user={user} title="Configurar actor social y CVD">
       <div className="flex flex-col gap-4">
         <div className="flex items-end justify-between gap-3">
           <div>

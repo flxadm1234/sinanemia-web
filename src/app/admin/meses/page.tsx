@@ -5,21 +5,29 @@ import { listMesesAll, listMesesByUbigeo } from "@/lib/meses";
 import { seleccionarMesAction, deletePadronMesAction } from "./actions";
 import { countPadronPorUbigeoEtapaTipovd } from "@/lib/padronnominal";
 import { DeletePadronButton } from "@/components/DeletePadronButton";
+import { MesesFiltersClient } from "@/components/MesesFiltersClient";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-export default async function AdminMesesPage() {
+export default async function AdminMesesPage(props: {
+  searchParams?: Promise<{ q?: string; ubigeo?: string; year?: string; estado?: string }>;
+}) {
   const user = await requireMesesAccess();
   const ubigeo = user.ubigeo ?? null;
   const canEdit =
     user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR";
-  const canSelect = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
-  const canDeletePadron = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
+  const canSelect =
+    user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "COORDINADOR";
+  const canDeletePadron =
+    user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR";
   const canCreate = canEdit || user.tipo === "INVITADO";
 
-  if ((user.tipo === "ADMINISTRADOR" || user.tipo === "INVITADO") && !ubigeo) {
+  if (
+    (user.tipo === "ADMINISTRADOR" || user.tipo === "INVITADO" || user.tipo === "COORDINADOR") &&
+    !ubigeo
+  ) {
     return (
       <AppShell user={user} title="Meses">
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -33,19 +41,47 @@ export default async function AdminMesesPage() {
     user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
       ? await listMesesAll()
       : await listMesesByUbigeo(ubigeo as number);
+  const sp = (await props.searchParams) ?? {};
+  const q = String(sp.q ?? "").trim().toLowerCase();
+  const filterUbigeo = String(sp.ubigeo ?? "").trim();
+  const filterYear = String(sp.year ?? "").trim();
+  const estado = String(sp.estado ?? "").trim();
+
+  const filteredRows = rows.filter((r) => {
+    const u = String(r.ubigeo ?? "");
+    const y = String(r.year ?? "");
+    const m = String(r.meses ?? "");
+    const n = String(r.numero_mes ?? "");
+    const isSelected = Number(r.seleccion ?? 0) === 1;
+
+    if (filterUbigeo && u !== filterUbigeo) return false;
+    if (filterYear && y !== filterYear) return false;
+    if (estado === "selected" && !isSelected) return false;
+    if (estado === "unselected" && isSelected) return false;
+
+    if (!q) return true;
+    const hay = `${u} ${m} ${y} ${n}`.toLowerCase();
+    return hay.includes(q);
+  });
   const selected =
     user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
       ? null
-      : rows.find((r) => Number(r.seleccion ?? 0) === 1) ?? null;
+      : filteredRows.find((r) => Number(r.seleccion ?? 0) === 1) ?? null;
 
   const ubigeos = Array.from(
     new Set(
-      rows
+      filteredRows
         .map((r) => Number(r.ubigeo ?? NaN))
         .filter((n) => Number.isFinite(n)),
     ),
   );
   const countsMap = await countPadronPorUbigeoEtapaTipovd({ ubigeos, tipovd: "1" });
+  const ubigeoOptions = Array.from(
+    new Set(rows.map((r) => Number(r.ubigeo ?? NaN)).filter((n) => Number.isFinite(n))),
+  ).sort((a, b) => a - b);
+  const yearOptions = Array.from(
+    new Set(rows.map((r) => Number(r.year ?? NaN)).filter((n) => Number.isFinite(n))),
+  ).sort((a, b) => b - a);
 
   return (
     <AppShell user={user} title="Meses">
@@ -88,6 +124,8 @@ export default async function AdminMesesPage() {
           </div>
         </div>
 
+        <MesesFiltersClient ubigeos={ubigeoOptions} years={yearOptions} />
+
         <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -105,7 +143,7 @@ export default async function AdminMesesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {rows.map((r) => {
+                {filteredRows.map((r) => {
                   const isSelected = Number(r.seleccion ?? 0) === 1;
                   const etapa = `${r.year}-${pad2(Number(r.numero_mes ?? 0))}-01`;
                   const count = countsMap.get(`${Number(r.ubigeo)}|${etapa}`) ?? 0;
@@ -151,32 +189,32 @@ export default async function AdminMesesPage() {
                               >
                                 Editar
                               </Link>
-                              {canSelect ? (
-                                <form action={seleccionarMesAction}>
-                                  <input type="hidden" name="idmeses" value={String(r.idmeses)} />
-                                  <input type="hidden" name="ubigeo" value={String(r.ubigeo ?? "")} />
-                                  <button
-                                    disabled={isSelected}
-                                    className="rounded-xl bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
-                                  >
-                                    Seleccionar
-                                  </button>
-                                </form>
-                              ) : null}
                             </>
+                          ) : null}
+                          {canSelect ? (
+                            <form action={seleccionarMesAction}>
+                              <input type="hidden" name="idmeses" value={String(r.idmeses)} />
+                              <input type="hidden" name="ubigeo" value={String(r.ubigeo ?? "")} />
+                              <button
+                                disabled={isSelected}
+                                className="rounded-xl bg-zinc-900 px-3 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
+                              >
+                                Seleccionar
+                              </button>
+                            </form>
                           ) : null}
                         </div>
                       </td>
                     </tr>
                   );
                 })}
-                {rows.length === 0 ? (
+                {filteredRows.length === 0 ? (
                   <tr>
                     <td
                       className="px-4 py-10 text-center text-zinc-500"
                       colSpan={9}
                     >
-                      No hay meses registrados.
+                      No se encontraron meses con los filtros actuales.
                     </td>
                   </tr>
                 ) : null}

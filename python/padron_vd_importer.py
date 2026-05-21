@@ -165,11 +165,11 @@ def fetch_existing_dni_by_ubigeo_etapa(cur, ubigeo: int, etapa_val: date, dni_li
         part = dni_list[i : i + chunk]
         placeholders = ",".join(["%s"] * len(part))
         sql = f"""
-          SELECT dni
+          SELECT TRIM(dni) AS dni
           FROM padronnominal
           WHERE ubigeo = %s
-            AND DATE_FORMAT(etapa, '%%Y-%%m-01') = %s
-            AND dni IN ({placeholders})
+            AND DATE(etapa) = %s
+            AND TRIM(dni) IN ({placeholders})
         """
         cur.execute(sql, [ubigeo, etapa_val] + part)
         for row in cur.fetchall():

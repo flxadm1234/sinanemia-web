@@ -16,6 +16,7 @@ function buildLinks(user: SessionUser): NavLink[] {
   if (
     user.tipo === "ADMINISTRADOR" ||
     user.tipo === "SUPER ADMIN" ||
+    user.tipo === "COORDINADOR" ||
     user.tipo === "INVITADO" ||
     user.tipo === "SUPERVISOR"
   ) {
@@ -35,7 +36,7 @@ function buildLinks(user: SessionUser): NavLink[] {
     links.push({ href: "/asignacion", label: "Asignación" });
   }
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
-    links.push({ href: "/admin/padronnominal", label: "Padrón nominal" });
+    links.push({ href: "/admin/padronnominal", label: "Configurar actor social y CVD" });
   }
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
     links.push({ href: "/admin/reportes/padron", label: "Reportes" });

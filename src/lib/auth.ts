@@ -147,6 +147,7 @@ export async function requireMesesAccess() {
   if (
     s.tipo !== "ADMINISTRADOR" &&
     s.tipo !== "SUPER ADMIN" &&
+    s.tipo !== "COORDINADOR" &&
     s.tipo !== "INVITADO" &&
     s.tipo !== "SUPERVISOR"
   )
@@ -154,7 +155,21 @@ export async function requireMesesAccess() {
   return s;
 }
 
+export async function requireMesesSelect() {
+  const s = await requireSession();
+  if (s.tipo !== "ADMINISTRADOR" && s.tipo !== "SUPER ADMIN" && s.tipo !== "COORDINADOR")
+    redirect(routeForRole(s.tipo));
+  return s;
+}
+
 export async function requireMesesManage() {
+  const s = await requireSession();
+  if (s.tipo !== "ADMINISTRADOR" && s.tipo !== "SUPER ADMIN" && s.tipo !== "SUPERVISOR")
+    redirect(routeForRole(s.tipo));
+  return s;
+}
+
+export async function requireMesesDeletePadron() {
   const s = await requireSession();
   if (s.tipo !== "ADMINISTRADOR" && s.tipo !== "SUPER ADMIN" && s.tipo !== "SUPERVISOR")
     redirect(routeForRole(s.tipo));
