@@ -451,7 +451,7 @@ export async function deletePadronByUbigeoEtapa(params: {
 }) {
   const pool = getDbPool();
   const [res] = await pool.query(
-    "DELETE FROM padronnominal WHERE ubigeo = ? AND etapa = ?",
+    "DELETE FROM padronnominal WHERE ubigeo = ? AND DATE(etapa) = ?",
     [params.ubigeo, params.etapa],
   );
   return res as any;

@@ -148,7 +148,7 @@ export async function seleccionarMesAction(formData: FormData) {
   revalidateMeses();
 }
 
-export async function deletePadronMesAction(formData: FormData) {
+export async function deletePadronMesAction(_: any, formData: FormData) {
   const user = await requireMesesDeletePadron();
   const parsed = deletePadronSchema.safeParse({
     ubigeo: formData.get("ubigeo"),
