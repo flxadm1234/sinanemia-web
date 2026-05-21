@@ -5,14 +5,36 @@ import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
 import { ActorSocialCombobox } from "@/components/ActorSocialCombobox";
 import { CoordinatorCombobox } from "@/components/CoordinatorCombobox";
 import { FormSubmitButton } from "@/components/FormSubmitButton";
-import { bulkActorSocialAction, bulkResponsableAction, rectifyCoordinadorAction } from "./actions";
+import { ActorCdrBulkChangeClient } from "@/components/ActorCdrBulkChangeClient";
+import {
+  bulkActorCdrAction,
+  bulkActorSocialAction,
+  bulkResponsableAction,
+  rectifyCoordinadorAction,
+} from "./actions";
 
 export default async function PadronNominalAdminPage(props: {
-  searchParams: Promise<{ tab?: string; ok?: string; rows?: string; rows2?: string; err?: string; msg?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    ok?: string;
+    rows?: string;
+    rows2?: string;
+    chg1?: string;
+    chg2?: string;
+    err?: string;
+    msg?: string;
+  }>;
 }) {
   const user = await requireAdminOrSuperAdmin();
-  const { tab, ok, rows, rows2, err, msg } = await props.searchParams;
-  const activeTab = tab === "responsable" ? "responsable" : tab === "coordinador" ? "coordinador" : "actor";
+  const { tab, ok, rows, rows2, chg1, chg2, err, msg } = await props.searchParams;
+  const activeTab =
+    tab === "responsable"
+      ? "responsable"
+      : tab === "coordinador"
+        ? "coordinador"
+        : tab === "actores"
+          ? "actores"
+          : "actor";
 
   const etapaSel =
     user.tipo === "ADMINISTRADOR"
@@ -24,6 +46,8 @@ export default async function PadronNominalAdminPage(props: {
   const showResult = ok === "1";
   const affected = rows && rows.trim() ? Number(rows) : 0;
   const affected2 = rows2 && rows2.trim() ? Number(rows2) : 0;
+  const changed1 = chg1 && chg1.trim() ? Number(chg1) : 0;
+  const changed2 = chg2 && chg2.trim() ? Number(chg2) : 0;
   const showError = err === "1";
   const errorMsg = msg ? String(msg) : "";
 
@@ -56,21 +80,38 @@ export default async function PadronNominalAdminPage(props: {
 
         {showResult ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            Actualización completada. Registros encontrados:{" "}
-            <span className="font-semibold">{Number.isFinite(affected) ? affected : 0}</span>
-            {activeTab === "responsable" ? (
+            {activeTab === "actores" ? (
               <>
-                {" "}
-                · Personas actualizadas (CDR):{" "}
-                <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span>
+                Actualización completada. Actores encontrados:{" "}
+                <span className="font-semibold">{Number.isFinite(affected) ? affected : 0}</span> · Padrón
+                (mes actual) encontrado:{" "}
+                <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span> · Cambios
+                aplicados:{" "}
+                <span className="font-semibold">{Number.isFinite(changed1) ? changed1 : 0}</span> actores /{" "}
+                <span className="font-semibold">{Number.isFinite(changed2) ? changed2 : 0}</span> padrón
               </>
-            ) : activeTab === "actor" || activeTab === "coordinador" ? (
+            ) : (
               <>
-                {" "}
-                · Filas modificadas:{" "}
-                <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span>
+                Actualización completada. Registros encontrados:{" "}
+                <span className="font-semibold">{Number.isFinite(affected) ? affected : 0}</span>
+                {activeTab === "responsable" ? (
+                  <>
+                    {" "}
+                    · Personas encontradas (CDR):{" "}
+                    <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span> ·
+                    Cambios aplicados:{" "}
+                    <span className="font-semibold">{Number.isFinite(changed1) ? changed1 : 0}</span> padrón /{" "}
+                    <span className="font-semibold">{Number.isFinite(changed2) ? changed2 : 0}</span> persona
+                  </>
+                ) : activeTab === "actor" || activeTab === "coordinador" ? (
+                  <>
+                    {" "}
+                    · Filas modificadas:{" "}
+                    <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
           </div>
         ) : null}
 
@@ -107,6 +148,17 @@ export default async function PadronNominalAdminPage(props: {
             }
           >
             Rectificar coordinador
+          </Link>
+          <Link
+            href="/admin/padronnominal?tab=actores"
+            className={
+              "rounded-xl px-4 py-2 text-sm font-semibold " +
+              (activeTab === "actores"
+                ? "bg-zinc-900 text-white"
+                : "bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50")
+            }
+          >
+            Cambiar coordinador de actores
           </Link>
         </div>
 
@@ -202,8 +254,8 @@ export default async function PadronNominalAdminPage(props: {
               Reemplazar responsable (coordinador)
             </div>
             <div className="mt-1 text-sm text-zinc-600">
-              Se actualiza el campo <span className="font-semibold">responsable</span> en{" "}
-              <span className="font-semibold">padronnominal</span>.
+              Actualiza <span className="font-semibold">padronnominal.responsable</span> (por etapa/ubigeo) y
+              también <span className="font-semibold">persona.cdr</span> (por ubigeo) para mantener consistencia.
             </div>
 
             <form action={bulkResponsableAction} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -281,6 +333,20 @@ export default async function PadronNominalAdminPage(props: {
                 />
               </div>
             </form>
+          </div>
+        ) : activeTab === "actores" ? (
+          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
+            <div className="text-sm font-semibold text-zinc-900">Cambiar coordinador de actores sociales</div>
+            <div className="mt-1 text-sm text-zinc-600">
+              Actualiza <span className="font-semibold">persona.cdr</span> para los actores seleccionados y, en
+              paralelo, actualiza <span className="font-semibold">padronnominal.responsable</span> del{" "}
+              <span className="font-semibold">mes seleccionado</span> (según tabla meses) para esos actores.
+            </div>
+            <ActorCdrBulkChangeClient
+              isSuperAdmin={user.tipo === "SUPER ADMIN"}
+              ubigeoDefault={ubigeoDefault}
+              action={bulkActorCdrAction}
+            />
           </div>
         ) : (
           <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
