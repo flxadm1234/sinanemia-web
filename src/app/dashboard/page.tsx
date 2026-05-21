@@ -346,10 +346,8 @@ export default async function DashboardPage(props: {
                 ubigeos={ubigeos}
                 initialUbigeo={scopeUbigeo}
                 initialYm={ymOf(selectedMonth)}
+                pdfPayload={pdfPayload as any}
               />
-              <div className="mt-3 flex justify-end">
-                <DashboardPdfButton payload={pdfPayload as any} />
-              </div>
             </div>
           ) : (
             <form className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FullScreenLoader } from "@/components/FullScreenLoader";
+import { DashboardPdfButton } from "@/components/DashboardPdfButton";
 
 type DashboardMonth = {
   ubigeo: string;
@@ -17,12 +18,14 @@ export function DashboardFiltersClient(props: {
   ubigeos: string[];
   initialUbigeo?: string;
   initialYm?: string;
+  pdfPayload?: any;
 }) {
   const router = useRouter();
   const [ubigeo, setUbigeo] = useState(String(props.initialUbigeo ?? ""));
   const [ym, setYm] = useState(String(props.initialYm ?? ""));
   const [months, setMonths] = useState<DashboardMonth[]>([]);
   const [loading, setLoading] = useState(false);
+  const [navLoading, setNavLoading] = useState(false);
   const [info, setInfo] = useState("");
 
   const monthOptions = useMemo(() => {
@@ -77,6 +80,7 @@ export function DashboardFiltersClient(props: {
   return (
     <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
       {loading ? <FullScreenLoader label="Cargando meses..." /> : null}
+      {navLoading ? <FullScreenLoader label="Cargando dashboard..." /> : null}
       <div className="flex-1">
         <label className="block text-sm font-medium text-zinc-900">Ubigeo</label>
         <select
@@ -121,17 +125,23 @@ export function DashboardFiltersClient(props: {
         {info ? <div className="mt-1 text-xs text-zinc-600">{info}</div> : null}
       </div>
 
-      <button
-        type="button"
-        disabled={!canSubmit || loading}
-        onClick={() => {
-          if (!canSubmit) return;
-          router.push(`/dashboard?ubigeo=${encodeURIComponent(ubigeo)}&ym=${encodeURIComponent(ym)}`);
-        }}
-        className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
-      >
-        Ver
-      </button>
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:ml-auto">
+        <button
+          type="button"
+          disabled={!canSubmit || loading || navLoading}
+          onClick={() => {
+            if (!canSubmit) return;
+            setNavLoading(true);
+            router.push(
+              `/dashboard?ubigeo=${encodeURIComponent(ubigeo)}&ym=${encodeURIComponent(ym)}`,
+            );
+          }}
+          className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-60"
+        >
+          Ver
+        </button>
+        {props.pdfPayload ? <DashboardPdfButton payload={props.pdfPayload} /> : null}
+      </div>
     </div>
   );
 }
