@@ -4,14 +4,15 @@ import { AppShell } from "@/components/AppShell";
 import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
 import { ActorSocialCombobox } from "@/components/ActorSocialCombobox";
 import { CoordinatorCombobox } from "@/components/CoordinatorCombobox";
-import { bulkActorSocialAction, bulkResponsableAction } from "./actions";
+import { FormSubmitButton } from "@/components/FormSubmitButton";
+import { bulkActorSocialAction, bulkResponsableAction, rectifyCoordinadorAction } from "./actions";
 
 export default async function PadronNominalAdminPage(props: {
   searchParams: Promise<{ tab?: string; ok?: string; rows?: string; rows2?: string; err?: string; msg?: string }>;
 }) {
   const user = await requireAdminOrSuperAdmin();
   const { tab, ok, rows, rows2, err, msg } = await props.searchParams;
-  const activeTab = tab === "responsable" ? "responsable" : "actor";
+  const activeTab = tab === "responsable" ? "responsable" : tab === "coordinador" ? "coordinador" : "actor";
 
   const etapaSel =
     user.tipo === "ADMINISTRADOR"
@@ -63,7 +64,7 @@ export default async function PadronNominalAdminPage(props: {
                 · Personas actualizadas (CDR):{" "}
                 <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span>
               </>
-            ) : activeTab === "actor" ? (
+            ) : activeTab === "actor" || activeTab === "coordinador" ? (
               <>
                 {" "}
                 · Filas modificadas:{" "}
@@ -95,6 +96,17 @@ export default async function PadronNominalAdminPage(props: {
             }
           >
             Cambiar responsable
+          </Link>
+          <Link
+            href="/admin/padronnominal?tab=coordinador"
+            className={
+              "rounded-xl px-4 py-2 text-sm font-semibold " +
+              (activeTab === "coordinador"
+                ? "bg-zinc-900 text-white"
+                : "bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50")
+            }
+          >
+            Rectificar coordinador
           </Link>
         </div>
 
@@ -175,13 +187,16 @@ export default async function PadronNominalAdminPage(props: {
               </div>
 
               <div className="md:col-span-2 flex justify-end pt-2">
-                <button className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
-                  Aplicar cambio masivo
-                </button>
+                <FormSubmitButton
+                  label="Aplicar cambio masivo"
+                  pendingLabel="Aplicando..."
+                  overlayLabel="Aplicando cambio masivo..."
+                  className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                />
               </div>
             </form>
           </div>
-        ) : (
+        ) : activeTab === "responsable" ? (
           <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
             <div className="text-sm font-semibold text-zinc-900">
               Reemplazar responsable (coordinador)
@@ -258,9 +273,70 @@ export default async function PadronNominalAdminPage(props: {
               </div>
 
               <div className="md:col-span-2 flex justify-end pt-2">
-                <button className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800">
-                  Aplicar cambio masivo
-                </button>
+                <FormSubmitButton
+                  label="Aplicar cambio masivo"
+                  pendingLabel="Aplicando..."
+                  overlayLabel="Aplicando cambio masivo..."
+                  className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                />
+              </div>
+            </form>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
+            <div className="text-sm font-semibold text-zinc-900">Rectificar coordinador</div>
+            <div className="mt-1 text-sm text-zinc-600">
+              Actualiza <span className="font-semibold">padronnominal.responsable</span> tomando el{" "}
+              <span className="font-semibold">cdr</span> de{" "}
+              <span className="font-semibold">persona</span>, uniendo por{" "}
+              <span className="font-semibold">actorsocial (dni)</span>.
+            </div>
+
+            <form action={rectifyCoordinadorAction} className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-zinc-900">Ubigeo</label>
+                {user.tipo === "SUPER ADMIN" ? (
+                  <input
+                    name="ubigeo"
+                    inputMode="numeric"
+                    placeholder="Ej: 160101"
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  />
+                ) : (
+                  <>
+                    <input type="hidden" name="ubigeo" value={ubigeoDefault ?? ""} />
+                    <div className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm text-zinc-700">
+                      {ubigeoDefault ?? "-"}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-900">Etapa (YYYY-MM-01)</label>
+                {user.tipo === "SUPER ADMIN" ? (
+                  <input
+                    name="etapa"
+                    placeholder="Ej: 2026-05-01"
+                    className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  />
+                ) : (
+                  <>
+                    <input type="hidden" name="etapa" value={etapaDefault} />
+                    <div className="mt-1 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-sm text-zinc-700">
+                      {etapaDefault || "-"}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="md:col-span-2 flex justify-end pt-2">
+                <FormSubmitButton
+                  label="Rectificar ahora"
+                  pendingLabel="Rectificando..."
+                  overlayLabel="Rectificando coordinador..."
+                  className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                />
               </div>
             </form>
           </div>

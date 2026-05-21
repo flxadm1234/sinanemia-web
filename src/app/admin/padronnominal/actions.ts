@@ -5,6 +5,7 @@ import { requireAdminOrSuperAdmin } from "@/lib/auth";
 import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
 import {
   updatePadronActorSocialAndResponsable,
+  rectifyPadronResponsableFromActorCdr,
   updatePadronResponsable,
 } from "@/lib/padronnominal";
 import { getDbPool } from "@/lib/db";
@@ -76,6 +77,46 @@ export async function bulkActorSocialAction(formData: FormData) {
   const changed = Number(res.changedRows ?? 0);
   revalidatePath("/admin/padronnominal");
   redirect(`/admin/padronnominal?tab=actor&ok=1&rows=${affected}&rows2=${changed}`);
+}
+
+const rectifySchema = z.object({
+  ubigeo: z.coerce.number().int().positive().optional(),
+  etapa: etapaSchema.optional(),
+});
+
+export async function rectifyCoordinadorAction(formData: FormData) {
+  const user = await requireAdminOrSuperAdmin();
+  const parsed = rectifySchema.safeParse({
+    ubigeo: formData.get("ubigeo"),
+    etapa: String(formData.get("etapa") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/admin/padronnominal?tab=coordinador&err=1&msg=${qs("Datos inválidos.")}`);
+  }
+
+  let ubigeo = user.ubigeo ?? null;
+  let etapa = "";
+
+  if (user.tipo === "SUPER ADMIN") {
+    ubigeo = parsed.data.ubigeo ?? null;
+    etapa = parsed.data.etapa ?? "";
+  } else {
+    const sel = await getEtapaSeleccionadaPorUbigeo(user.ubigeo ?? "");
+    etapa = sel?.etapa ?? "";
+  }
+
+  if (!ubigeo) {
+    redirect(`/admin/padronnominal?tab=coordinador&err=1&msg=${qs("Falta ubigeo.")}`);
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(etapa)) {
+    redirect(`/admin/padronnominal?tab=coordinador&err=1&msg=${qs("Falta etapa (YYYY-MM-01).")}`);
+  }
+
+  const res = await rectifyPadronResponsableFromActorCdr({ ubigeo, etapa });
+  const matched = Number(res.matched ?? 0);
+  const changed = Number(res.changedRows ?? 0);
+  revalidatePath("/admin/padronnominal");
+  redirect(`/admin/padronnominal?tab=coordinador&ok=1&rows=${matched}&rows2=${changed}`);
 }
 
 const respSchema = z.object({

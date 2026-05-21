@@ -56,6 +56,43 @@ export async function updatePadronActorSocialAndResponsable(params: {
   return { ok: true as const, matched, affectedRows, changedRows, cdr };
 }
 
+export async function rectifyPadronResponsableFromActorCdr(params: {
+  ubigeo: number;
+  etapa: string;
+}) {
+  const pool = getDbPool();
+  const [rowsCount] = await pool.query(
+    `SELECT COUNT(*) as c
+     FROM padronnominal pn
+     INNER JOIN persona p
+       ON p.dni = pn.actorsocial
+      AND p.ubigeo = pn.ubigeo
+     WHERE pn.ubigeo = ?
+       AND DATE_FORMAT(pn.etapa,'%Y-%m-01') = ?
+       AND TRIM(COALESCE(pn.actorsocial,'')) <> ''
+       AND TRIM(COALESCE(p.cdr,'')) <> ''`,
+    [params.ubigeo, params.etapa],
+  );
+  const matched = Number((rowsCount as any)?.[0]?.c ?? 0);
+
+  const [res] = await pool.query(
+    `UPDATE padronnominal pn
+     INNER JOIN persona p
+       ON p.dni = pn.actorsocial
+      AND p.ubigeo = pn.ubigeo
+     SET pn.responsable = p.cdr
+     WHERE pn.ubigeo = ?
+       AND DATE_FORMAT(pn.etapa,'%Y-%m-01') = ?
+       AND TRIM(COALESCE(pn.actorsocial,'')) <> ''
+       AND TRIM(COALESCE(p.cdr,'')) <> ''
+       AND (pn.responsable IS NULL OR TRIM(COALESCE(pn.responsable,'')) <> TRIM(p.cdr))`,
+    [params.ubigeo, params.etapa],
+  );
+  const affectedRows = Number((res as any)?.affectedRows ?? 0);
+  const changedRows = Number((res as any)?.changedRows ?? 0);
+  return { matched, affectedRows, changedRows };
+}
+
 export async function countAsignadosPorActores(params: {
   ubigeo: number;
   etapa: string;
