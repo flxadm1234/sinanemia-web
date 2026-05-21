@@ -55,12 +55,18 @@ export default async function PadronNominalAdminPage(props: {
 
         {showResult ? (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-            Actualización completada. Registros afectados:{" "}
+            Actualización completada. Registros encontrados:{" "}
             <span className="font-semibold">{Number.isFinite(affected) ? affected : 0}</span>
             {activeTab === "responsable" ? (
               <>
                 {" "}
                 · Personas actualizadas (CDR):{" "}
+                <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span>
+              </>
+            ) : activeTab === "actor" ? (
+              <>
+                {" "}
+                · Filas modificadas:{" "}
                 <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span>
               </>
             ) : null}

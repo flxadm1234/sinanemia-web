@@ -3,7 +3,10 @@
 import { z } from "zod";
 import { requireAdminOrSuperAdmin } from "@/lib/auth";
 import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
-import { updatePadronActorSocial, updatePadronResponsable } from "@/lib/padronnominal";
+import {
+  updatePadronActorSocialAndResponsable,
+  updatePadronResponsable,
+} from "@/lib/padronnominal";
 import { getDbPool } from "@/lib/db";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -54,16 +57,25 @@ export async function bulkActorSocialAction(formData: FormData) {
     redirect(`/admin/padronnominal?tab=actor&err=1&msg=${qs("El actor anterior y el nuevo no pueden ser iguales.")}`);
   }
 
-  const res = await updatePadronActorSocial({
+  const res = await updatePadronActorSocialAndResponsable({
     ubigeo,
     etapa,
     actorAnterior: parsed.data.actorAnterior,
     actorNuevo: parsed.data.actorNuevo,
   });
 
-  const affected = Number((res as any)?.affectedRows ?? 0);
+  if (!res.ok) {
+    redirect(
+      `/admin/padronnominal?tab=actor&err=1&msg=${qs(
+        "No se pudo aplicar el cambio: el actor social nuevo no tiene CDR configurado.",
+      )}`,
+    );
+  }
+
+  const affected = Number(res.matched ?? 0);
+  const changed = Number(res.changedRows ?? 0);
   revalidatePath("/admin/padronnominal");
-  redirect(`/admin/padronnominal?tab=actor&ok=1&rows=${affected}`);
+  redirect(`/admin/padronnominal?tab=actor&ok=1&rows=${affected}&rows2=${changed}`);
 }
 
 const respSchema = z.object({
