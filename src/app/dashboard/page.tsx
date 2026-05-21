@@ -3,7 +3,6 @@ import { AppShell } from "@/components/AppShell";
 import { DashboardPdfButton } from "@/components/DashboardPdfButton";
 import {
   estadosvdDistribucion,
-  getLatestDashboardMonthAny,
   listDashboardMonthsByUbigeo,
   listDistinctUbigeosFromMeses,
   resumenPorDepartamento,
@@ -15,6 +14,7 @@ import {
 import { computeNcMetricsForEtapa } from "@/lib/ncReporte";
 import { NcLineChart } from "@/components/NcLineChart";
 import { DownloadFileButton } from "@/components/DownloadFileButton";
+import { DashboardFiltersClient } from "@/components/DashboardFiltersClient";
 import {
   computeVisitasGeoSeries,
   computeVisitasMetaDetalleMes,
@@ -45,6 +45,10 @@ function pickDefaultMonth(months: DashboardMonth[]) {
   return sel ?? months[0] ?? null;
 }
 
+function ymOf(m: DashboardMonth | null) {
+  return m ? `${m.year}-${m.numero_mes}` : "";
+}
+
 export default async function DashboardPage(props: {
   searchParams: Promise<{ ubigeo?: string; ym?: string }>;
 }) {
@@ -73,25 +77,36 @@ export default async function DashboardPage(props: {
   let months: DashboardMonth[] = [];
   if (scopeUbigeo) {
     months = await listDashboardMonthsByUbigeo(scopeUbigeo, 12);
-  } else if (role === "SUPER ADMIN" || role === "SUPERVISOR") {
-    const latest = await getLatestDashboardMonthAny();
-    if (latest) {
-      scopeUbigeo = latest.ubigeo;
-      months = await listDashboardMonthsByUbigeo(scopeUbigeo, 12);
-    }
   }
 
   let selectedMonth: DashboardMonth | null = null;
   if (months.length) {
-    selectedMonth = findSelectedMonth(months, sp.year, sp.numero_mes) ?? pickDefaultMonth(months);
+    selectedMonth =
+      role === "SUPER ADMIN" || role === "SUPERVISOR"
+        ? findSelectedMonth(months, sp.year, sp.numero_mes)
+        : findSelectedMonth(months, sp.year, sp.numero_mes) ?? pickDefaultMonth(months);
   }
 
   if (!selectedMonth) {
     return (
       <AppShell user={user} title="Dashboard">
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          No hay meses disponibles para mostrar el dashboard.
-        </div>
+        {role === "SUPER ADMIN" || role === "SUPERVISOR" ? (
+          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
+            <div className="text-lg font-semibold text-zinc-900">Resumen</div>
+            <div className="mt-1 text-sm text-zinc-600">
+              Selecciona un ubigeo y un mes para visualizar el dashboard.
+            </div>
+            <DashboardFiltersClient
+              ubigeos={ubigeos}
+              initialUbigeo={sp.ubigeo}
+              initialYm={sp.ubigeo && sp.year && sp.numero_mes ? `${sp.year}-${sp.numero_mes}` : ""}
+            />
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            No hay meses disponibles para mostrar el dashboard.
+          </div>
+        )}
       </AppShell>
     );
   }
@@ -207,6 +222,107 @@ export default async function DashboardPage(props: {
     : [];
   const geoSelected = geoSeries.find((p) => p.etapa === selectedMonth.etapa) ?? null;
 
+  const pdfPayload = {
+    scopeUbigeo: scopeUbigeo,
+    etapa: selectedMonth.etapa,
+    periodoLabel: `${selectedMonth.meses} ${selectedMonth.year}`,
+    userLabel: user.nombre,
+    role: role,
+    totals: totalsPoint ? { total: totalsPoint.total, assigned: totalsPoint.assigned } : undefined,
+    nc: ncSelected
+      ? {
+          denom: ncSelected.denom_total,
+          numer: ncSelected.num_total,
+          pct: ncSelected.denom_total
+            ? Math.round((ncSelected.num_total / ncSelected.denom_total) * 1000) / 10
+            : 0,
+          meta: metaNc ? Number(metaNc.valla_min) : undefined,
+        }
+      : undefined,
+    visitas: visitasDetalle
+      ? {
+          denom: visitasDetalle.denom_total,
+          numer: visitasDetalle.numer_total,
+          pct: visitasDetalle.denom_total
+            ? Math.round((visitasDetalle.numer_total / visitasDetalle.denom_total) * 1000) / 10
+            : 0,
+          meta: metaVisitas ? Number(metaVisitas.valla_min) : undefined,
+        }
+      : undefined,
+    geo: geoSelected
+      ? {
+          denom: geoSelected.denom,
+          numer: geoSelected.numer,
+          pct: geoSelected.denom
+            ? Math.round((geoSelected.numer / geoSelected.denom) * 1000) / 10
+            : 0,
+          meta: metaGeo ? Number(metaGeo.valla_min) : undefined,
+        }
+      : undefined,
+    series: {
+      nc: ncSeries.length
+        ? ncSeries.map((m: any) => ({
+            etapa: String(m.etapa ?? ""),
+            label: String(m.label ?? ""),
+            denom: Number(m.denom_total ?? 0),
+            numer: Number(m.num_total ?? 0),
+            pct: Number(m.denom_total ?? 0)
+              ? Math.round((Number(m.num_total ?? 0) / Number(m.denom_total ?? 0)) * 1000) / 10
+              : 0,
+            meta: metaNc ? Number(metaNc.valla_min) : undefined,
+          }))
+        : undefined,
+      visitas: visitasSeries.length
+        ? visitasSeries.map((p: any) => ({
+            etapa: String(p.etapa ?? ""),
+            label: String(p.label ?? ""),
+            denom: Number(p.denom ?? 0),
+            numer: Number(p.numer ?? 0),
+            pct: Number(p.denom ?? 0)
+              ? Math.round((Number(p.numer ?? 0) / Number(p.denom ?? 0)) * 1000) / 10
+              : 0,
+            meta: metaVisitas ? Number(metaVisitas.valla_min) : undefined,
+          }))
+        : undefined,
+      geo: geoSeries.length
+        ? geoSeries.map((p: any) => ({
+            etapa: String(p.etapa ?? ""),
+            label: String(p.label ?? ""),
+            denom: Number(p.denom ?? 0),
+            numer: Number(p.numer ?? 0),
+            pct: Number(p.denom ?? 0)
+              ? Math.round((Number(p.numer ?? 0) / Number(p.denom ?? 0)) * 1000) / 10
+              : 0,
+            meta: metaGeo ? Number(metaGeo.valla_min) : undefined,
+          }))
+        : undefined,
+    },
+    charts: [
+      ncOkUbigeo && ncSeries.length
+        ? {
+            key: "nc",
+            title: "Cumplimiento NC (tamizaje) por mes",
+            svgId: "chart-nc",
+          }
+        : null,
+      visitasOkUbigeo && visitasSeries.length
+        ? {
+            key: "visitas",
+            title:
+              "Porcentaje de niños de 1 a 12 meses de edad que reciben visitas domiciliarias por actor social de manera oportuna y completa.",
+            svgId: "chart-visitas",
+          }
+        : null,
+      visitasOkUbigeo && geoSeries.length
+        ? {
+            key: "geo",
+            title: "Cumplimiento de visitas georreferenciadas",
+            svgId: "chart-geo",
+          }
+        : null,
+    ].filter(Boolean) as any,
+  };
+
   return (
     <AppShell user={user} title="Dashboard">
       <div className="flex flex-col gap-4">
@@ -224,151 +340,41 @@ export default async function DashboardPage(props: {
             ) : null}
           </div>
 
-          <form className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
-            {role === "SUPER ADMIN" || role === "SUPERVISOR" ? (
+          {role === "SUPER ADMIN" || role === "SUPERVISOR" ? (
+            <div className="mt-2">
+              <DashboardFiltersClient
+                ubigeos={ubigeos}
+                initialUbigeo={scopeUbigeo}
+                initialYm={ymOf(selectedMonth)}
+              />
+              <div className="mt-3 flex justify-end">
+                <DashboardPdfButton payload={pdfPayload as any} />
+              </div>
+            </div>
+          ) : (
+            <form className="mt-4 flex flex-col gap-3 md:flex-row md:items-end">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-zinc-900">
-                  Ubigeo
-                </label>
+                <label className="block text-sm font-medium text-zinc-900">Mes</label>
                 <select
-                  name="ubigeo"
-                  defaultValue={scopeUbigeo}
+                  name="ym"
+                  defaultValue={ymOf(selectedMonth)}
                   className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                 >
-                  {ubigeos.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
+                  {months.map((m) => (
+                    <option key={`${m.year}-${m.numero_mes}`} value={`${m.year}-${m.numero_mes}`}>
+                      {m.meses} {m.year} (N° {m.numero_mes})
                     </option>
                   ))}
                 </select>
               </div>
-            ) : null}
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-zinc-900">
-                Mes
-              </label>
-              <select
-                name="ym"
-                defaultValue={`${selectedMonth.year}-${selectedMonth.numero_mes}`}
-                className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
-              >
-                {months.map((m) => (
-                  <option key={`${m.year}-${m.numero_mes}`} value={`${m.year}-${m.numero_mes}`}>
-                    {m.meses} {m.year} (N° {m.numero_mes})
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800">
-              Ver
-            </button>
-            <div className="md:ml-auto">
-              <DashboardPdfButton
-                payload={{
-                  scopeUbigeo: scopeUbigeo,
-                  etapa: selectedMonth.etapa,
-                  periodoLabel: `${selectedMonth.meses} ${selectedMonth.year}`,
-                  userLabel: user.nombre,
-                  role: role,
-                  totals: totalsPoint
-                    ? { total: totalsPoint.total, assigned: totalsPoint.assigned }
-                    : undefined,
-                  nc: ncSelected
-                    ? {
-                        denom: ncSelected.denom_total,
-                        numer: ncSelected.num_total,
-                        pct: ncSelected.denom_total
-                          ? Math.round((ncSelected.num_total / ncSelected.denom_total) * 1000) / 10
-                          : 0,
-                        meta: metaNc ? Number(metaNc.valla_min) : undefined,
-                      }
-                    : undefined,
-                  visitas: visitasDetalle
-                    ? {
-                        denom: visitasDetalle.denom_total,
-                        numer: visitasDetalle.numer_total,
-                        pct: visitasDetalle.denom_total
-                          ? Math.round((visitasDetalle.numer_total / visitasDetalle.denom_total) * 1000) / 10
-                          : 0,
-                        meta: metaVisitas ? Number(metaVisitas.valla_min) : undefined,
-                      }
-                    : undefined,
-                  geo: geoSelected
-                    ? {
-                        denom: geoSelected.denom,
-                        numer: geoSelected.numer,
-                        pct: geoSelected.denom
-                          ? Math.round((geoSelected.numer / geoSelected.denom) * 1000) / 10
-                          : 0,
-                        meta: metaGeo ? Number(metaGeo.valla_min) : undefined,
-                      }
-                    : undefined,
-                  series: {
-                    nc: ncSeries.length
-                      ? ncSeries.map((m: any) => ({
-                          etapa: String(m.etapa ?? ""),
-                          label: String(m.label ?? ""),
-                          denom: Number(m.denom_total ?? 0),
-                          numer: Number(m.num_total ?? 0),
-                          pct: Number(m.denom_total ?? 0)
-                            ? Math.round((Number(m.num_total ?? 0) / Number(m.denom_total ?? 0)) * 1000) / 10
-                            : 0,
-                          meta: metaNc ? Number(metaNc.valla_min) : undefined,
-                        }))
-                      : undefined,
-                    visitas: visitasSeries.length
-                      ? visitasSeries.map((p: any) => ({
-                          etapa: String(p.etapa ?? ""),
-                          label: String(p.label ?? ""),
-                          denom: Number(p.denom ?? 0),
-                          numer: Number(p.numer ?? 0),
-                          pct: Number(p.denom ?? 0)
-                            ? Math.round((Number(p.numer ?? 0) / Number(p.denom ?? 0)) * 1000) / 10
-                            : 0,
-                          meta: metaVisitas ? Number(metaVisitas.valla_min) : undefined,
-                        }))
-                      : undefined,
-                    geo: geoSeries.length
-                      ? geoSeries.map((p: any) => ({
-                          etapa: String(p.etapa ?? ""),
-                          label: String(p.label ?? ""),
-                          denom: Number(p.denom ?? 0),
-                          numer: Number(p.numer ?? 0),
-                          pct: Number(p.denom ?? 0)
-                            ? Math.round((Number(p.numer ?? 0) / Number(p.denom ?? 0)) * 1000) / 10
-                            : 0,
-                          meta: metaGeo ? Number(metaGeo.valla_min) : undefined,
-                        }))
-                      : undefined,
-                  },
-                  charts: [
-                    ncOkUbigeo && ncSeries.length
-                      ? {
-                          key: "nc",
-                          title: "Cumplimiento NC (tamizaje) por mes",
-                          svgId: "chart-nc",
-                        }
-                      : null,
-                    visitasOkUbigeo && visitasSeries.length
-                      ? {
-                          key: "visitas",
-                          title:
-                            "Porcentaje de niños de 1 a 12 meses de edad que reciben visitas domiciliarias por actor social de manera oportuna y completa.",
-                          svgId: "chart-visitas",
-                        }
-                      : null,
-                    visitasOkUbigeo && geoSeries.length
-                      ? {
-                          key: "geo",
-                          title: "Cumplimiento de visitas georreferenciadas",
-                          svgId: "chart-geo",
-                        }
-                      : null,
-                  ].filter(Boolean) as any,
-                }}
-              />
-            </div>
-          </form>
+              <button className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800">
+                Ver
+              </button>
+              <div className="md:ml-auto">
+                <DashboardPdfButton payload={pdfPayload as any} />
+              </div>
+            </form>
+          )}
         </div>
 
         {totalsPoint ? (
