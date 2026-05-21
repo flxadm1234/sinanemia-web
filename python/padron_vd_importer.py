@@ -154,6 +154,30 @@ def fetch_last_by_dni(cur, dni_list):
     return out
 
 
+def fetch_existing_dni_by_ubigeo_etapa(cur, ubigeo: int, etapa_val: date, dni_list):
+    out = set()
+    if not dni_list:
+        return out
+    chunk = 900
+    for i in range(0, len(dni_list), chunk):
+        part = dni_list[i : i + chunk]
+        placeholders = ",".join(["%s"] * len(part))
+        sql = f"""
+          SELECT dni
+          FROM padronnominal
+          WHERE ubigeo = %s
+            AND DATE_FORMAT(etapa, '%%Y-%%m-01') = %s
+            AND TRIM(COALESCE(tipovd,'')) = '1'
+            AND dni IN ({placeholders})
+        """
+        cur.execute(sql, [ubigeo, etapa_val] + part)
+        for row in cur.fetchall():
+            dni = str(row[0] or "").strip()
+            if dni:
+                out.add(dni)
+    return out
+
+
 INSERT_SQL = """
 INSERT INTO padronnominal (
   rango, ccpp, direccion, dni, nombres, fecha_nac, dnimadre,
@@ -270,6 +294,7 @@ def run_import(job_id: str, file_path: str):
 
     batch_size = 500
     inserted_total = 0
+    skipped_total = 0
     processed = 0
     last_tick = time.time()
 
@@ -278,13 +303,17 @@ def run_import(job_id: str, file_path: str):
     for i in range(0, total_rows, batch_size):
         batch = records[i : i + batch_size]
         values = []
-        for r in batch:
-            dni = r.get("dni")
-            last = last_map.get(dni, {})
+        computed = []
+        groups = {}
 
+        for r in batch:
+            dni = str(r.get("dni") or "").strip()
+            if not dni:
+                continue
             ubigeo = r.get("ubigeo")
             if ubigeo is None:
                 continue
+            ubigeo_i = int(ubigeo)
 
             etapa_val = r.get("etapa")
             if etapa_val is None:
@@ -298,10 +327,25 @@ def run_import(job_id: str, file_path: str):
             if isinstance(etapa_val, date):
                 etapa_val = etapa_from_month(etapa_val)
 
-            ccpp_raw = r.get("ccpp")
+            k = (ubigeo_i, etapa_val)
+            groups.setdefault(k, set()).add(dni)
+            computed.append((r, ubigeo_i, etapa_val, dni))
+
+        existing_by_key = {}
+        for k, dset in groups.items():
+            u, e = k
+            existing_by_key[k] = fetch_existing_dni_by_ubigeo_etapa(cur, u, e, sorted(dset))
+
+        for r, ubigeo_i, etapa_val, dni in computed:
+            if dni in existing_by_key.get((ubigeo_i, etapa_val), set()):
+                skipped_total += 1
+                continue
+
+            last = last_map.get(dni, {})
             ccpp_excel = to_text(ccpp_raw)
             if not ccpp_excel or ccpp_excel.strip() == "#N/D":
                 ccpp = to_text(last.get("ccpp"))
+                referencia = to_text(last.get("referencia")) or ""
                 referencia = to_text(last.get("referencia")) or ""
             else:
                 ccpp = ccpp_excel
@@ -328,7 +372,7 @@ def run_import(job_id: str, file_path: str):
                     r.get("nrovd") or None,
                     r.get("fecha_inicio_vd") or None,
                     r.get("fecha_fin_vd") or None,
-                    ubigeo,
+                    ubigeo_i,
                     "1",
                     r.get("actorsocial") or None,
                     r.get("responsable") or None,
@@ -359,7 +403,7 @@ def run_import(job_id: str, file_path: str):
                 progress=progress,
                 processed_rows=processed,
                 inserted_rows=inserted_total,
-                message=f"Procesando... {processed}/{total_rows}",
+                message=f"Procesando... {processed}/{total_rows} · Omitidos: {skipped_total}",
             )
             db.commit()
             last_tick = now
@@ -372,10 +416,10 @@ def run_import(job_id: str, file_path: str):
         processed_rows=processed,
         inserted_rows=inserted_total,
         finished_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-        message=f"Completado. Insertados: {inserted_total}",
+        message=f"Completado. Insertados: {inserted_total} · Omitidos: {skipped_total}",
     )
     db.commit()
-    log_line(f"Done. processed={processed} inserted={inserted_total}")
+    log_line(f"Done. processed={processed} inserted={inserted_total} skipped={skipped_total}")
 
 
 def main():
