@@ -1,18 +1,34 @@
 "use client";
 
-import { useActionState, useMemo } from "react";
+import { useActionState, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 
-type State = { ok: true; message: string } | { ok: false; message: string } | null;
+type State =
+  | { ok: true; message: string; newId?: number }
+  | { ok: false; message: string }
+  | null;
 
 export function PadronVdConfigFormClient(props: {
+  cfgId: number;
   cfg: Record<string, any>;
+  configs: { id: number; name: string }[];
   action: any;
 }) {
+  const router = useRouter();
   const [state, act, pending] = useActionState<State, FormData>(props.action as any, null);
   const msg = useMemo(() => state?.message ?? "", [state]);
 
+  useEffect(() => {
+    if (!state || !("newId" in state)) return;
+    const nid = Number((state as any).newId ?? 0);
+    if (!Number.isFinite(nid) || nid <= 0) return;
+    router.push(`/admin/carga-vd/config?id=${nid}`);
+    router.refresh();
+  }, [router, state]);
+
   return (
     <form action={act} className="mt-6 space-y-6">
+      <input type="hidden" name="config_id" value={String(props.cfgId)} />
       {msg ? (
         <div
           className={
@@ -25,6 +41,36 @@ export function PadronVdConfigFormClient(props: {
           {msg}
         </div>
       ) : null}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div>
+          <label className="block text-sm font-medium text-zinc-900">Configuración</label>
+          <select
+            value={String(props.cfgId)}
+            onChange={(e) => {
+              const id = Number(e.target.value);
+              if (!Number.isFinite(id) || id <= 0) return;
+              router.push(`/admin/carga-vd/config?id=${id}`);
+            }}
+            className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          >
+            {props.configs.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-zinc-900">Nombre</label>
+          <input
+            name="name"
+            required
+            defaultValue={props.cfg.name}
+            className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          />
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div>
@@ -126,9 +172,19 @@ export function PadronVdConfigFormClient(props: {
         </a>
         <button
           disabled={pending}
+          name="op"
+          value="create"
+          className="rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+        >
+          {pending ? "Guardando..." : "Guardar como nueva"}
+        </button>
+        <button
+          disabled={pending}
+          name="op"
+          value="update"
           className="rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
         >
-          {pending ? "Guardando..." : "Guardar"}
+          {pending ? "Guardando..." : "Guardar cambios"}
         </button>
       </div>
     </form>

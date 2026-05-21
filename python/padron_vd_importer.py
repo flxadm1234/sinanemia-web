@@ -105,11 +105,13 @@ def job_update(cur, job_id: str, **fields):
     cur.execute(f"UPDATE padron_vd_import_jobs SET {', '.join(set_parts)} WHERE id = %s", vals)
 
 
-def load_config(cur):
-    cur.execute("SELECT * FROM padron_vd_import_config WHERE id = 1 LIMIT 1")
+def load_config(cur, config_id: int):
+    cur.execute("SELECT * FROM padron_vd_import_configs WHERE id = %s LIMIT 1", [config_id])
     r = cur.fetchone()
     if not r:
-        raise Exception("No existe configuración de columnas (padron_vd_import_config).")
+        raise Exception(
+            f"No existe configuración de columnas (padron_vd_import_configs) con id={config_id}."
+        )
     cols = [d[0] for d in cur.description]
     return dict(zip(cols, r))
 
@@ -167,7 +169,6 @@ def fetch_existing_dni_by_ubigeo_etapa(cur, ubigeo: int, etapa_val: date, dni_li
           FROM padronnominal
           WHERE ubigeo = %s
             AND DATE_FORMAT(etapa, '%%Y-%%m-01') = %s
-            AND TRIM(COALESCE(tipovd,'')) = '1'
             AND dni IN ({placeholders})
         """
         cur.execute(sql, [ubigeo, etapa_val] + part)
@@ -209,15 +210,15 @@ def etapa_from_month(d: date):
     return date(d.year, d.month, 1)
 
 
-def run_import(job_id: str, file_path: str):
+def run_import(job_id: str, file_path: str, config_id: int):
     load_dotenv(os.getenv("PADRON_VD_DOTENV", ".env.local"), override=False)
     load_dotenv(override=False)
 
-    log_line(f"Job {job_id} starting. File: {file_path}")
+    log_line(f"Job {job_id} starting. File: {file_path} config_id={config_id}")
     db = connect_db()
     cur = db.cursor()
 
-    cfg = load_config(cur)
+    cfg = load_config(cur, config_id)
     db.commit()
 
     job_update(
@@ -297,6 +298,7 @@ def run_import(job_id: str, file_path: str):
     skipped_total = 0
     processed = 0
     last_tick = time.time()
+    seen_keys = set()
 
     cur.execute("SET SESSION sql_mode = ''")
 
@@ -337,9 +339,14 @@ def run_import(job_id: str, file_path: str):
             existing_by_key[k] = fetch_existing_dni_by_ubigeo_etapa(cur, u, e, sorted(dset))
 
         for r, ubigeo_i, etapa_val, dni in computed:
+            k3 = (ubigeo_i, etapa_val, dni)
+            if k3 in seen_keys:
+                skipped_total += 1
+                continue
             if dni in existing_by_key.get((ubigeo_i, etapa_val), set()):
                 skipped_total += 1
                 continue
+            seen_keys.add(k3)
 
             last = last_map.get(dni, {})
             ccpp_raw = r.get("ccpp")
@@ -426,10 +433,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--job", required=True)
     ap.add_argument("--file", required=True)
+    ap.add_argument("--config", required=False, type=int, default=1)
     args = ap.parse_args()
 
     try:
-        run_import(args.job, args.file)
+        run_import(args.job, args.file, int(args.config or 1))
     except Exception as e:
         try:
             load_dotenv(os.getenv("PADRON_VD_DOTENV", ".env.local"), override=False)

@@ -20,6 +20,7 @@ export type VisitasImportJob = {
 
 export type VisitasImportConfig = {
   id: number;
+  name: string;
   sheet_index: number;
   start_row: number;
   col_ubigeo: number;
@@ -31,9 +32,17 @@ export type VisitasImportConfig = {
   col_estado_intervencion: number | null;
   col_latitud: number | null;
   col_longitud: number | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
-const defaultConfig: Omit<VisitasImportConfig, "id"> = {
+export type VisitasImportConfigSummary = { id: number; name: string };
+
+const defaultConfig: Omit<
+  VisitasImportConfig,
+  "id" | "name" | "created_by" | "created_at" | "updated_at"
+> = {
   sheet_index: 0,
   start_row: 9,
   col_ubigeo: 0,
@@ -51,8 +60,9 @@ export async function ensureVisitasTables() {
   const pool = getDbPool();
 
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS visitas_import_config (
-      id INT NOT NULL PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS visitas_import_configs (
+      id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
       sheet_index INT NOT NULL DEFAULT 0,
       start_row INT NOT NULL DEFAULT 9,
       col_ubigeo INT NOT NULL DEFAULT 0,
@@ -64,7 +74,10 @@ export async function ensureVisitasTables() {
       col_estado_intervencion INT NULL,
       col_latitud INT NULL,
       col_longitud INT NULL,
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      created_by VARCHAR(15) NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_name (name)
     ) ENGINE=InnoDB
   `);
 
@@ -78,6 +91,7 @@ export async function ensureVisitasTables() {
       inserted_rows INT NOT NULL DEFAULT 0,
       file_name VARCHAR(255) NULL,
       requested_by VARCHAR(15) NULL,
+      config_id INT NULL,
       started_at DATETIME NULL,
       finished_at DATETIME NULL,
       message TEXT NULL,
@@ -131,36 +145,122 @@ export async function ensureVisitasTables() {
     ) ENGINE=InnoDB
   `);
 
-  const [rows] = await pool.query("SELECT id FROM visitas_import_config WHERE id=1 LIMIT 1");
-  if (!(rows as any[]).length) {
-    await pool.query(
-      `INSERT INTO visitas_import_config
-        (id, sheet_index, start_row, col_ubigeo, col_dni_nino, col_etapa_text, col_visitas_completas, col_fecha_intervencion, col_dispositivo, col_estado_intervencion, col_latitud, col_longitud)
-       VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        defaultConfig.sheet_index,
-        defaultConfig.start_row,
-        defaultConfig.col_ubigeo,
-        defaultConfig.col_dni_nino,
-        defaultConfig.col_etapa_text,
-        defaultConfig.col_visitas_completas,
-        defaultConfig.col_fecha_intervencion,
-        defaultConfig.col_dispositivo,
-        defaultConfig.col_estado_intervencion,
-        defaultConfig.col_latitud,
-        defaultConfig.col_longitud,
-      ],
-    );
-  }
+  try {
+    await pool.query("ALTER TABLE visitas_import_jobs ADD COLUMN config_id INT NULL");
+  } catch {}
+
+  try {
+    await pool.query("ALTER TABLE visitas_import_jobs ADD KEY idx_config (config_id)");
+  } catch {}
+
+  const [cfgRows] = await pool.query("SELECT id FROM visitas_import_configs ORDER BY id ASC LIMIT 1");
+  if ((cfgRows as any[]).length) return;
+
+  let migrated: any = null;
+  try {
+    const [rows] = await pool.query("SELECT * FROM visitas_import_config WHERE id = 1 LIMIT 1");
+    migrated = (rows as any[])[0] ?? null;
+  } catch {}
+
+  const d = migrated
+    ? {
+        sheet_index: Number(migrated.sheet_index ?? defaultConfig.sheet_index),
+        start_row: Number(migrated.start_row ?? defaultConfig.start_row),
+        col_ubigeo: Number(migrated.col_ubigeo ?? defaultConfig.col_ubigeo),
+        col_dni_nino: Number(migrated.col_dni_nino ?? defaultConfig.col_dni_nino),
+        col_etapa_text: migrated.col_etapa_text == null ? null : Number(migrated.col_etapa_text),
+        col_visitas_completas:
+          migrated.col_visitas_completas == null ? null : Number(migrated.col_visitas_completas),
+        col_fecha_intervencion: Number(
+          migrated.col_fecha_intervencion ?? defaultConfig.col_fecha_intervencion,
+        ),
+        col_dispositivo: migrated.col_dispositivo == null ? null : Number(migrated.col_dispositivo),
+        col_estado_intervencion:
+          migrated.col_estado_intervencion == null
+            ? null
+            : Number(migrated.col_estado_intervencion),
+        col_latitud: migrated.col_latitud == null ? null : Number(migrated.col_latitud),
+        col_longitud: migrated.col_longitud == null ? null : Number(migrated.col_longitud),
+      }
+    : defaultConfig;
+
+  await pool.query(
+    `INSERT INTO visitas_import_configs
+      (name, sheet_index, start_row, col_ubigeo, col_dni_nino, col_etapa_text, col_visitas_completas, col_fecha_intervencion, col_dispositivo, col_estado_intervencion, col_latitud, col_longitud)
+     VALUES ('Default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      d.sheet_index,
+      d.start_row,
+      d.col_ubigeo,
+      d.col_dni_nino,
+      d.col_etapa_text,
+      d.col_visitas_completas,
+      d.col_fecha_intervencion,
+      d.col_dispositivo,
+      d.col_estado_intervencion,
+      d.col_latitud,
+      d.col_longitud,
+    ],
+  );
 }
 
-export async function getVisitasConfig(): Promise<VisitasImportConfig> {
+export async function listVisitasConfigs(): Promise<VisitasImportConfigSummary[]> {
   const pool = getDbPool();
-  const [rows] = await pool.query("SELECT * FROM visitas_import_config WHERE id=1 LIMIT 1");
-  return (rows as any[])[0] as VisitasImportConfig;
+  const [rows] = await pool.query("SELECT id, name FROM visitas_import_configs ORDER BY name ASC");
+  return (rows as any[]).map((r) => ({ id: Number(r.id), name: String(r.name || "") }));
 }
 
-export async function updateVisitasConfig(patch: Partial<Omit<VisitasImportConfig, "id">>) {
+export async function getVisitasConfig(configId: number): Promise<VisitasImportConfig | null> {
+  const pool = getDbPool();
+  const [rows] = await pool.query("SELECT * FROM visitas_import_configs WHERE id=? LIMIT 1", [
+    configId,
+  ]);
+  return ((rows as any[])[0] as VisitasImportConfig | undefined) ?? null;
+}
+
+export async function getDefaultVisitasConfigId(): Promise<number> {
+  const pool = getDbPool();
+  const [rows] = await pool.query("SELECT id FROM visitas_import_configs ORDER BY id ASC LIMIT 1");
+  const id = Number((rows as any[])?.[0]?.id ?? 0);
+  return Number.isFinite(id) && id > 0 ? id : 1;
+}
+
+export async function createVisitasConfig(params: {
+  name: string;
+  createdBy?: string | null;
+  config: Omit<VisitasImportConfig, "id" | "name" | "created_by" | "created_at" | "updated_at">;
+}) {
+  const pool = getDbPool();
+  const d = params.config;
+  const [res] = await pool.query(
+    `INSERT INTO visitas_import_configs
+      (name, sheet_index, start_row, col_ubigeo, col_dni_nino, col_etapa_text, col_visitas_completas, col_fecha_intervencion, col_dispositivo, col_estado_intervencion, col_latitud, col_longitud, created_by)
+     VALUES
+      (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      params.name,
+      d.sheet_index,
+      d.start_row,
+      d.col_ubigeo,
+      d.col_dni_nino,
+      d.col_etapa_text,
+      d.col_visitas_completas,
+      d.col_fecha_intervencion,
+      d.col_dispositivo,
+      d.col_estado_intervencion,
+      d.col_latitud,
+      d.col_longitud,
+      params.createdBy ?? null,
+    ],
+  );
+  return Number((res as any)?.insertId ?? 0);
+}
+
+export async function updateVisitasConfig(params: {
+  id: number;
+  patch: Partial<Omit<VisitasImportConfig, "id" | "created_by" | "created_at" | "updated_at">>;
+}) {
+  const patch = params.patch;
   const keys = Object.keys(patch) as (keyof typeof patch)[];
   if (!keys.length) return;
   const set: string[] = [];
@@ -169,9 +269,9 @@ export async function updateVisitasConfig(patch: Partial<Omit<VisitasImportConfi
     set.push(`${String(k)} = ?`);
     values.push((patch as any)[k]);
   }
-  values.push(1);
+  values.push(params.id);
   const pool = getDbPool();
-  await pool.query(`UPDATE visitas_import_config SET ${set.join(", ")} WHERE id = ?`, values);
+  await pool.query(`UPDATE visitas_import_configs SET ${set.join(", ")} WHERE id = ?`, values);
 }
 
 export async function getVisitasJobById(id: string) {

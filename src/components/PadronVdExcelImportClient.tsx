@@ -14,8 +14,11 @@ type Job = {
 
 export function PadronVdExcelImportClient(props: {
   canEditConfig: boolean;
+  configs: { id: number; name: string }[];
+  defaultConfigId: number;
 }) {
   const [file, setFile] = useState<File | null>(null);
+  const [configId, setConfigId] = useState<number>(() => props.defaultConfigId);
   const [jobId, setJobId] = useState<string>("");
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState<string>("");
@@ -29,6 +32,12 @@ export function PadronVdExcelImportClient(props: {
     const inserted = job.inserted_rows || 0;
     return `${processed} / ${total} · Insertados: ${inserted}`;
   }, [job]);
+
+  useEffect(() => {
+    if (!props.configs?.length) return;
+    if (props.configs.some((c) => c.id === configId)) return;
+    setConfigId(props.defaultConfigId || props.configs[0]!.id);
+  }, [configId, props.configs, props.defaultConfigId]);
 
   useEffect(() => {
     if (!jobId) return;
@@ -58,6 +67,10 @@ export function PadronVdExcelImportClient(props: {
   const onStart = async () => {
     setError("");
     setJob(null);
+    if (!props.configs?.length) {
+      setError("No hay configuraciones registradas. Solicita al SUPER ADMIN crear una configuración.");
+      return;
+    }
     if (!file) {
       setError("Selecciona un archivo Excel.");
       return;
@@ -66,6 +79,7 @@ export function PadronVdExcelImportClient(props: {
     try {
       const fd = new FormData();
       fd.append("file", file);
+      fd.append("config_id", String(configId || props.defaultConfigId || props.configs[0]?.id || ""));
       const res = await fetch("/api/padron/vd-import", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo iniciar la carga");
@@ -103,6 +117,20 @@ export function PadronVdExcelImportClient(props: {
       ) : null}
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="w-full sm:w-72">
+          <label className="block text-sm font-medium text-zinc-900">Configuración</label>
+          <select
+            value={String(configId)}
+            onChange={(e) => setConfigId(Number(e.target.value))}
+            className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+          >
+            {props.configs.map((c) => (
+              <option key={c.id} value={String(c.id)}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="flex-1">
           <label className="block text-sm font-medium text-zinc-900">
             Archivo Excel (.xlsx/.xls)

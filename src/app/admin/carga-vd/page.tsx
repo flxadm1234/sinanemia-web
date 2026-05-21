@@ -1,6 +1,6 @@
 import { AppShell } from "@/components/AppShell";
 import { requireSession } from "@/lib/auth";
-import { ensurePadronVdTables } from "@/lib/padronVdImport";
+import { ensurePadronVdTables, getDefaultPadronVdConfigId, listPadronVdConfigs } from "@/lib/padronVdImport";
 import { PadronVdExcelImportClient } from "@/components/PadronVdExcelImportClient";
 
 export default async function CargaVdPage() {
@@ -21,11 +21,15 @@ export default async function CargaVdPage() {
   }
 
   await ensurePadronVdTables();
+  const configs = await listPadronVdConfigs();
+  const defaultConfigId = await getDefaultPadronVdConfigId();
 
   return (
     <AppShell user={user} title="Padrón de niños">
       <PadronVdExcelImportClient
-        canEditConfig={user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN"}
+        canEditConfig={user.tipo === "SUPER ADMIN"}
+        configs={configs}
+        defaultConfigId={defaultConfigId}
       />
     </AppShell>
   );

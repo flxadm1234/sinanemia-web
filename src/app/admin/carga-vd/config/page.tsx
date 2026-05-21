@@ -1,6 +1,11 @@
 import { AppShell } from "@/components/AppShell";
-import { requireAdminOrSuperAdmin } from "@/lib/auth";
-import { ensurePadronVdTables, getPadronVdConfig } from "@/lib/padronVdImport";
+import { requireSuperAdmin } from "@/lib/auth";
+import {
+  ensurePadronVdTables,
+  getDefaultPadronVdConfigId,
+  getPadronVdConfig,
+  listPadronVdConfigs,
+} from "@/lib/padronVdImport";
 import { updatePadronVdConfigAction } from "./actions";
 import { PadronVdConfigFormClient } from "@/components/PadronVdConfigFormClient";
 
@@ -11,12 +16,22 @@ function toOneBased(v: number | null | undefined) {
   return String(n + 1);
 }
 
-export default async function ConfigCargaVdPage() {
-  const user = await requireAdminOrSuperAdmin();
+export default async function ConfigCargaVdPage(props: { searchParams?: Promise<any> }) {
+  const user = await requireSuperAdmin();
   await ensurePadronVdTables();
-  const cfg = await getPadronVdConfig();
+  const configs = await listPadronVdConfigs();
+  const sp = (await props.searchParams) ?? {};
+  const idRaw = String(sp?.id ?? "").trim();
+  const parsedId = idRaw ? Number(idRaw) : NaN;
+  const selectedId =
+    Number.isFinite(parsedId) && parsedId > 0
+      ? Math.trunc(parsedId)
+      : await getDefaultPadronVdConfigId();
+  const cfg = (await getPadronVdConfig(selectedId)) ?? (await getPadronVdConfig(await getDefaultPadronVdConfigId()));
+  if (!cfg) throw new Error("No existe configuración de columnas registrada.");
 
   const clientCfg = {
+    name: cfg.name,
     sheet_index: cfg.sheet_index,
     start_row: cfg.start_row,
     col_ubigeo: toOneBased(cfg.col_ubigeo),
@@ -46,7 +61,12 @@ export default async function ConfigCargaVdPage() {
         <div className="mt-1 text-sm text-zinc-600">
           Ingresa el número de columna (A=1, B=2, ..., Z=26, AA=27). Deja vacío si no existe.
         </div>
-        <PadronVdConfigFormClient cfg={clientCfg} action={updatePadronVdConfigAction} />
+        <PadronVdConfigFormClient
+          cfgId={cfg.id}
+          cfg={clientCfg}
+          configs={configs}
+          action={updatePadronVdConfigAction}
+        />
       </div>
     </AppShell>
   );

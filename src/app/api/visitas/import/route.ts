@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { ensureVisitasTables } from "@/lib/visitasImport";
+import { ensureVisitasTables, getDefaultVisitasConfigId, getVisitasConfig } from "@/lib/visitasImport";
 import { getDbPool } from "@/lib/db";
 import crypto from "crypto";
 import path from "path";
@@ -37,7 +37,7 @@ async function writeUploadToDisk(file: File, jobId: string) {
   return filePath;
 }
 
-async function startPythonJob(params: { jobId: string; filePath: string }) {
+async function startPythonJob(params: { jobId: string; filePath: string; configId: number }) {
   const venvPython = path.join("python", ".venv", "bin", "python3");
   const pythonBin =
     process.env.VISITAS_PYTHON_BIN || (fsSync.existsSync(venvPython) ? venvPython : "python3");
@@ -53,7 +53,7 @@ async function startPythonJob(params: { jobId: string; filePath: string }) {
   await pool.query(
     "UPDATE visitas_import_jobs SET status='running', started_at=NOW(), message=? WHERE id=?",
     [
-      `Iniciando proceso Python... Bin: ${pythonBin} Script: ${script} Log: ${logPath}`,
+      `Iniciando proceso Python... Bin: ${pythonBin} Script: ${script} Log: ${logPath} ConfigId: ${params.configId}`,
       params.jobId,
     ],
   );
@@ -62,19 +62,23 @@ async function startPythonJob(params: { jobId: string; filePath: string }) {
   try {
     fsSync.writeSync(
       fd,
-      `[bootstrap] pythonBin=${pythonBin} script=${script} file=${params.filePath}\n`,
+      `[bootstrap] pythonBin=${pythonBin} script=${script} file=${params.filePath} configId=${params.configId}\n`,
     );
   } catch {}
 
-  const child = spawn(pythonBin, [script, "--job", params.jobId, "--file", params.filePath], {
-    detached: true,
-    stdio: ["ignore", fd, fd],
-    env: {
-      ...process.env,
-      VISITAS_LOG_PATH: logPath,
-      PYTHONUNBUFFERED: "1",
+  const child = spawn(
+    pythonBin,
+    [script, "--job", params.jobId, "--file", params.filePath, "--config", String(params.configId)],
+    {
+      detached: true,
+      stdio: ["ignore", fd, fd],
+      env: {
+        ...process.env,
+        VISITAS_LOG_PATH: logPath,
+        PYTHONUNBUFFERED: "1",
+      },
     },
-  });
+  );
   try {
     fsSync.closeSync(fd);
   } catch {}
@@ -129,14 +133,24 @@ export async function POST(request: Request) {
     }
 
     const pool = getDbPool();
+    const configIdRaw = String(formData.get("config_id") ?? "").trim();
+    const configIdParsed = configIdRaw ? Number(configIdRaw) : NaN;
+    const configId =
+      Number.isFinite(configIdParsed) && configIdParsed > 0
+        ? Math.trunc(configIdParsed)
+        : await getDefaultVisitasConfigId();
+    const cfg = await getVisitasConfig(configId);
+    if (!cfg) {
+      return NextResponse.json({ error: "Configuración inválida." }, { status: 400 });
+    }
     await pool.query(
       `INSERT INTO visitas_import_jobs
-        (id, status, progress, total_rows, processed_rows, inserted_rows, file_name, requested_by)
-       VALUES (?, 'queued', 0, 0, 0, 0, ?, ?)`,
-      [jobId, path.basename(filePath), session.dni],
+        (id, status, progress, total_rows, processed_rows, inserted_rows, file_name, requested_by, config_id)
+       VALUES (?, 'queued', 0, 0, 0, 0, ?, ?, ?)`,
+      [jobId, path.basename(filePath), session.dni, cfg.id],
     );
 
-    await startPythonJob({ jobId, filePath });
+    await startPythonJob({ jobId, filePath, configId: cfg.id });
 
     return NextResponse.json({ ok: true, jobId });
   } catch (e) {

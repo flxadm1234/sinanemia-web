@@ -130,11 +130,13 @@ def job_update(cur, job_id: str, **fields):
     cur.execute(f"UPDATE visitas_import_jobs SET {', '.join(set_parts)} WHERE id = %s", vals)
 
 
-def load_config(cur):
-    cur.execute("SELECT * FROM visitas_import_config WHERE id = 1 LIMIT 1")
+def load_config(cur, config_id: int):
+    cur.execute("SELECT * FROM visitas_import_configs WHERE id = %s LIMIT 1", [config_id])
     r = cur.fetchone()
     if not r:
-        raise Exception("No existe configuración de columnas (visitas_import_config).")
+        raise Exception(
+            f"No existe configuración de columnas (visitas_import_configs) con id={config_id}."
+        )
     cols = [d[0] for d in cur.description]
     return dict(zip(cols, r))
 
@@ -251,15 +253,15 @@ def calc_month_summary(events):
     }
 
 
-def run_import(job_id: str, file_path: str):
+def run_import(job_id: str, file_path: str, config_id: int):
     load_dotenv(os.getenv("VISITAS_DOTENV", ".env.local"), override=False)
     load_dotenv(override=False)
 
-    log_line(f"Job {job_id} starting. File: {file_path}")
+    log_line(f"Job {job_id} starting. File: {file_path} config_id={config_id}")
     db = connect_db()
     cur = db.cursor()
 
-    cfg = load_config(cur)
+    cfg = load_config(cur, config_id)
     db.commit()
 
     job_update(
@@ -467,10 +469,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--job", required=True)
     ap.add_argument("--file", required=True)
+    ap.add_argument("--config", required=False, type=int, default=1)
     args = ap.parse_args()
 
     try:
-        run_import(args.job, args.file)
+        run_import(args.job, args.file, int(args.config or 1))
     except Exception as e:
         try:
             load_dotenv(os.getenv("VISITAS_DOTENV", ".env.local"), override=False)

@@ -1,17 +1,33 @@
 import Link from "next/link";
-import { requireAdminOrSuperAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
-import { ensureVisitasTables, getVisitasConfig } from "@/lib/visitasImport";
+import {
+  ensureVisitasTables,
+  getDefaultVisitasConfigId,
+  getVisitasConfig,
+  listVisitasConfigs,
+} from "@/lib/visitasImport";
 import { VisitasConfigFormClient } from "@/components/VisitasConfigFormClient";
 import { updateVisitasConfigAction } from "./actions";
 
-export default async function VisitasConfigPage() {
-  const user = await requireAdminOrSuperAdmin();
+export default async function VisitasConfigPage(props: { searchParams?: Promise<any> }) {
+  const user = await requireSuperAdmin();
   await ensureVisitasTables();
-  const cfg = await getVisitasConfig();
+  const configs = await listVisitasConfigs();
+  const sp = (await props.searchParams) ?? {};
+  const idRaw = String(sp?.id ?? "").trim();
+  const parsedId = idRaw ? Number(idRaw) : NaN;
+  const selectedId =
+    Number.isFinite(parsedId) && parsedId > 0
+      ? Math.trunc(parsedId)
+      : await getDefaultVisitasConfigId();
+  const cfg =
+    (await getVisitasConfig(selectedId)) ?? (await getVisitasConfig(await getDefaultVisitasConfigId()));
+  if (!cfg) throw new Error("No existe configuración de columnas registrada.");
 
   const uiCfg = {
     ...cfg,
+    name: cfg.name,
     col_ubigeo: cfg.col_ubigeo + 1,
     col_dni_nino: cfg.col_dni_nino + 1,
     col_fecha_intervencion: cfg.col_fecha_intervencion + 1,
@@ -43,7 +59,12 @@ export default async function VisitasConfigPage() {
         </div>
 
         <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
-          <VisitasConfigFormClient cfg={uiCfg} action={updateVisitasConfigAction} />
+          <VisitasConfigFormClient
+            cfgId={cfg.id}
+            cfg={uiCfg}
+            configs={configs}
+            action={updateVisitasConfigAction}
+          />
         </div>
       </div>
     </AppShell>
