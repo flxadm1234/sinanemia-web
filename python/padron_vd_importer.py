@@ -342,10 +342,10 @@ def run_import(job_id: str, file_path: str):
                 continue
 
             last = last_map.get(dni, {})
+            ccpp_raw = r.get("ccpp")
             ccpp_excel = to_text(ccpp_raw)
             if not ccpp_excel or ccpp_excel.strip() == "#N/D":
                 ccpp = to_text(last.get("ccpp"))
-                referencia = to_text(last.get("referencia")) or ""
                 referencia = to_text(last.get("referencia")) or ""
             else:
                 ccpp = ccpp_excel
