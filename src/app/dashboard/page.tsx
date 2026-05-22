@@ -626,7 +626,7 @@ export default async function DashboardPage(props: {
                   <div className="text-sm font-semibold text-zinc-900">
                     Descarga
                   </div>
-                  {role === "INVITADO" || role === "SUPERVISOR" ? (
+                  {role === "INVITADO" ? (
                     <div className="mt-2 text-xs text-zinc-600">
                       La exportación de Excel se encuentra deshabilitada para tu rol.
                     </div>
@@ -748,7 +748,7 @@ export default async function DashboardPage(props: {
 
                   <div className="mt-4 rounded-2xl bg-white ring-1 ring-black/5 p-4">
                     <div className="text-sm font-semibold text-zinc-900">Descarga</div>
-                    {role === "INVITADO" || role === "SUPERVISOR" ? (
+                    {role === "INVITADO" ? (
                       <div className="mt-2 text-xs text-zinc-600">
                         La exportación de Excel se encuentra deshabilitada para tu rol.
                       </div>

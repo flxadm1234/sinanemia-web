@@ -39,7 +39,11 @@ function th(v: unknown, style = "") {
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (session.tipo !== "ADMINISTRADOR" && session.tipo !== "SUPER ADMIN") {
+  if (
+    session.tipo !== "ADMINISTRADOR" &&
+    session.tipo !== "SUPER ADMIN" &&
+    session.tipo !== "SUPERVISOR"
+  ) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -48,7 +52,9 @@ export async function GET(req: Request) {
   const ubigeoParam = String(url.searchParams.get("ubigeo") ?? "").trim();
 
   const ubigeo =
-    session.tipo === "SUPER ADMIN" ? Number(ubigeoParam || "") : Number(session.ubigeo ?? "");
+    session.tipo === "SUPER ADMIN" || session.tipo === "SUPERVISOR"
+      ? Number(ubigeoParam || "")
+      : Number(session.ubigeo ?? "");
 
   if (!Number.isFinite(ubigeo) || ubigeo <= 0) {
     return NextResponse.json({ error: "invalid_ubigeo" }, { status: 400 });

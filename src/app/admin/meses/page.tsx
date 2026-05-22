@@ -20,8 +20,7 @@ export default async function AdminMesesPage(props: {
     user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR";
   const canSelect =
     user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "COORDINADOR";
-  const canDeletePadron =
-    user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR";
+  const canDeletePadron = user.tipo === "SUPER ADMIN";
   const canCreate = canEdit || user.tipo === "INVITADO";
 
   if (

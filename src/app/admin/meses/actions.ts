@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth";
 import {
   createMes,
+  findMesByUbigeoYearNumero,
   setMesSeleccionadoById,
   updateMesById,
   updateMesByIdAny,
@@ -43,6 +44,21 @@ const deletePadronSchema = z.object({
   etapa: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/),
 });
 
+const MONTHS: Record<number, string> = {
+  1: "ENERO",
+  2: "FEBRERO",
+  3: "MARZO",
+  4: "ABRIL",
+  5: "MAYO",
+  6: "JUNIO",
+  7: "JULIO",
+  8: "AGOSTO",
+  9: "SETIEMBRE",
+  10: "OCTUBRE",
+  11: "NOVIEMBRE",
+  12: "DICIEMBRE",
+};
+
 function revalidateMeses() {
   revalidatePath("/admin/meses");
   revalidatePath("/asignacion");
@@ -71,10 +87,23 @@ export async function createMesAction(_: any, formData: FormData) {
       ? String(formData.get("seleccion") ?? "") === "1"
       : false;
 
+  const existing = await findMesByUbigeoYearNumero({
+    ubigeo,
+    year: parsed.data.year,
+    numero_mes: parsed.data.numero_mes,
+  });
+  if (existing) {
+    return {
+      ok: false,
+      message: `Ya existe el mes ${existing.meses} ${existing.year} (N° ${existing.numero_mes}) para el ubigeo ${existing.ubigeo}.`,
+    };
+  }
+
+  const mesesAuto = MONTHS[parsed.data.numero_mes] ?? parsed.data.meses;
   const res = await createMes({
     ubigeo,
     numero_mes: parsed.data.numero_mes,
-    meses: parsed.data.meses,
+    meses: mesesAuto,
     year: parsed.data.year,
     seleccion: sel ? 1 : 0,
   });
@@ -99,6 +128,26 @@ export async function updateMesAction(_: any, formData: FormData) {
   });
   if (!parsed.success) return { ok: false, message: "Datos inválidos." };
 
+  const ubigeoTarget =
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
+      ? parsed.data.ubigeo ?? ""
+      : String(user.ubigeo ?? "");
+  if (!ubigeoTarget) return { ok: false, message: "Ubigeo requerido." };
+
+  const existing = await findMesByUbigeoYearNumero({
+    ubigeo: ubigeoTarget,
+    year: parsed.data.year,
+    numero_mes: parsed.data.numero_mes,
+  });
+  if (existing && Number(existing.idmeses) !== Number(parsed.data.idmeses)) {
+    return {
+      ok: false,
+      message: `Ya existe el mes ${existing.meses} ${existing.year} (N° ${existing.numero_mes}) para el ubigeo ${existing.ubigeo}.`,
+    };
+  }
+
+  const mesesAuto = MONTHS[parsed.data.numero_mes] ?? parsed.data.meses;
+
   if (user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR") {
     const ubigeo = parsed.data.ubigeo ?? "";
     if (!ubigeo) return { ok: false, message: "Ubigeo requerido." };
@@ -106,7 +155,7 @@ export async function updateMesAction(_: any, formData: FormData) {
       idmeses: parsed.data.idmeses,
       patch: {
         numero_mes: parsed.data.numero_mes,
-        meses: parsed.data.meses,
+        meses: mesesAuto,
         year: parsed.data.year,
         ubigeo,
       },
@@ -119,7 +168,7 @@ export async function updateMesAction(_: any, formData: FormData) {
       idmeses: parsed.data.idmeses,
       patch: {
         numero_mes: parsed.data.numero_mes,
-        meses: parsed.data.meses,
+        meses: mesesAuto,
         year: parsed.data.year,
       },
     });

@@ -63,8 +63,7 @@ export async function GET(request: Request) {
   try {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    if (session.tipo === "INVITADO" || session.tipo === "SUPERVISOR")
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    if (session.tipo === "INVITADO") return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
     const url = new URL(request.url);
     const etapa = String(url.searchParams.get("etapa") ?? "").trim();
@@ -73,7 +72,9 @@ export async function GET(request: Request) {
     }
 
     const ubigeoCandidate =
-      session.tipo === "SUPER ADMIN" ? Number(url.searchParams.get("ubigeo")) : session.ubigeo;
+      session.tipo === "SUPER ADMIN" || session.tipo === "SUPERVISOR"
+        ? Number(url.searchParams.get("ubigeo"))
+        : session.ubigeo;
     const ubigeo = Number(ubigeoCandidate);
     if (!Number.isFinite(ubigeo) || ubigeo <= 0) {
       return NextResponse.json({ error: "missing_ubigeo" }, { status: 400 });

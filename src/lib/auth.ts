@@ -171,7 +171,7 @@ export async function requireMesesManage() {
 
 export async function requireMesesDeletePadron() {
   const s = await requireSession();
-  if (s.tipo !== "ADMINISTRADOR" && s.tipo !== "SUPER ADMIN" && s.tipo !== "SUPERVISOR")
+  if (s.tipo !== "SUPER ADMIN")
     redirect(routeForRole(s.tipo));
   return s;
 }

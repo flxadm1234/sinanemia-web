@@ -49,6 +49,35 @@ export async function listMesesAll(): Promise<MesRow[]> {
   return rows as MesRow[];
 }
 
+export async function listMesNumeroByUbigeoYear(input: {
+  ubigeo: number | string;
+  year: number;
+}): Promise<number[]> {
+  const pool = getDbPool();
+  const ubigeoStr = normalizeUbigeo(input.ubigeo);
+  const [rows] = await pool.query(
+    "SELECT numero_mes FROM meses WHERE ubigeo = ? AND year = ? ORDER BY numero_mes ASC",
+    [ubigeoStr, input.year],
+  );
+  return (rows as any[])
+    .map((r) => Number(r.numero_mes))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 12);
+}
+
+export async function findMesByUbigeoYearNumero(input: {
+  ubigeo: number | string;
+  year: number;
+  numero_mes: number;
+}): Promise<MesRow | null> {
+  const pool = getDbPool();
+  const ubigeoStr = normalizeUbigeo(input.ubigeo);
+  const [rows] = await pool.query(
+    "SELECT idmeses, numero_mes, meses, year, seleccion, tramo, ubigeo FROM meses WHERE ubigeo = ? AND year = ? AND numero_mes = ? LIMIT 1",
+    [ubigeoStr, input.year, input.numero_mes],
+  );
+  return ((rows as any[])[0] as MesRow | undefined) ?? null;
+}
+
 export async function findMesById(params: {
   ubigeo: number | string;
   idmeses: number;
