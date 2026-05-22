@@ -245,25 +245,28 @@ export async function updatePersonaAction(formData: FormData) {
   }
 }
 
-export async function deletePersonaAction(_: any, formData: FormData) {
+export async function deletePersonaAction(formData: FormData) {
   const user = await requireSuperAdmin();
   const parsed = deleteSchema.safeParse({
     idpersona: formData.get("idpersona"),
   });
-  if (!parsed.success) return { ok: false, message: "Datos inválidos." };
+  if (!parsed.success) {
+    redirect(`/admin/personas?err=1&msg=${qs("Datos inválidos.")}`);
+  }
 
   const current = await findPersonaById(parsed.data.idpersona);
-  if (!current) return { ok: false, message: "Usuario no encontrado." };
+  if (!current) {
+    redirect(`/admin/personas?err=1&msg=${qs("Usuario no encontrado.")}`);
+  }
   if (String(current.dni ?? "").trim() === String(user.dni ?? "").trim())
-    return { ok: false, message: "No puedes eliminar tu propio usuario." };
+    redirect(`/admin/personas?err=1&msg=${qs("No puedes eliminar tu propio usuario.")}`);
 
   try {
     await deletePersonaById(parsed.data.idpersona);
   } catch {
-    return {
-      ok: false,
-      message: "No se pudo eliminar. Inhabilita el usuario o revisa dependencias en BD.",
-    };
+    redirect(
+      `/admin/personas?err=1&msg=${qs("No se pudo eliminar. Inhabilita el usuario o revisa dependencias en BD.")}`,
+    );
   }
 
   revalidatePath("/admin/personas");
