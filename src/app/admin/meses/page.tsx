@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { requireMesesAccess } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
-import { listMesesAll, listMesesByUbigeo } from "@/lib/meses";
+import {
+  findMesSeleccionadoByUbigeo,
+  listMesesPage,
+  listMesesUbigeoOptions,
+  listMesesYearOptions,
+} from "@/lib/meses";
 import { seleccionarMesAction, deletePadronMesAction } from "./actions";
 import { countPadronPorUbigeoEtapaTipovd } from "@/lib/padronnominal";
 import { DeletePadronButton } from "@/components/DeletePadronButton";
@@ -12,7 +17,13 @@ function pad2(n: number) {
 }
 
 export default async function AdminMesesPage(props: {
-  searchParams?: Promise<{ q?: string; ubigeo?: string; year?: string; estado?: string }>;
+  searchParams?: Promise<{
+    q?: string;
+    ubigeo?: string;
+    year?: string;
+    estado?: string;
+    page?: string;
+  }>;
 }) {
   const user = await requireMesesAccess();
   const ubigeo = user.ubigeo ?? null;
@@ -36,51 +47,63 @@ export default async function AdminMesesPage(props: {
     );
   }
 
-  const rows =
-    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
-      ? await listMesesAll()
-      : await listMesesByUbigeo(ubigeo as number);
   const sp = (await props.searchParams) ?? {};
   const q = String(sp.q ?? "").trim().toLowerCase();
   const filterUbigeo = String(sp.ubigeo ?? "").trim();
   const filterYear = String(sp.year ?? "").trim();
   const estado = String(sp.estado ?? "").trim();
+  const pageSize = 30;
+  const pageNumRaw = Number(sp.page ?? 1);
+  const pageNum = Number.isFinite(pageNumRaw) && pageNumRaw >= 1 ? Math.floor(pageNumRaw) : 1;
+  const offset = (pageNum - 1) * pageSize;
 
-  const filteredRows = rows.filter((r) => {
-    const u = String(r.ubigeo ?? "");
-    const y = String(r.year ?? "");
-    const m = String(r.meses ?? "");
-    const n = String(r.numero_mes ?? "");
-    const isSelected = Number(r.seleccion ?? 0) === 1;
+  const scopedUbigeo =
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
+      ? filterUbigeo
+      : String(ubigeo ?? "");
 
-    if (filterUbigeo && u !== filterUbigeo) return false;
-    if (filterYear && y !== filterYear) return false;
-    if (estado === "selected" && !isSelected) return false;
-    if (estado === "unselected" && isSelected) return false;
-
-    if (!q) return true;
-    const hay = `${u} ${m} ${y} ${n}`.toLowerCase();
-    return hay.includes(q);
+  const yearNum = filterYear ? Number(filterYear) : NaN;
+  const pageRes = await listMesesPage({
+    ubigeo: scopedUbigeo ? scopedUbigeo : undefined,
+    q: q ? q : undefined,
+    year: Number.isFinite(yearNum) ? yearNum : undefined,
+    estado: estado === "selected" || estado === "unselected" ? (estado as any) : undefined,
+    limit: pageSize,
+    offset,
   });
+  const rows = pageRes.rows;
+  const total = pageRes.total;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const from = total ? offset + 1 : 0;
+  const to = Math.min(total, offset + rows.length);
+
   const selected =
     user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
       ? null
-      : filteredRows.find((r) => Number(r.seleccion ?? 0) === 1) ?? null;
+      : await findMesSeleccionadoByUbigeo(ubigeo as number);
 
   const ubigeos = Array.from(
-    new Set(
-      filteredRows
-        .map((r) => Number(r.ubigeo ?? NaN))
-        .filter((n) => Number.isFinite(n)),
-    ),
+    new Set(rows.map((r) => Number(r.ubigeo ?? NaN)).filter((n) => Number.isFinite(n))),
   );
   const countsMap = await countPadronPorUbigeoEtapaTipovd({ ubigeos, tipovd: "1" });
-  const ubigeoOptions = Array.from(
-    new Set(rows.map((r) => Number(r.ubigeo ?? NaN)).filter((n) => Number.isFinite(n))),
-  ).sort((a, b) => a - b);
-  const yearOptions = Array.from(
-    new Set(rows.map((r) => Number(r.year ?? NaN)).filter((n) => Number.isFinite(n))),
-  ).sort((a, b) => b - a);
+  const [ubigeoOptions, yearOptions] = await Promise.all([
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
+      ? listMesesUbigeoOptions()
+      : [Number(ubigeo)],
+    user.tipo === "SUPER ADMIN" || user.tipo === "SUPERVISOR"
+      ? listMesesYearOptions(scopedUbigeo ? scopedUbigeo : undefined)
+      : listMesesYearOptions(ubigeo as number),
+  ]);
+
+  function hrefWithPage(n: number) {
+    const params = new URLSearchParams();
+    if (sp.q) params.set("q", String(sp.q));
+    if (sp.ubigeo) params.set("ubigeo", String(sp.ubigeo));
+    if (sp.year) params.set("year", String(sp.year));
+    if (sp.estado) params.set("estado", String(sp.estado));
+    params.set("page", String(n));
+    return `/admin/meses?${params.toString()}`;
+  }
 
   return (
     <AppShell user={user} title="Meses">
@@ -125,6 +148,39 @@ export default async function AdminMesesPage(props: {
 
         <MesesFiltersClient ubigeos={ubigeoOptions} years={yearOptions} />
 
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-zinc-700">
+          <div>
+            Mostrando <span className="font-semibold">{from}</span>–<span className="font-semibold">{to}</span>{" "}
+            de <span className="font-semibold">{total}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href={hrefWithPage(Math.max(1, pageNum - 1))}
+              aria-disabled={pageNum <= 1}
+              className={
+                "rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 " +
+                (pageNum <= 1 ? "pointer-events-none opacity-50" : "")
+              }
+            >
+              Anterior
+            </Link>
+            <div className="text-xs text-zinc-600">
+              Página <span className="font-semibold">{pageNum}</span> /{" "}
+              <span className="font-semibold">{totalPages}</span>
+            </div>
+            <Link
+              href={hrefWithPage(Math.min(totalPages, pageNum + 1))}
+              aria-disabled={pageNum >= totalPages}
+              className={
+                "rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 " +
+                (pageNum >= totalPages ? "pointer-events-none opacity-50" : "")
+              }
+            >
+              Siguiente
+            </Link>
+          </div>
+        </div>
+
         <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -142,7 +198,7 @@ export default async function AdminMesesPage(props: {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {filteredRows.map((r) => {
+                {rows.map((r) => {
                   const isSelected = Number(r.seleccion ?? 0) === 1;
                   const etapa = `${r.year}-${pad2(Number(r.numero_mes ?? 0))}-01`;
                   const count = countsMap.get(`${Number(r.ubigeo)}|${etapa}`) ?? 0;
@@ -207,7 +263,7 @@ export default async function AdminMesesPage(props: {
                     </tr>
                   );
                 })}
-                {filteredRows.length === 0 ? (
+                {rows.length === 0 ? (
                   <tr>
                     <td
                       className="px-4 py-10 text-center text-zinc-500"

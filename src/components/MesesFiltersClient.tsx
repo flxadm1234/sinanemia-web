@@ -47,6 +47,7 @@ export function MesesFiltersClient(props: {
     setOrDelete("ubigeo", nu);
     setOrDelete("year", ny);
     setOrDelete("estado", ne);
+    params.set("page", "1");
 
     router.push(`/admin/meses?${params.toString()}`);
   };
@@ -143,4 +144,3 @@ export function MesesFiltersClient(props: {
     </div>
   );
 }
-
