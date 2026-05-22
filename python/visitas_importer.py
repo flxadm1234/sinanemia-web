@@ -230,7 +230,7 @@ def calc_month_summary(events):
                     ok = False
                     break
             oportuna = 1 if ok else 0
-    cumple = 1 if (completa == 1 and oportuna == 1) else 0
+    cumple = 1 if (completa == 1 and oportuna == 1 and flag_no == 0 and flag_rech == 0) else 0
 
     v1 = visit_dates[0] if len(visit_dates) >= 1 else None
     v2 = visit_dates[1] if len(visit_dates) >= 2 else None

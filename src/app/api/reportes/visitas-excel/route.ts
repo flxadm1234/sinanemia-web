@@ -55,6 +55,10 @@ function tdDate(v: unknown) {
   return `<td>${escapeHtml(fmtDateDMY(v))}</td>`;
 }
 
+function tdNum(v: unknown) {
+  return `<td style="mso-number-format:'0'">${escapeHtml(v)}</td>`;
+}
+
 export async function GET(request: Request) {
   try {
     const session = await getSession();
@@ -90,6 +94,8 @@ export async function GET(request: Request) {
       "Responsable",
       "Tipo seguro",
       "F. Nac",
+      "En denominador",
+      "Obs. denominador",
       "Visitas esperadas",
       "Visitas registradas",
       "V1",
@@ -98,15 +104,55 @@ export async function GET(request: Request) {
       "Completa",
       "Oportuna",
       "Cumple",
+      "No encontrado",
+      "Rechazado",
+      "Estado (NVₙ)",
       "Visitas georef",
       "Tiene georef",
     ];
+
+    const exclMap = new Map<string, number>();
+    const nvMap = new Map<string, number>();
+
+    for (const r of rows as any[]) {
+      const inDen = Number(r.es_denominador ?? 0) === 1;
+      if (!inDen) {
+        const reason = String(r.obs_denominador ?? "Excluido");
+        exclMap.set(reason, (exclMap.get(reason) ?? 0) + 1);
+      } else {
+        const noEncontrado = Number(r.flag_no_encontrado ?? 0) === 1;
+        const rechazado = Number(r.flag_rechazado ?? 0) === 1;
+        const visitas = Number(r.visitas_count ?? 0);
+        const completa = Number(r.completa ?? 0) === 1;
+        const oportuna = Number(r.oportuna ?? 0) === 1;
+
+        let estado = "Cumple";
+        if (noEncontrado) estado = "No encontrado";
+        else if (rechazado) estado = "Rechazado";
+        else if (!visitas) estado = "Sin registro de visita (Excel)";
+        else if (!completa) estado = "Con visitas pero no completas";
+        else if (!oportuna) estado = "Completas pero no oportunas (7–10d)";
+
+        if (estado !== "Cumple") nvMap.set(estado, (nvMap.get(estado) ?? 0) + 1);
+      }
+    }
 
     const body = rows
       .map((r, idx) => {
         const cumple = Number(r.cumple ?? 0) === 1;
         const visitas = Number(r.visitas_count ?? 0);
-        const bg = cumple ? "#ECFDF5" : visitas > 0 ? "#FEF9C3" : "#FEE2E2";
+        const inDen = Number(r.es_denominador ?? 0) === 1;
+        const noEncontrado = Number(r.flag_no_encontrado ?? 0) === 1;
+        const rechazado = Number(r.flag_rechazado ?? 0) === 1;
+
+        let estado = "Cumple";
+        if (noEncontrado) estado = "No encontrado";
+        else if (rechazado) estado = "Rechazado";
+        else if (!visitas) estado = "Sin registro de visita (Excel)";
+        else if (Number(r.completa ?? 0) !== 1) estado = "Con visitas pero no completas";
+        else if (Number(r.oportuna ?? 0) !== 1) estado = "Completas pero no oportunas (7–10d)";
+
+        const bg = !inDen ? "#E5E7EB" : estado === "Cumple" ? "#ECFDF5" : "#FEF9C3";
         return `<tr style="background:${bg}">
           ${td(idx + 1)}
           ${tdText(r.ubigeo)}
@@ -117,18 +163,33 @@ export async function GET(request: Request) {
           ${tdText(r.responsable ?? "")}
           ${td(r.tiposeguro ?? "")}
           ${tdDate(r.fecha_nac)}
+          ${td(inDen ? "Sí" : "No")}
+          ${td(r.obs_denominador ?? "")}
           ${td(r.expected_visits ?? "")}
-          ${td(r.visitas_count ?? 0)}
+          ${tdNum(r.visitas_count ?? 0)}
           ${tdDate(r.fecha_v1)}
           ${tdDate(r.fecha_v2)}
           ${tdDate(r.fecha_v3)}
           ${td(cumple ? "Sí" : Number(r.completa ?? 0) === 1 ? "Sí" : "No")}
           ${td(Number(r.oportuna ?? 0) === 1 ? "Sí" : "No")}
           ${td(cumple ? "Sí" : "No")}
+          ${td(noEncontrado ? "Sí" : "No")}
+          ${td(rechazado ? "Sí" : "No")}
+          ${td(estado === "Cumple" ? "Cumple" : estado)}
           ${td(r.georef_visits ?? 0)}
           ${td(Number(r.has_georef ?? 0) === 1 ? "Sí" : "No")}
         </tr>`;
       })
+      .join("");
+
+    const exclRows = Array.from(exclMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `<tr>${td(k)}${tdNum(v)}</tr>`)
+      .join("");
+
+    const nvRows = Array.from(nvMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `<tr>${td(k)}${tdNum(v)}</tr>`)
       .join("");
 
     const html = `<!doctype html>
@@ -145,6 +206,30 @@ export async function GET(request: Request) {
           </thead>
           <tbody>
             ${body}
+          </tbody>
+        </table>
+        <br />
+        <table border="1" cellpadding="4" cellspacing="0">
+          <thead>
+            <tr style="background:#111827;color:#fff;font-weight:700">
+              <th>Exclusiones del denominador (Nₙ)</th>
+              <th>Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${exclRows || `<tr><td colspan="2">Sin exclusiones.</td></tr>`}
+          </tbody>
+        </table>
+        <br />
+        <table border="1" cellpadding="4" cellspacing="0">
+          <thead>
+            <tr style="background:#111827;color:#fff;font-weight:700">
+              <th>No suman al numerador (NVₙ) (solo dentro del denominador)</th>
+              <th>Cantidad</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${nvRows || `<tr><td colspan="2">Sin observaciones.</td></tr>`}
           </tbody>
         </table>
       </body>

@@ -59,7 +59,15 @@ export async function computeVisitasMetaSeries(params: {
     SELECT
       DATE_FORMAT(pn.etapa, '%Y-%m-01') AS etapa_mes,
       COUNT(DISTINCT pn.dni) AS denom,
-      COUNT(DISTINCT IF(vm.cumple = 1, pn.dni, NULL)) AS numer
+      COUNT(
+        DISTINCT IF(
+          vm.cumple = 1
+          AND COALESCE(vm.flag_no_encontrado, 0) = 0
+          AND COALESCE(vm.flag_rechazado, 0) = 0,
+          pn.dni,
+          NULL
+        )
+      ) AS numer
     FROM padronnominal pn
     LEFT JOIN visitas_mensual vm
       ON vm.ubigeo = pn.ubigeo
@@ -69,7 +77,6 @@ export async function computeVisitasMetaSeries(params: {
       DATE_FORMAT(pn.etapa, '%Y-%m-01') IN (${placeholders})
       AND pn.ubigeo = ?
       AND ${ninosWhere()}
-      AND ${assignedWhere()}
       AND ${edadEnRangoWhere()}
       AND ${seguroValidoWhere()}
       ${whereExtra.length ? `AND ${whereExtra.join(" AND ")}` : ""}
@@ -170,6 +177,7 @@ export async function computeVisitasGeoSeries(params: {
 
 export type VisitasMetaDetalle = {
   etapa: string;
+  total_padron: number;
   total_asignados: number;
   excl_edad: number;
   excl_seguro: number;
@@ -178,6 +186,8 @@ export type VisitasMetaDetalle = {
   sin_registro_visita: number;
   no_completa: number;
   no_oportuna: number;
+  no_encontrado: number;
+  rechazado: number;
 };
 
 export async function computeVisitasMetaDetalleMes(params: {
@@ -202,14 +212,63 @@ export async function computeVisitasMetaDetalleMes(params: {
   const [rows] = await pool.query(
     `
     SELECT
-      COUNT(*) AS total_asignados,
+      COUNT(*) AS total_padron,
+      SUM(CASE WHEN ${assignedWhere()} THEN 1 ELSE 0 END) AS total_asignados,
       SUM(CASE WHEN NOT ${edadEnRangoWhere()} THEN 1 ELSE 0 END) AS excl_edad,
       SUM(CASE WHEN ${edadEnRangoWhere()} AND NOT ${seguroValidoWhere()} THEN 1 ELSE 0 END) AS excl_seguro,
       SUM(CASE WHEN ${edadEnRangoWhere()} AND ${seguroValidoWhere()} THEN 1 ELSE 0 END) AS denom_total,
-      SUM(CASE WHEN ${edadEnRangoWhere()} AND ${seguroValidoWhere()} AND vm.cumple = 1 THEN 1 ELSE 0 END) AS numer_total,
-      SUM(CASE WHEN ${edadEnRangoWhere()} AND ${seguroValidoWhere()} AND (vm.visitas_count IS NULL OR vm.visitas_count = 0) THEN 1 ELSE 0 END) AS sin_registro_visita,
-      SUM(CASE WHEN ${edadEnRangoWhere()} AND ${seguroValidoWhere()} AND vm.visitas_count > 0 AND vm.completa = 0 THEN 1 ELSE 0 END) AS no_completa,
-      SUM(CASE WHEN ${edadEnRangoWhere()} AND ${seguroValidoWhere()} AND vm.completa = 1 AND vm.oportuna = 0 THEN 1 ELSE 0 END) AS no_oportuna
+      SUM(
+        CASE WHEN
+          ${edadEnRangoWhere()}
+          AND ${seguroValidoWhere()}
+          AND vm.cumple = 1
+          AND COALESCE(vm.flag_no_encontrado, 0) = 0
+          AND COALESCE(vm.flag_rechazado, 0) = 0
+        THEN 1 ELSE 0 END
+      ) AS numer_total,
+      SUM(
+        CASE WHEN
+          ${edadEnRangoWhere()}
+          AND ${seguroValidoWhere()}
+          AND COALESCE(vm.flag_no_encontrado, 0) = 1
+        THEN 1 ELSE 0 END
+      ) AS no_encontrado,
+      SUM(
+        CASE WHEN
+          ${edadEnRangoWhere()}
+          AND ${seguroValidoWhere()}
+          AND COALESCE(vm.flag_rechazado, 0) = 1
+        THEN 1 ELSE 0 END
+      ) AS rechazado,
+      SUM(
+        CASE WHEN
+          ${edadEnRangoWhere()}
+          AND ${seguroValidoWhere()}
+          AND COALESCE(vm.flag_no_encontrado, 0) = 0
+          AND COALESCE(vm.flag_rechazado, 0) = 0
+          AND (vm.visitas_count IS NULL OR vm.visitas_count = 0)
+        THEN 1 ELSE 0 END
+      ) AS sin_registro_visita,
+      SUM(
+        CASE WHEN
+          ${edadEnRangoWhere()}
+          AND ${seguroValidoWhere()}
+          AND COALESCE(vm.flag_no_encontrado, 0) = 0
+          AND COALESCE(vm.flag_rechazado, 0) = 0
+          AND vm.visitas_count > 0
+          AND vm.completa = 0
+        THEN 1 ELSE 0 END
+      ) AS no_completa,
+      SUM(
+        CASE WHEN
+          ${edadEnRangoWhere()}
+          AND ${seguroValidoWhere()}
+          AND COALESCE(vm.flag_no_encontrado, 0) = 0
+          AND COALESCE(vm.flag_rechazado, 0) = 0
+          AND vm.completa = 1
+          AND vm.oportuna = 0
+        THEN 1 ELSE 0 END
+      ) AS no_oportuna
     FROM padronnominal pn
     LEFT JOIN visitas_mensual vm
       ON vm.ubigeo = pn.ubigeo
@@ -219,7 +278,6 @@ export async function computeVisitasMetaDetalleMes(params: {
       DATE_FORMAT(pn.etapa, '%Y-%m-01') = ?
       AND pn.ubigeo = ?
       AND ${ninosWhere()}
-      AND ${assignedWhere()}
       ${whereExtra.length ? `AND ${whereExtra.join(" AND ")}` : ""}
     `,
     values,
@@ -228,6 +286,7 @@ export async function computeVisitasMetaDetalleMes(params: {
   const r = (rows as any[])[0] ?? {};
   return {
     etapa: params.etapa,
+    total_padron: Number(r.total_padron ?? 0),
     total_asignados: Number(r.total_asignados ?? 0),
     excl_edad: Number(r.excl_edad ?? 0),
     excl_seguro: Number(r.excl_seguro ?? 0),
@@ -236,6 +295,8 @@ export async function computeVisitasMetaDetalleMes(params: {
     sin_registro_visita: Number(r.sin_registro_visita ?? 0),
     no_completa: Number(r.no_completa ?? 0),
     no_oportuna: Number(r.no_oportuna ?? 0),
+    no_encontrado: Number(r.no_encontrado ?? 0),
+    rechazado: Number(r.rechazado ?? 0),
   } as VisitasMetaDetalle;
 }
 
@@ -248,6 +309,8 @@ export type VisitaDetalleRow = {
   responsable: string | null;
   tiposeguro: string | null;
   fecha_nac: any;
+  es_denominador: number;
+  obs_denominador: string | null;
   expected_visits: number | null;
   visitas_count: number;
   fecha_v1: any;
@@ -256,6 +319,8 @@ export type VisitaDetalleRow = {
   completa: number;
   oportuna: number;
   cumple: number;
+  flag_no_encontrado: number;
+  flag_rechazado: number;
   georef_visits: number;
   has_georef: number;
 };
@@ -272,7 +337,6 @@ export async function listVisitasDetallePorMes(params: {
     "DATE_FORMAT(pn.etapa, '%Y-%m-01') = ?",
     "pn.ubigeo = ?",
     ninosWhere(),
-    assignedWhere(),
   ];
   const values: any[] = [params.etapa, params.ubigeo];
   if (params.actor) {
@@ -294,6 +358,13 @@ export async function listVisitasDetallePorMes(params: {
       pn.responsable,
       pn.tiposeguro,
       pn.fecha_nac,
+      CASE WHEN ${edadEnRangoWhere()} AND ${seguroValidoWhere()} THEN 1 ELSE 0 END AS es_denominador,
+      CASE
+        WHEN pn.fecha_nac IS NULL THEN 'Sin fecha de nacimiento'
+        WHEN NOT ${edadEnRangoWhere()} THEN 'Fuera de edad (30–389d)'
+        WHEN ${edadEnRangoWhere()} AND NOT ${seguroValidoWhere()} THEN 'Seguro no SIS'
+        ELSE NULL
+      END AS obs_denominador,
       vm.expected_visits,
       COALESCE(vm.visitas_count, 0) AS visitas_count,
       vm.fecha_v1,
@@ -302,6 +373,8 @@ export async function listVisitasDetallePorMes(params: {
       COALESCE(vm.completa, 0) AS completa,
       COALESCE(vm.oportuna, 0) AS oportuna,
       COALESCE(vm.cumple, 0) AS cumple,
+      COALESCE(vm.flag_no_encontrado, 0) AS flag_no_encontrado,
+      COALESCE(vm.flag_rechazado, 0) AS flag_rechazado,
       COALESCE(vm.georef_visits, 0) AS georef_visits,
       COALESCE(vm.has_georef, 0) AS has_georef
     FROM padronnominal pn

@@ -378,7 +378,7 @@ export default async function DashboardPage(props: {
         {totalsPoint ? (
           <div className="rounded-2xl bg-blue-50 ring-1 ring-blue-200 p-5">
             <div className="text-sm font-semibold text-blue-950">
-              Niños del mes seleccionado
+              Resultados de niños sin anemia
             </div>
             <div className="mt-1 text-xs text-blue-900/70">
               Asignados = registros con Actor Social.
@@ -663,7 +663,7 @@ export default async function DashboardPage(props: {
                 META DE VISITAS COMPLETAS Y OPORTUNAS
               </div>
               <div className="mt-1 text-xs text-zinc-600">
-                Denominador (Nₙ): niños asignados del padrón (etapa) con edad 30–389 días y seguro SIS o sin seguro. Numerador (NVₙ): cumplen visitas completas y oportunas (intervalos 7–10 días) según el Excel cargado.
+                Denominador (Nₙ): niños del padrón (etapa), asignados y no asignados, con edad 30–389 días y seguro SIS o sin seguro. Numerador (NVₙ): cumplen visitas completas y oportunas (intervalos 7–10 días) según el Excel cargado. Registros “No encontrado” o “Rechazado” no suman al numerador.
               </div>
 
               {visitasOkUbigeo && visitasSeries.length && visitasDetalle ? (
@@ -671,7 +671,7 @@ export default async function DashboardPage(props: {
                   <div className="mt-4">
                     <NcLineChart
                       title="Porcentaje de niños de 1 a 12 meses de edad que reciben visitas domiciliarias por actor social de manera oportuna y completa."
-                      subtitle="Línea = % (Σ NVₙ / Σ Nₙ) × 100. NVₙ: niños con visitas completas y oportunas. Nₙ: niños asignados con edad 30–389 días y SIS/sin seguro."
+                      subtitle="Línea = % (Σ NVₙ / Σ Nₙ) × 100. NVₙ: niños con visitas completas y oportunas. Nₙ: niños del padrón con edad 30–389 días y SIS/sin seguro (incluye no asignados)."
                       target={metaVisitas ? Number(metaVisitas.valla_min) : undefined}
                       svgId="chart-visitas"
                       points={visitasSeries.map((p) => ({
@@ -684,9 +684,12 @@ export default async function DashboardPage(props: {
 
                   <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-4">
                     <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
-                      <div className="text-xs text-zinc-600">Asignados (base)</div>
+                      <div className="text-xs text-zinc-600">Total padrón (base)</div>
                       <div className="mt-1 text-2xl font-semibold text-zinc-900">
-                        {visitasDetalle.total_asignados}
+                        {visitasDetalle.total_padron}
+                      </div>
+                      <div className="mt-2 text-xs text-zinc-600">
+                        Asignados: <span className="font-semibold">{visitasDetalle.total_asignados}</span>
                       </div>
                     </div>
                     <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
@@ -734,6 +737,12 @@ export default async function DashboardPage(props: {
                         Completas pero no oportunas (7–10d):{" "}
                         <span className="font-semibold">{visitasDetalle.no_oportuna}</span>
                       </div>
+                        <div>
+                          No encontrado: <span className="font-semibold">{visitasDetalle.no_encontrado}</span>
+                        </div>
+                        <div>
+                          Rechazado: <span className="font-semibold">{visitasDetalle.rechazado}</span>
+                        </div>
                     </div>
                   </div>
 
