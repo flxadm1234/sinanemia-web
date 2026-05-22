@@ -129,6 +129,70 @@ export async function listPersonas(params: {
   return rows as PersonaSafe[];
 }
 
+export async function listPersonasPage(params: {
+  ubigeo?: number;
+  estado?: number;
+  tipo?: string;
+  q?: string;
+  limit: number;
+  offset: number;
+}) {
+  const pool = getDbPool();
+  const where: string[] = [];
+  const values: any[] = [];
+  const valuesCount: any[] = [];
+  const limit = Math.max(1, Math.min(200, Math.floor(params.limit)));
+  const offset = Math.max(0, Math.floor(params.offset));
+
+  if (typeof params.ubigeo === "number") {
+    where.push("ubigeo = ?");
+    values.push(params.ubigeo);
+    valuesCount.push(params.ubigeo);
+  }
+
+  if (typeof params.estado === "number") {
+    where.push("estado = ?");
+    values.push(params.estado);
+    valuesCount.push(params.estado);
+  }
+
+  if (params.tipo && params.tipo.trim()) {
+    const tipo = params.tipo.trim().toUpperCase();
+    if (tipo === "ACTOR SOCIAL") where.push("UPPER(tipo) LIKE 'ACTOR SOCIAL%'");
+    else {
+      where.push("UPPER(tipo) = ?");
+      values.push(tipo);
+      valuesCount.push(tipo);
+    }
+  }
+
+  if (params.q && params.q.trim()) {
+    const like = `%${params.q.trim()}%`;
+    where.push(
+      "(dni LIKE ? OR nombrecompleto LIKE ? OR apellidos LIKE ? OR cdr LIKE ? OR telefono LIKE ?)",
+    );
+    values.push(like, like, like, like, like);
+    valuesCount.push(like, like, like, like, like);
+  }
+
+  const whereSql = where.length ? ` WHERE ${where.join(" AND ")}` : "";
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) AS total FROM persona${whereSql}`,
+    valuesCount,
+  );
+  const total = Number((countRows as any[])[0]?.total ?? 0);
+
+  const [rows] = await pool.query(
+    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono, " +
+      "(SELECT 1 FROM sectorizacion_actor sa WHERE sa.dni_actor_social = persona.dni LIMIT 1) AS sectorizacion " +
+      `FROM persona${whereSql} ORDER BY idpersona DESC LIMIT ? OFFSET ?`,
+    [...values, limit, offset],
+  );
+
+  return { total, rows: rows as PersonaSafe[] };
+}
+
 export async function listActoresPorCoordinador(dniCoordinador: string) {
   const pool = getDbPool();
   const [rows] = await pool.query(

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdminOrSuperAdmin } from "@/lib/auth";
-import { listPersonas } from "@/lib/persona";
+import { listPersonasPage } from "@/lib/persona";
 import { AppShell } from "@/components/AppShell";
 import { deletePersonaAction, setEstadoAction } from "./actions";
 import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
@@ -9,10 +9,23 @@ import { NinosAsignadosButton } from "@/components/NinosAsignadosButton";
 import { DeletePersonaButton } from "@/components/DeletePersonaButton";
 
 export default async function AdminPersonasPage(props: {
-  searchParams: Promise<{ estado?: string; q?: string; tipo?: string; ok?: string; err?: string; msg?: string }>;
+  searchParams: Promise<{
+    estado?: string;
+    q?: string;
+    tipo?: string;
+    page?: string;
+    ok?: string;
+    err?: string;
+    msg?: string;
+  }>;
 }) {
   const user = await requireAdminOrSuperAdmin();
-  const { estado, q, tipo, ok, err, msg } = await props.searchParams;
+  const { estado, q, tipo, ok, err, msg, page } = await props.searchParams;
+
+  const pageSize = 50;
+  const pageNumRaw = Number(page ?? 1);
+  const pageNum = Number.isFinite(pageNumRaw) && pageNumRaw >= 1 ? Math.floor(pageNumRaw) : 1;
+  const offset = (pageNum - 1) * pageSize;
 
   const estadoNum =
     estado === "1" ? 1 : estado === "0" ? 0 : undefined;
@@ -20,12 +33,28 @@ export default async function AdminPersonasPage(props: {
   const ubigeoFilter =
     user.tipo === "ADMINISTRADOR" ? user.ubigeo ?? undefined : undefined;
 
-  const rows = await listPersonas({
+  const pageRes = await listPersonasPage({
     ubigeo: ubigeoFilter,
     estado: estadoNum,
     tipo: tipo ?? undefined,
     q: q ?? undefined,
+    limit: pageSize,
+    offset,
   });
+  const rows = pageRes.rows;
+  const total = pageRes.total;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const from = total ? offset + 1 : 0;
+  const to = Math.min(total, offset + rows.length);
+
+  function hrefWithPage(n: number) {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", String(q));
+    if (tipo) sp.set("tipo", String(tipo));
+    if (estado) sp.set("estado", String(estado));
+    sp.set("page", String(n));
+    return `/admin/personas?${sp.toString()}`;
+  }
 
   const actorRows = rows.filter((r) =>
     String(r.tipo ?? "").toUpperCase().startsWith("ACTOR SOCIAL"),
@@ -99,6 +128,7 @@ export default async function AdminPersonasPage(props: {
         <div className="rounded-2xl bg-white ring-1 ring-black/5 p-4">
           <form className="flex flex-col gap-3 md:flex-row md:items-center">
             <div className="flex-1">
+              <input type="hidden" name="page" value="1" />
               <input
                 name="q"
                 defaultValue={q ?? ""}
@@ -134,6 +164,39 @@ export default async function AdminPersonasPage(props: {
               </button>
             </div>
           </form>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-zinc-700">
+          <div>
+            Mostrando <span className="font-semibold">{from}</span>–<span className="font-semibold">{to}</span>{" "}
+            de <span className="font-semibold">{total}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link
+              href={hrefWithPage(Math.max(1, pageNum - 1))}
+              aria-disabled={pageNum <= 1}
+              className={
+                "rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 " +
+                (pageNum <= 1 ? "pointer-events-none opacity-50" : "")
+              }
+            >
+              Anterior
+            </Link>
+            <div className="text-xs text-zinc-600">
+              Página <span className="font-semibold">{pageNum}</span> /{" "}
+              <span className="font-semibold">{totalPages}</span>
+            </div>
+            <Link
+              href={hrefWithPage(Math.min(totalPages, pageNum + 1))}
+              aria-disabled={pageNum >= totalPages}
+              className={
+                "rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 " +
+                (pageNum >= totalPages ? "pointer-events-none opacity-50" : "")
+              }
+            >
+              Siguiente
+            </Link>
+          </div>
         </div>
 
         <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">

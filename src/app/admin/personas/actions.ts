@@ -6,6 +6,7 @@ import {
   createPersona,
   deletePersonaById,
   findPersonaById,
+  getRoleFromPersonaTipo,
   updatePersonaEstado,
 } from "@/lib/persona";
 import { getDbPool } from "@/lib/db";
@@ -152,6 +153,7 @@ export async function updatePersonaAction(formData: FormData) {
 
   const patch: any = {};
   const oldCdr = String(current.cdr ?? "").trim();
+  const role = getRoleFromPersonaTipo(current.tipo);
 
   if (data.nombrecompleto !== undefined)
     patch.nombrecompleto = data.nombrecompleto ? data.nombrecompleto : null;
@@ -170,7 +172,7 @@ export async function updatePersonaAction(formData: FormData) {
   if (data.email !== undefined) patch.email = data.email.trim() ? data.email.trim() : null;
 
   const newCdr = typeof patch.cdr === "string" ? patch.cdr.trim() : "";
-  const needsPadronUpdate = Boolean(newCdr) && newCdr !== oldCdr;
+  const needsPadronUpdate = role === "ACTOR SOCIAL" && Boolean(newCdr) && newCdr !== oldCdr;
 
   const ubigeoToUse =
     typeof user.ubigeo === "number"
@@ -216,8 +218,8 @@ export async function updatePersonaAction(formData: FormData) {
     let affectedPadron = 0;
     if (needsPadronUpdate && typeof ubigeoToUse === "number") {
       const [resPadron] = await conn.query(
-        "UPDATE padronnominal SET responsable = ? WHERE responsable = ? AND ubigeo = ? AND etapa = ?",
-        [newCdr, oldCdr, ubigeoToUse, etapa],
+        "UPDATE padronnominal SET responsable = ? WHERE actorsocial = ? AND ubigeo = ? AND DATE(etapa) = ?",
+        [newCdr, String(current.dni ?? "").trim(), ubigeoToUse, etapa],
       );
       affectedPadron = Number((resPadron as any)?.affectedRows ?? 0);
     }
@@ -228,7 +230,7 @@ export async function updatePersonaAction(formData: FormData) {
     revalidatePath(`/admin/personas/${data.idpersona}`);
 
     const msg = needsPadronUpdate
-      ? `Coordinador (CDR) actualizado. Padrón nominal actualizado en etapa ${etapa}: ${affectedPadron} registros.`
+      ? `Coordinador (CDR) actualizado. Padrón nominal actualizado para el actor social ${String(current.dni ?? "").trim()} en etapa ${etapa}: ${affectedPadron} registros.`
       : "Usuario actualizado correctamente.";
     redirect(`/admin/personas?ok=1&msg=${qs(msg)}`);
   } catch {
