@@ -2,10 +2,11 @@ import Link from "next/link";
 import { requireAdminOrSuperAdmin } from "@/lib/auth";
 import { listPersonas } from "@/lib/persona";
 import { AppShell } from "@/components/AppShell";
-import { setEstadoAction } from "./actions";
+import { deletePersonaAction, setEstadoAction } from "./actions";
 import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
 import { countAsignadosPorActores } from "@/lib/padronnominal";
 import { NinosAsignadosButton } from "@/components/NinosAsignadosButton";
+import { DeletePersonaButton } from "@/components/DeletePersonaButton";
 
 export default async function AdminPersonasPage(props: {
   searchParams: Promise<{ estado?: string; q?: string; tipo?: string; ok?: string; err?: string; msg?: string }>;
@@ -248,6 +249,9 @@ export default async function AdminPersonasPage(props: {
                               {activo ? "Inhabilitar" : "Habilitar"}
                             </button>
                           </form>
+                          {user.tipo === "SUPER ADMIN" ? (
+                            <DeletePersonaButton action={deletePersonaAction} idpersona={r.idpersona} />
+                          ) : null}
                         </div>
                       </td>
                     </tr>

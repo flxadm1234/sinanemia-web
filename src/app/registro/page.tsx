@@ -7,11 +7,44 @@ type RegisterState = { ok: false; error: string } | null;
 
 export default function RegistroPage() {
   const [showPassword, setShowPassword] = useState(false);
+  const [dni, setDni] = useState("");
+  const [loadingReniec, setLoadingReniec] = useState(false);
+  const [reniecError, setReniecError] = useState("");
+  const [nombres, setNombres] = useState("");
+  const [apellidos, setApellidos] = useState("");
   const [state, action, pending] = useActionState<RegisterState, FormData>(
     registerInvitadoAction as any,
     null,
   );
   const errorText = useMemo(() => state?.error ?? "", [state?.error]);
+
+  async function buscarReniec() {
+    const v = dni.trim();
+    if (!/^\d{8}$/.test(v)) {
+      setReniecError("Ingresa un DNI válido de 8 dígitos.");
+      return;
+    }
+    setReniecError("");
+    setLoadingReniec(true);
+    try {
+      const res = await fetch(`/api/reniec-public/${v}`, { cache: "no-store" });
+      if (!res.ok) {
+        setReniecError("DNI no encontrado en RENIEC o servicio no disponible.");
+        return;
+      }
+      const data = await res.json();
+      setNombres(String(data?.nombres ?? ""));
+      const ap =
+        `${String(data?.apellidoPaterno ?? "")} ${String(
+          data?.apellidoMaterno ?? "",
+        )}`.trim();
+      setApellidos(ap);
+    } catch {
+      setReniecError("No se pudo consultar RENIEC. Intenta nuevamente.");
+    } finally {
+      setLoadingReniec(false);
+    }
+  }
 
   return (
     <div className="flex flex-1 min-h-[100dvh] bg-zinc-50 items-center justify-center px-6 py-10">
@@ -31,19 +64,48 @@ export default function RegistroPage() {
           <form action={action} className="mt-6 space-y-4">
             <div>
               <label className="block text-sm font-medium text-zinc-900">DNI</label>
+              <div className="mt-1 flex gap-2">
+                <input
+                  name="dni"
+                  inputMode="numeric"
+                  value={dni}
+                  onChange={(e) => setDni(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                  required
+                  maxLength={15}
+                />
+                <button
+                  type="button"
+                  onClick={buscarReniec}
+                  disabled={loadingReniec || pending}
+                  className="shrink-0 rounded-xl border border-zinc-200 bg-white px-3 py-3 text-sm font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                >
+                  {loadingReniec ? "Buscando..." : "RENIEC"}
+                </button>
+              </div>
+              {reniecError ? (
+                <div className="mt-2 text-xs text-red-700">{reniecError}</div>
+              ) : null}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-900">Nombres</label>
               <input
-                name="dni"
-                inputMode="numeric"
+                name="nombrecompleto"
+                value={nombres}
+                onChange={(e) => setNombres(e.target.value)}
                 className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                 required
-                maxLength={15}
+                maxLength={200}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-zinc-900">Nombre completo</label>
+              <label className="block text-sm font-medium text-zinc-900">Apellidos</label>
               <input
-                name="nombrecompleto"
+                name="apellidos"
+                value={apellidos}
+                onChange={(e) => setApellidos(e.target.value)}
                 className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
                 required
                 maxLength={200}

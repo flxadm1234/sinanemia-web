@@ -8,6 +8,7 @@ import { createPersona, findPersonaByDni, getRoleFromPersonaTipo } from "@/lib/p
 const schema = z.object({
   dni: z.string().trim().min(6).max(15),
   nombrecompleto: z.string().trim().min(2).max(200),
+  apellidos: z.string().trim().min(1).max(200),
   clave: z.string().trim().min(3).max(15),
   ubigeo: z.coerce.number().int().positive(),
 });
@@ -18,6 +19,7 @@ export async function registerInvitadoAction(_: RegisterState, formData: FormDat
   const parsed = schema.safeParse({
     dni: formData.get("dni"),
     nombrecompleto: formData.get("nombrecompleto"),
+    apellidos: formData.get("apellidos"),
     clave: formData.get("clave"),
     ubigeo: formData.get("ubigeo"),
   });
@@ -30,7 +32,7 @@ export async function registerInvitadoAction(_: RegisterState, formData: FormDat
   await createPersona({
     dni: parsed.data.dni,
     nombrecompleto: parsed.data.nombrecompleto,
-    apellidos: "-",
+    apellidos: parsed.data.apellidos,
     tipo: "INVITADO",
     clave: parsed.data.clave,
     ubigeo: parsed.data.ubigeo,
@@ -41,11 +43,12 @@ export async function registerInvitadoAction(_: RegisterState, formData: FormDat
   });
 
   const role = getRoleFromPersonaTipo("INVITADO");
+  const nombre = `${parsed.data.nombrecompleto} ${parsed.data.apellidos}`.trim();
   await createSessionCookie({
     dni: parsed.data.dni,
     tipo: role ?? "INVITADO",
     ubigeo: parsed.data.ubigeo,
-    nombre: parsed.data.nombrecompleto,
+    nombre,
   });
 
   redirect("/dashboard");

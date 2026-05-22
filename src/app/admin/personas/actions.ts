@@ -1,9 +1,10 @@
 "use server";
 
 import { z } from "zod";
-import { requireAdminOrSuperAdmin } from "@/lib/auth";
+import { requireAdminOrSuperAdmin, requireSuperAdmin } from "@/lib/auth";
 import {
   createPersona,
+  deletePersonaById,
   findPersonaById,
   updatePersonaEstado,
 } from "@/lib/persona";
@@ -17,22 +18,34 @@ const estadoSchema = z.object({
   estado: z.coerce.number().int().min(0).max(1),
 });
 
+const deleteSchema = z.object({
+  idpersona: z.coerce.number().int().positive(),
+});
+
+function qs(v: string) {
+  return encodeURIComponent(v);
+}
+
 export async function setEstadoAction(formData: FormData) {
   const user = await requireAdminOrSuperAdmin();
   const parsed = estadoSchema.safeParse({
     idpersona: formData.get("idpersona"),
     estado: formData.get("estado"),
   });
-  if (!parsed.success) return;
+  if (!parsed.success) {
+    redirect(`/admin/personas?err=1&msg=${qs("Datos inválidos.")}`);
+  }
 
   if (user.tipo === "ADMINISTRADOR") {
     const current = await findPersonaById(parsed.data.idpersona);
-    if (!current) return;
-    if ((current.ubigeo ?? null) !== (user.ubigeo ?? null)) return;
+    if (!current) redirect(`/admin/personas?err=1&msg=${qs("Usuario no encontrado.")}`);
+    if ((current.ubigeo ?? null) !== (user.ubigeo ?? null))
+      redirect(`/admin/personas?err=1&msg=${qs("No permitido.")}`);
   }
 
   await updatePersonaEstado(parsed.data.idpersona, parsed.data.estado);
   revalidatePath("/admin/personas");
+  redirect(`/admin/personas?ok=1&msg=${qs("Estado actualizado correctamente.")}`);
 }
 
 const personaCreateSchema = z.object({
@@ -114,10 +127,6 @@ const personaUpdateSchema = z.object({
   direccion: z.string().trim().optional(),
   email: z.string().trim().optional(),
 });
-
-function qs(v: string) {
-  return encodeURIComponent(v);
-}
 
 export async function updatePersonaAction(formData: FormData) {
   const user = await requireAdminOrSuperAdmin();
@@ -232,5 +241,30 @@ export async function updatePersonaAction(formData: FormData) {
   } finally {
     conn.release();
   }
+}
+
+export async function deletePersonaAction(_: any, formData: FormData) {
+  const user = await requireSuperAdmin();
+  const parsed = deleteSchema.safeParse({
+    idpersona: formData.get("idpersona"),
+  });
+  if (!parsed.success) return { ok: false, message: "Datos inválidos." };
+
+  const current = await findPersonaById(parsed.data.idpersona);
+  if (!current) return { ok: false, message: "Usuario no encontrado." };
+  if (String(current.dni ?? "").trim() === String(user.dni ?? "").trim())
+    return { ok: false, message: "No puedes eliminar tu propio usuario." };
+
+  try {
+    await deletePersonaById(parsed.data.idpersona);
+  } catch {
+    return {
+      ok: false,
+      message: "No se pudo eliminar. Inhabilita el usuario o revisa dependencias en BD.",
+    };
+  }
+
+  revalidatePath("/admin/personas");
+  redirect(`/admin/personas?ok=1&msg=${qs("Usuario eliminado correctamente.")}`);
 }
 

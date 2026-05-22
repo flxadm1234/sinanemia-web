@@ -212,6 +212,12 @@ export async function updatePersonaEstado(idpersona: number, estado: number) {
   return res as any;
 }
 
+export async function deletePersonaById(idpersona: number) {
+  const pool = getDbPool();
+  const [res] = await pool.query("DELETE FROM persona WHERE idpersona = ? LIMIT 1", [idpersona]);
+  return res as any;
+}
+
 export async function createPersona(input: {
   dni: string;
   nombrecompleto?: string | null;
