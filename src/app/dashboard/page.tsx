@@ -301,7 +301,7 @@ export default async function DashboardPage(props: {
       ncOkUbigeo && ncSeries.length
         ? {
             key: "nc",
-            title: "Cumplimiento NC (tamizaje) por mes",
+            title: "Porcentaje de niños de 6 y/o 12 meses de edad sin anemia",
             svgId: "chart-nc",
           }
         : null,
@@ -378,7 +378,7 @@ export default async function DashboardPage(props: {
         {totalsPoint ? (
           <div className="rounded-2xl bg-blue-50 ring-1 ring-blue-200 p-5">
             <div className="text-sm font-semibold text-blue-950">
-              Resultados de niños sin anemia
+              Resumen de la carga de niños del mes {String(selectedMonth.meses ?? "").toUpperCase()}
             </div>
             <div className="mt-1 text-xs text-blue-900/70">
               Asignados = registros con Actor Social.

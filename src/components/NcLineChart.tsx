@@ -79,7 +79,7 @@ export function NcLineChart(props: {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-sm font-semibold text-zinc-900">
-            {props.title ?? "Cumplimiento NC (tamizaje) por mes"}
+            {props.title ?? "Porcentaje de niños de 6 y/o 12 meses de edad sin anemia"}
           </div>
           <div className="mt-1 text-xs text-zinc-500">
             {props.subtitle ??
