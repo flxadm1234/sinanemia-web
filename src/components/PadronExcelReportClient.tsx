@@ -13,12 +13,14 @@ export function PadronExcelReportClient(props: {
   role: string;
   meses: MesOption[];
   defaultEtapas: string[];
+  ubigeos?: number[];
 }) {
-  const { role, meses, defaultEtapas } = props;
+  const { role, meses, defaultEtapas, ubigeos = [] } = props;
   const [tipo, setTipo] = useState<"1" | "2">("1");
   const [selectedEtapas, setSelectedEtapas] = useState<string[]>(
     defaultEtapas.length ? defaultEtapas : meses.slice(0, 1).map((m) => m.etapa),
   );
+  const [selectedUbigeos, setSelectedUbigeos] = useState<number[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,6 +38,14 @@ export function PadronExcelReportClient(props: {
     });
   };
 
+  const toggleUbigeo = (u: number) => {
+    setSelectedUbigeos((prev) => {
+      const has = prev.includes(u);
+      if (has) return prev.filter((x) => x !== u);
+      return [...prev, u];
+    });
+  };
+
   const download = async () => {
     setError(null);
     const etapas = selectedEtapas
@@ -50,6 +60,9 @@ export function PadronExcelReportClient(props: {
       const url = new URL("/api/reportes/padron-excel", window.location.origin);
       url.searchParams.set("tipo", tipo);
       url.searchParams.set("etapas", etapas.join(","));
+      if (role === "SUPER ADMIN" && selectedUbigeos.length) {
+        url.searchParams.set("ubigeos", selectedUbigeos.slice().sort((a, b) => a - b).join(","));
+      }
       window.location.href = url.toString();
     } finally {
       setTimeout(() => setPending(false), 800);
@@ -64,7 +77,9 @@ export function PadronExcelReportClient(props: {
         <div className="text-sm font-semibold text-zinc-900">Filtros</div>
         <div className="mt-1 text-sm text-zinc-600">
           {role === "SUPER ADMIN"
-            ? "Descarga registros de todos los ubigeos."
+            ? selectedUbigeos.length
+              ? `Descarga registros de ${selectedUbigeos.length} ubigeo(s) seleccionado(s).`
+              : "Descarga registros de todos los ubigeos."
             : "Descarga registros del ubigeo de tu cuenta."}
         </div>
 
@@ -121,6 +136,45 @@ export function PadronExcelReportClient(props: {
             </div>
           </div>
         </div>
+
+        {role === "SUPER ADMIN" ? (
+          <div className="mt-4 rounded-2xl bg-white ring-1 ring-black/5 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium text-zinc-900">Ubigeos</div>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => setSelectedUbigeos([])}
+                className="rounded-xl border border-zinc-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+              >
+                Todos
+              </button>
+            </div>
+            <div className="mt-2 text-xs text-zinc-500">
+              Si no eliges ninguno, se descargan todos.
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+              {ubigeos.map((u) => {
+                const checked = selectedUbigeos.includes(u);
+                return (
+                  <label
+                    key={u}
+                    className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 hover:bg-zinc-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={pending}
+                      onChange={() => toggleUbigeo(u)}
+                      className="h-4 w-4"
+                    />
+                    <span className="truncate">{String(u).padStart(6, "0")}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">

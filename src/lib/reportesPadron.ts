@@ -103,7 +103,7 @@ export type PadronReporteRow = {
 };
 
 export async function listPadronReporte(params: {
-  ubigeo?: number;
+  ubigeos?: number[];
   tipovd: string | number;
   etapas: string[];
   limit?: number;
@@ -127,10 +127,29 @@ export async function listPadronReporte(params: {
   ];
   const values: any[] = [tipovd, ...etapas];
 
-  if (typeof params.ubigeo === "number") {
+  const ubigeos = Array.from(
+    new Set((params.ubigeos ?? []).map((u) => Number(u)).filter((u) => Number.isFinite(u))),
+  ) as number[];
+  if (ubigeos.length === 1) {
     where.unshift("pn.ubigeo = ?");
-    values.unshift(params.ubigeo);
+    values.unshift(ubigeos[0]);
+  } else if (ubigeos.length > 1) {
+    where.unshift(`pn.ubigeo IN (${ubigeos.map(() => "?").join(",")})`);
+    values.unshift(...ubigeos);
   }
+
+  const vrUbigeoSql =
+    ubigeos.length === 1
+      ? "AND vr0.ubigeo = ?"
+      : ubigeos.length > 1
+        ? `AND vr0.ubigeo IN (${ubigeos.map(() => "?").join(",")})`
+        : "";
+
+  const queryValues: any[] = [
+    ...etapas,
+    ...(ubigeos.length ? ubigeos : []),
+    ...values,
+  ];
 
   const limit = Math.min(Math.max(params.limit ?? 200000, 1), 200000);
 
@@ -157,8 +176,12 @@ export async function listPadronReporte(params: {
         pn.tiposeguro, pn.tipodocum, pn.usuario,
         pn.ubigeo,
         pn.fecha_inicio_vd, pn.fecha_fin_vd,
-        pn.estadosvd, pn.estadosvd2, pn.estadosvd3,
-        pn.primera_vd, pn.segunda_vd, pn.tercera_vd,
+        vr.estadosvd,
+        vr.estadosvd2,
+        vr.estadosvd3,
+        vr.primera_vd,
+        vr.segunda_vd,
+        vr.tercera_vd,
         pn.resultado, pn.avance,
         pn.fotos, pn.programacion1, pn.padronnominal,
         pn.iddistrito, pn.discapacidad, pn.titular_linea, pn.codigov,
@@ -170,6 +193,41 @@ export async function listPadronReporte(params: {
         o1.descripcion AS ocurrencia_desc,
         o2.descripcion AS ocurrencia2_desc
      FROM padronnominal pn
+     LEFT JOIN (
+        SELECT
+          ubigeo,
+          etapa_mes,
+          TRIM(dni_nino) AS dni_nino,
+          MAX(CASE WHEN rn = 1 THEN fecha_intervencion END) AS primera_vd,
+          MAX(CASE WHEN rn = 2 THEN fecha_intervencion END) AS segunda_vd,
+          MAX(CASE WHEN rn = 3 THEN fecha_intervencion END) AS tercera_vd,
+          MAX(CASE WHEN rn = 1 THEN etapa_text END) AS estadosvd,
+          MAX(CASE WHEN rn = 2 THEN etapa_text END) AS estadosvd2,
+          MAX(CASE WHEN rn = 3 THEN etapa_text END) AS estadosvd3
+        FROM (
+          SELECT
+            vr0.ubigeo,
+            vr0.etapa_mes,
+            vr0.dni_nino,
+            vr0.fecha_intervencion,
+            vr0.etapa_text,
+            ROW_NUMBER() OVER (
+              PARTITION BY vr0.ubigeo, vr0.etapa_mes, TRIM(vr0.dni_nino)
+              ORDER BY vr0.fecha_intervencion ASC
+            ) AS rn
+          FROM visitas_raw vr0
+          WHERE vr0.etapa_mes IN (${etapas.map(() => "?").join(",")})
+            ${vrUbigeoSql}
+            AND vr0.fecha_intervencion IS NOT NULL
+            AND (
+              LOWER(COALESCE(vr0.etapa_text,'')) LIKE 'visita%'
+              OR LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%no encontrado%'
+              OR LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%rechaz%'
+            )
+        ) x
+        WHERE rn <= 3
+        GROUP BY ubigeo, etapa_mes, TRIM(dni_nino)
+     ) vr ON vr.ubigeo = pn.ubigeo AND vr.etapa_mes = pn.etapa AND vr.dni_nino = TRIM(pn.dni)
      LEFT JOIN persona p_actor ON TRIM(p_actor.dni) = TRIM(pn.actorsocial)
      LEFT JOIN persona p_resp ON TRIM(p_resp.dni) = TRIM(pn.responsable)
      LEFT JOIN ocurrencias o1 ON o1.idocurrencias = pn.idocurrencia
@@ -177,7 +235,7 @@ export async function listPadronReporte(params: {
      WHERE ${where.join(" AND ")}
      ORDER BY pn.ubigeo ASC, pn.etapa DESC, pn.idpn ASC
      LIMIT ${limit}`,
-    values,
+    queryValues,
   );
 
   return rows as PadronReporteRow[];

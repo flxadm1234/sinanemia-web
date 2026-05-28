@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import { PadronExcelReportClient } from "@/components/PadronExcelReportClient";
 import { requireAdminOrSuperAdmin } from "@/lib/auth";
-import { listMesesAll, listMesesByUbigeo } from "@/lib/meses";
+import { listMesesAll, listMesesByUbigeo, listMesesUbigeoOptions } from "@/lib/meses";
 
 export default async function ReportePadronPage() {
   const user = await requireAdminOrSuperAdmin();
@@ -13,6 +13,8 @@ export default async function ReportePadronPage() {
       : typeof user.ubigeo === "number"
         ? await listMesesByUbigeo(user.ubigeo)
         : [];
+
+  const ubigeos = user.tipo === "SUPER ADMIN" ? await listMesesUbigeoOptions() : [];
 
   const seen = new Set<string>();
   const opciones = meses
@@ -59,6 +61,7 @@ export default async function ReportePadronPage() {
           role={user.tipo}
           meses={opciones}
           defaultEtapas={defaultEtapas}
+          ubigeos={ubigeos}
         />
       </div>
     </AppShell>

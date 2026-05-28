@@ -100,6 +100,160 @@ function tdDateTime(v: unknown) {
   return `<td>${escapeHtml(fmtDateTimeDMY(v))}</td>`;
 }
 
+function daysBetween(a: unknown, b: unknown) {
+  const da = toDate(a);
+  const db = toDate(b);
+  if (!da || !db) return null;
+  const ta = Date.UTC(da.getUTCFullYear(), da.getUTCMonth(), da.getUTCDate());
+  const tb = Date.UTC(db.getUTCFullYear(), db.getUTCMonth(), db.getUTCDate());
+  return Math.floor((tb - ta) / 86400000);
+}
+
+function addDaysUTC(d: Date, days: number) {
+  const t = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) + days * 86400000;
+  return new Date(t);
+}
+
+function isNoEncontrado(s: string) {
+  const v = s.trim().toLowerCase();
+  return v.includes("no encontrado");
+}
+
+function isRechazado(s: string) {
+  const v = s.trim().toLowerCase();
+  return v.includes("rechaz");
+}
+
+function canonEstadoVisita(s: string) {
+  if (isNoEncontrado(s)) return "No Encontrado";
+  if (isRechazado(s)) return "Rechazado";
+  return s.trim();
+}
+
+function todayISO() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+function calcAlertaVD(r: PadronReporteRow) {
+  const hoy = todayISO();
+  const primera = toDate(r.primera_vd);
+  const segunda = toDate(r.segunda_vd);
+  const tercera = toDate(r.tercera_vd);
+  const nrovd = typeof r.nrovd === "number" ? r.nrovd : null;
+  const tipo = typeof r.tipo === "number" ? r.tipo : null;
+  const fechainicioVD = toDate(r.fecha_inicio_vd);
+  const fechafinVD = toDate(r.fecha_fin_vd);
+
+  const limit_min = tipo === 6 ? 13 : 7;
+  const limit_max = tipo === 6 ? 15 : 10;
+  const limit_rgo = tipo === 6 ? 15 : 9;
+
+  let nrovdr = 0;
+  if (!primera) nrovdr = 0;
+  else if (primera && !segunda) nrovdr = 1;
+  else if (primera && segunda && !tercera) nrovdr = 2;
+  else if (primera && segunda && tercera) nrovdr = 3;
+
+  const estado1 = canonEstadoVisita(String(r.estadosvd ?? ""));
+  const estado2 = canonEstadoVisita(String(r.estadosvd2 ?? ""));
+  const estado3 = canonEstadoVisita(String(r.estadosvd3 ?? ""));
+
+  const estadoActual = nrovdr === 1 ? estado1 : nrovdr === 2 ? estado2 : nrovdr === 3 ? estado3 : "";
+  if (estadoActual && (isNoEncontrado(estadoActual) || isRechazado(estadoActual))) return estadoActual;
+
+  let resultado = "";
+
+  if (nrovdr === 0) {
+    if (!fechainicioVD) return "";
+    const d0 = daysBetween(fechainicioVD, hoy);
+    if (d0 === 0) resultado = "INICIO DE 1RA VD";
+    else if (d0 !== null && d0 < 0) resultado = "ESPERANDO FECHA DE 1RA VD";
+    else if (d0 !== null && d0 > 5) resultado = "CERO VD, FUERA DE FECHA";
+    else resultado = "1RA VD EN CURSO";
+  } else if (nrovdr === 1) {
+    if (!primera) return "";
+    if (!segunda && typeof nrovd === "number" && nrovd > 1) {
+      const dt = daysBetween(primera, hoy);
+      if (dt !== null && dt > limit_max) resultado = "INC. 2DA FECHA NO REALIZADA";
+      else {
+        const ideal = addDaysUTC(primera, limit_min);
+        const riesgo = addDaysUTC(primera, limit_rgo);
+        if (hoy.getTime() < ideal.getTime()) resultado = "ESPERANDO FECHA 2DA VD";
+        else if (hoy.getTime() >= riesgo.getTime()) resultado = "VD EN RIESGO";
+        else resultado = "2DA VISITA EN CURSO";
+      }
+    } else {
+      if (fechainicioVD && primera.getTime() < fechainicioVD.getTime()) {
+        resultado = "INCONSISTENCIA VD ANTES DE INICIO DE INTERVENCION";
+      } else if (fechafinVD && primera.getTime() > fechafinVD.getTime()) {
+        resultado = "INCONSISTENCIA VD FUERA DE MAXIMO PERMITIDO";
+      } else if (typeof nrovd === "number" && nrovd === nrovdr) {
+        resultado = "VD COMPLETO";
+      }
+    }
+  } else if (nrovdr === 2 || nrovdr === 3) {
+    if (!primera || !segunda) return "";
+    const d12 = daysBetween(primera, segunda);
+    if (d12 !== null && (d12 < limit_min || d12 > limit_max)) {
+      resultado = "ERROR POR RANGO DE FECHA";
+    } else if (nrovdr === 3) {
+      if (!tercera) return "";
+      const d23 = daysBetween(segunda, tercera);
+      if (d23 !== null && (d23 < limit_min || d23 > limit_max)) {
+        resultado = "ERROR POR RANGO DE FECHA";
+      }
+    }
+
+    if (!resultado) {
+      const fechas = [primera, segunda, ...(tercera ? [tercera] : [])];
+      if (fechainicioVD && fechas.some((f) => f.getTime() < fechainicioVD.getTime())) {
+        resultado = "INCONSISTENCIA VD ANTES DE FECHA PERMITIDO";
+      } else if (fechafinVD && fechas.some((f) => f.getTime() > fechafinVD.getTime())) {
+        resultado = "INCONSISTENCIA VD FUERA DE MAXIMO PERMITIDO";
+      } else if (typeof nrovd === "number" && nrovdr > nrovd) {
+        resultado = "SOBREPASO EL NRO DE VD PERMITIDO";
+      } else if (typeof nrovd === "number" && nrovdr === nrovd) {
+        resultado = "VD COMPLETO";
+      } else if (typeof nrovd === "number" && nrovd > nrovdr) {
+        if (nrovdr === 2) {
+          const dt = daysBetween(segunda, hoy);
+          if (dt !== null && dt > limit_max) resultado = "INC. 3RA FECHA NO REALIZADA";
+          else {
+            const ideal = addDaysUTC(segunda, limit_min);
+            const riesgo = addDaysUTC(segunda, limit_rgo);
+            if (hoy.getTime() < ideal.getTime()) resultado = "ESPERANDO FECHA 3RA VD";
+            else if (hoy.getTime() >= riesgo.getTime()) resultado = "VD EN RIESGO";
+            else resultado = "3RA VISITA EN CURSO";
+          }
+        }
+      }
+    }
+  }
+
+  if (
+    resultado &&
+    resultado !== "VD COMPLETO" &&
+    resultado !== "ERROR POR RANGO DE FECHA" &&
+    !resultado.startsWith("INCONSISTENCIA") &&
+    !resultado.startsWith("SOBREPASO") &&
+    fechafinVD
+  ) {
+    if (typeof nrovd === "number" && nrovd === 3 && nrovdr === 1 && primera) {
+      const cushion = daysBetween(primera, fechafinVD);
+      if (cushion !== null && cushion < 14) resultado = "🚫 ERROR EN FECHA PARA LA ÚLTIMA VD";
+    } else if (typeof nrovd === "number" && nrovd === 3 && nrovdr === 2 && segunda) {
+      const cushion = daysBetween(segunda, fechafinVD);
+      if (cushion !== null && cushion < 7) resultado = "🚫 ERROR EN FECHA PARA LA ÚLTIMA VD";
+    } else if (typeof nrovd === "number" && nrovd === 2 && nrovdr === 1 && primera) {
+      const cushion = daysBetween(primera, fechafinVD);
+      if (cushion !== null && cushion < 7) resultado = "🚫 ERROR EN FECHA PARA LA ÚLTIMA VD";
+    }
+  }
+
+  return resultado;
+}
+
 type Col = {
   label: string;
   cell: (r: PadronReporteRow, idx: number) => string;
@@ -234,6 +388,15 @@ function buildSections() {
         { label: "1ra VD", cell: (r) => tdDate(r.primera_vd) },
         { label: "2da VD", cell: (r) => tdDate(r.segunda_vd) },
         { label: "3ra VD", cell: (r) => tdDate(r.tercera_vd) },
+        {
+          label: "Días 1-2",
+          cell: (r) => td(daysBetween(r.primera_vd, r.segunda_vd) ?? ""),
+        },
+        {
+          label: "Días 2-3",
+          cell: (r) => td(daysBetween(r.segunda_vd, r.tercera_vd) ?? ""),
+        },
+        { label: "Alerta VD", cell: (r) => td(calcAlertaVD(r)) },
         { label: "Programación 1", cell: (r) => tdDate(r.programacion1) },
         { label: "F. modif.", cell: (r) => tdDateTime(r.fechamodificacion) },
         { label: "F. modif. 2", cell: (r) => tdDateTime(r.fechamodificacion2) },
@@ -308,14 +471,27 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "missing_etapas" }, { status: 400 });
     }
 
-    const ubigeoCandidate =
-      session.tipo === "SUPER ADMIN" ? undefined : session.ubigeo;
-    const ubigeo = typeof ubigeoCandidate === "number" ? ubigeoCandidate : undefined;
-    if (session.tipo !== "SUPER ADMIN" && typeof ubigeo !== "number") {
+    let ubigeos: number[] | undefined = undefined;
+    if (session.tipo === "SUPER ADMIN") {
+      const raw = String(url.searchParams.get("ubigeos") ?? "").trim();
+      const parsed = raw
+        .split(",")
+        .map((v) => Number(String(v).trim()))
+        .filter((n) => Number.isFinite(n));
+      ubigeos = parsed.length ? Array.from(new Set(parsed)) : undefined;
+    } else {
+      const u = typeof session.ubigeo === "number" ? session.ubigeo : undefined;
+      if (typeof u !== "number") {
+        return NextResponse.json({ error: "missing_ubigeo" }, { status: 400 });
+      }
+      ubigeos = [u];
+    }
+
+    if (session.tipo !== "SUPER ADMIN" && (!ubigeos || !ubigeos.length)) {
       return NextResponse.json({ error: "missing_ubigeo" }, { status: 400 });
     }
 
-    const rows = await listPadronReporte({ ubigeo, tipovd, etapas });
+    const rows = await listPadronReporte({ ubigeos, tipovd, etapas });
 
     const sections = buildSections();
     const allCols = sections.flatMap((s) => s.cols);
@@ -330,9 +506,14 @@ export async function GET(request: Request) {
       .map((e) => e.slice(0, 7))
       .join("_");
 
-    const filename = cleanFilename(
-      `reporte_padron_${tipoLabel}_${session.tipo === "SUPER ADMIN" ? "todos_ubigeos" : `ubigeo_${ubigeo}`}_${etapasLabel}.xls`,
-    );
+    const ubigeosLabel =
+      session.tipo === "SUPER ADMIN"
+        ? ubigeos && ubigeos.length
+          ? `ubigeos_${ubigeos.slice().sort((a, b) => a - b).join("-")}`
+          : "todos_ubigeos"
+        : `ubigeo_${ubigeos?.[0] ?? "na"}`;
+
+    const finalFilename = cleanFilename(`reporte_padron_${tipoLabel}_${ubigeosLabel}_${etapasLabel}.xls`);
 
     const sectionHeaderRow = `<tr>${sections
       .map(
@@ -360,7 +541,7 @@ export async function GET(request: Request) {
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>${escapeHtml(filename)}</title>
+    <title>${escapeHtml(finalFilename)}</title>
     <style>
       body { font-family: Arial, sans-serif; }
       table { border-collapse: collapse; }
@@ -374,7 +555,7 @@ export async function GET(request: Request) {
       <tr><td><b>Reporte:</b> Padrón nominal</td></tr>
       <tr><td><b>Generado:</b> ${escapeHtml(generatedAt)}</td></tr>
       <tr><td><b>Rol:</b> ${escapeHtml(session.tipo)}</td></tr>
-      <tr><td><b>Ubigeo:</b> ${escapeHtml(session.tipo === "SUPER ADMIN" ? "TODOS" : String(ubigeo))}</td></tr>
+      <tr><td><b>Ubigeo:</b> ${escapeHtml(session.tipo === "SUPER ADMIN" ? (ubigeos && ubigeos.length ? ubigeos.join(", ") : "TODOS") : String(ubigeos?.[0] ?? ""))}</td></tr>
       <tr><td><b>Tipo:</b> ${escapeHtml(`${tipoLabel} (tipovd=${tipovd})`)}</td></tr>
       <tr><td><b>Etapas:</b> ${escapeHtml(etapas.slice().sort().join(", "))}</td></tr>
       <tr><td><b>Total filas:</b> ${escapeHtml(rows.length)}</td></tr>
@@ -395,7 +576,7 @@ export async function GET(request: Request) {
     return new NextResponse(html, {
       headers: {
         "Content-Type": "application/vnd.ms-excel; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${filename}"`,
+        "Content-Disposition": `attachment; filename="${finalFilename}"`,
         "Cache-Control": "no-store",
       },
     });
