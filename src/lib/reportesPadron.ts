@@ -122,8 +122,8 @@ export async function listPadronReporte(params: {
   if (tipovd !== "1" && tipovd !== "2") return [];
 
   const where: string[] = [
-    "TRIM(COALESCE(pn.tipovd,'')) = ?",
-    `pn.etapa IN (${etapas.map(() => "?").join(",")})`,
+    "TRIM(COALESCE(pn0.tipovd,'')) = ?",
+    `pn0.etapa IN (${etapas.map(() => "?").join(",")})`,
   ];
   const values: any[] = [tipovd, ...etapas];
 
@@ -131,10 +131,10 @@ export async function listPadronReporte(params: {
     new Set((params.ubigeos ?? []).map((u) => Number(u)).filter((u) => Number.isFinite(u))),
   ) as number[];
   if (ubigeos.length === 1) {
-    where.unshift("pn.ubigeo = ?");
+    where.unshift("pn0.ubigeo = ?");
     values.unshift(ubigeos[0]);
   } else if (ubigeos.length > 1) {
-    where.unshift(`pn.ubigeo IN (${ubigeos.map(() => "?").join(",")})`);
+    where.unshift(`pn0.ubigeo IN (${ubigeos.map(() => "?").join(",")})`);
     values.unshift(...ubigeos);
   }
 
@@ -192,7 +192,16 @@ export async function listPadronReporte(params: {
         TRIM(CONCAT(COALESCE(p_resp.nombrecompleto,''),' ',COALESCE(p_resp.apellidos,''))) AS responsable_nombre,
         o1.descripcion AS ocurrencia_desc,
         o2.descripcion AS ocurrencia2_desc
-     FROM padronnominal pn
+     FROM (
+        SELECT
+          pn0.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY pn0.ubigeo, pn0.etapa, TRIM(pn0.dni)
+            ORDER BY pn0.idpn DESC
+          ) AS rn_pn
+        FROM padronnominal pn0
+        WHERE ${where.join(" AND ")}
+     ) pn
      LEFT JOIN (
         SELECT
           ubigeo,
@@ -206,24 +215,52 @@ export async function listPadronReporte(params: {
           MAX(CASE WHEN rn = 3 THEN etapa_text END) AS estadosvd3
         FROM (
           SELECT
-            vr0.ubigeo,
-            vr0.etapa_mes,
-            vr0.dni_nino,
-            vr0.fecha_intervencion,
-            vr0.etapa_text,
+            y.ubigeo,
+            y.etapa_mes,
+            y.dni_nino,
+            y.fecha_intervencion,
+            y.etapa_text,
             ROW_NUMBER() OVER (
-              PARTITION BY vr0.ubigeo, vr0.etapa_mes, TRIM(vr0.dni_nino)
-              ORDER BY vr0.fecha_intervencion ASC
+              PARTITION BY y.ubigeo, y.etapa_mes, y.dni_nino
+              ORDER BY y.fecha_intervencion ASC
             ) AS rn
-          FROM visitas_raw vr0
-          WHERE vr0.etapa_mes IN (${etapas.map(() => "?").join(",")})
-            ${vrUbigeoSql}
-            AND vr0.fecha_intervencion IS NOT NULL
-            AND (
-              LOWER(COALESCE(vr0.etapa_text,'')) LIKE 'visita%'
-              OR LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%no encontrado%'
-              OR LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%rechaz%'
-            )
+          FROM (
+            SELECT
+              d.ubigeo,
+              d.etapa_mes,
+              d.dni_nino,
+              d.fecha_intervencion,
+              d.etapa_text
+            FROM (
+              SELECT
+                vr0.ubigeo,
+                vr0.etapa_mes,
+                TRIM(vr0.dni_nino) AS dni_nino,
+                DATE(vr0.fecha_intervencion) AS fecha_intervencion,
+                vr0.etapa_text,
+                ROW_NUMBER() OVER (
+                  PARTITION BY vr0.ubigeo, vr0.etapa_mes, TRIM(vr0.dni_nino), DATE(vr0.fecha_intervencion)
+                  ORDER BY
+                    CASE
+                      WHEN LOWER(COALESCE(vr0.etapa_text,'')) LIKE 'visita%' THEN 3
+                      WHEN LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%no encontrado%' THEN 2
+                      WHEN LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%rechaz%' THEN 1
+                      ELSE 0
+                    END DESC,
+                    vr0.fecha_intervencion ASC
+                ) AS rn_day
+              FROM visitas_raw vr0
+              WHERE vr0.etapa_mes IN (${etapas.map(() => "?").join(",")})
+                ${vrUbigeoSql}
+                AND vr0.fecha_intervencion IS NOT NULL
+                AND (
+                  LOWER(COALESCE(vr0.etapa_text,'')) LIKE 'visita%'
+                  OR LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%no encontrado%'
+                  OR LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%rechaz%'
+                )
+            ) d
+            WHERE d.rn_day = 1
+          ) y
         ) x
         WHERE rn <= 3
         GROUP BY ubigeo, etapa_mes, TRIM(dni_nino)
@@ -232,7 +269,7 @@ export async function listPadronReporte(params: {
      LEFT JOIN persona p_resp ON TRIM(p_resp.dni) = TRIM(pn.responsable)
      LEFT JOIN ocurrencias o1 ON o1.idocurrencias = pn.idocurrencia
      LEFT JOIN ocurrencias o2 ON o2.idocurrencias = pn.idocurrencia2
-     WHERE ${where.join(" AND ")}
+     WHERE pn.rn_pn = 1
      ORDER BY pn.ubigeo ASC, pn.etapa DESC, pn.idpn ASC
      LIMIT ${limit}`,
     queryValues,
