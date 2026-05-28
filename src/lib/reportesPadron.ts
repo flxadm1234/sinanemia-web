@@ -332,8 +332,38 @@ export async function listPadronReporte(params: {
         WHERE rn <= 3
         GROUP BY dni
      ) tam ON tam.dni = TRIM(pn.dni)
-     LEFT JOIN persona p_actor ON TRIM(p_actor.dni) = TRIM(pn.actorsocial)
-     LEFT JOIN persona p_resp ON TRIM(p_resp.dni) = TRIM(pn.responsable)
+     LEFT JOIN (
+        SELECT dni, nombrecompleto, apellidos
+        FROM (
+          SELECT
+            TRIM(p.dni) AS dni,
+            p.nombrecompleto,
+            p.apellidos,
+            ROW_NUMBER() OVER (
+              PARTITION BY TRIM(p.dni)
+              ORDER BY p.idpersona DESC
+            ) AS rn_persona
+          FROM persona p
+          WHERE TRIM(COALESCE(p.dni,'')) <> ''
+        ) x
+        WHERE rn_persona = 1
+     ) p_actor ON p_actor.dni = TRIM(pn.actorsocial)
+     LEFT JOIN (
+        SELECT dni, nombrecompleto, apellidos
+        FROM (
+          SELECT
+            TRIM(p.dni) AS dni,
+            p.nombrecompleto,
+            p.apellidos,
+            ROW_NUMBER() OVER (
+              PARTITION BY TRIM(p.dni)
+              ORDER BY p.idpersona DESC
+            ) AS rn_persona
+          FROM persona p
+          WHERE TRIM(COALESCE(p.dni,'')) <> ''
+        ) x
+        WHERE rn_persona = 1
+     ) p_resp ON p_resp.dni = TRIM(pn.responsable)
      LEFT JOIN ocurrencias o1 ON o1.idocurrencias = pn.idocurrencia
      LEFT JOIN ocurrencias o2 ON o2.idocurrencias = pn.idocurrencia2
      WHERE pn.rn_pn = 1
