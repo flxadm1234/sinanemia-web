@@ -74,6 +74,18 @@ export type PadronReporteRow = {
   primera_vd: string | null;
   segunda_vd: string | null;
   tercera_vd: string | null;
+  tam_fecha_atencion: string | null;
+  tam_hemoglobina: string | null;
+  tam_peso: string | null;
+  tam_talla: string | null;
+  tam_cie_10: string | null;
+  tam_resultado: string | null;
+  hemoglobina1: string | null;
+  fecha_atencion1: string | null;
+  hemoglobina2: string | null;
+  fecha_atencion2: string | null;
+  hemoglobina3: string | null;
+  fecha_atencion3: string | null;
   resultado: number | null;
   avance: number | null;
   fotos: string | null;
@@ -145,10 +157,14 @@ export async function listPadronReporte(params: {
         ? `AND vr0.ubigeo IN (${ubigeos.map(() => "?").join(",")})`
         : "";
 
+  const wherePn2 = where.map((w) => w.replaceAll("pn0.", "pn2."));
+  const valuesPn2 = [...values];
+
   const queryValues: any[] = [
+    ...values,
     ...etapas,
     ...(ubigeos.length ? ubigeos : []),
-    ...values,
+    ...valuesPn2,
   ];
 
   const limit = Math.min(Math.max(params.limit ?? 200000, 1), 200000);
@@ -182,6 +198,18 @@ export async function listPadronReporte(params: {
         vr.primera_vd,
         vr.segunda_vd,
         vr.tercera_vd,
+        tam.fecha_atencion AS tam_fecha_atencion,
+        tam.hemoglobina AS tam_hemoglobina,
+        tam.peso AS tam_peso,
+        tam.talla AS tam_talla,
+        tam.cie_10 AS tam_cie_10,
+        tam.resultado AS tam_resultado,
+        tam.hemoglobina1,
+        tam.fecha_atencion1,
+        tam.hemoglobina2,
+        tam.fecha_atencion2,
+        tam.hemoglobina3,
+        tam.fecha_atencion3,
         pn.resultado, pn.avance,
         pn.fotos, pn.programacion1, pn.padronnominal,
         pn.iddistrito, pn.discapacidad, pn.titular_linea, pn.codigov,
@@ -265,6 +293,45 @@ export async function listPadronReporte(params: {
         WHERE rn <= 3
         GROUP BY ubigeo, etapa_mes, TRIM(dni_nino)
      ) vr ON vr.ubigeo = pn.ubigeo AND vr.etapa_mes = pn.etapa AND vr.dni_nino = TRIM(pn.dni)
+     LEFT JOIN (
+        SELECT
+          dni,
+          MAX(CASE WHEN rn = 1 THEN fecha_atencion END) AS fecha_atencion,
+          MAX(CASE WHEN rn = 1 THEN hemoglobina END) AS hemoglobina,
+          MAX(CASE WHEN rn = 1 THEN peso END) AS peso,
+          MAX(CASE WHEN rn = 1 THEN talla END) AS talla,
+          MAX(CASE WHEN rn = 1 THEN cie_10 END) AS cie_10,
+          MAX(CASE WHEN rn = 1 THEN resultado END) AS resultado,
+          MAX(CASE WHEN rn = 1 THEN hemoglobina END) AS hemoglobina1,
+          MAX(CASE WHEN rn = 1 THEN fecha_atencion END) AS fecha_atencion1,
+          MAX(CASE WHEN rn = 2 THEN hemoglobina END) AS hemoglobina2,
+          MAX(CASE WHEN rn = 2 THEN fecha_atencion END) AS fecha_atencion2,
+          MAX(CASE WHEN rn = 3 THEN hemoglobina END) AS hemoglobina3,
+          MAX(CASE WHEN rn = 3 THEN fecha_atencion END) AS fecha_atencion3
+        FROM (
+          SELECT
+            TRIM(rt.dni) AS dni,
+            DATE(rt.fecha_atencion) AS fecha_atencion,
+            rt.hemoglobina,
+            rt.peso,
+            rt.talla,
+            rt.cie_10,
+            rt.resultado,
+            ROW_NUMBER() OVER (
+              PARTITION BY TRIM(rt.dni)
+              ORDER BY rt.fecha_atencion DESC, rt.id DESC
+            ) AS rn
+          FROM registro_tamizaje rt
+          JOIN (
+            SELECT DISTINCT TRIM(pn2.dni) AS dni
+            FROM padronnominal pn2
+            WHERE ${wherePn2.join(" AND ")}
+          ) dnis ON dnis.dni = TRIM(rt.dni)
+          WHERE rt.fecha_atencion IS NOT NULL
+        ) t
+        WHERE rn <= 3
+        GROUP BY dni
+     ) tam ON tam.dni = TRIM(pn.dni)
      LEFT JOIN persona p_actor ON TRIM(p_actor.dni) = TRIM(pn.actorsocial)
      LEFT JOIN persona p_resp ON TRIM(p_resp.dni) = TRIM(pn.responsable)
      LEFT JOIN ocurrencias o1 ON o1.idocurrencias = pn.idocurrencia
