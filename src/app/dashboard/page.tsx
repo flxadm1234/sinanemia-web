@@ -590,7 +590,7 @@ export default async function DashboardPage(props: {
                       Exclusiones del numerador (desde NC)
                     </div>
                     <div className="mt-1 text-xs text-zinc-500">
-                      Incluye anemia (HB{"<"}10.5), hemoglobina inválida y falta de tamizaje (HIS).
+                      Incluye anemia (HB{"<"}10.5), hemoglobina inválida y falta de tamizaje en ventana (HB 0/vacía o sin registro HIS).
                     </div>
                     <div className="mt-3 overflow-auto">
                       <table className="min-w-[520px] text-sm">

@@ -192,7 +192,7 @@ export async function GET(req: Request) {
         denom ? Math.round((numer / denom) * 1000) / 10 : 0,
       )}%</b></td></tr>
       <tr><td>Filtros del denominador: edad crítica + permanencia (2 meses) + seguro (SIS o sin seguro)</td></tr>
-      <tr><td>Numerador: sin anemia (HB>=10.5) usando el último tamizaje HIS por DNI (fecha_atencion más reciente). Validación: HB en rango 6-18.</td></tr>
+      <tr><td>Numerador: tamizaje en ventana (6m: 170-209 días / 12m: 365-394 días) con HB registrada (HB&gt;0) y sin anemia (HB&gt;=10.5). Denominador excluye inconsistencias (HB&lt;6 o &gt;18, o CIE10 con HB 0/vacía). En tabla se muestra el último HIS global.</td></tr>
       <tr><td>&nbsp;</td></tr>
     </table>
   `;

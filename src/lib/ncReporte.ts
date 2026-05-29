@@ -353,30 +353,39 @@ export async function computeNcMetricsForEtapa(params: {
   }
 
   const dnis = Array.from(new Set(candidates.map((c) => c.dni)));
+  const birthMap = new Map<string, Date>();
+  for (const c of candidates) {
+    if (!birthMap.has(c.dni)) birthMap.set(c.dni, c.birth);
+  }
+
+  const minStart = (() => {
+    let min: Date | null = null;
+    for (const b of birthMap.values()) {
+      const d = addDaysUTC(b, 170);
+      if (!min || d.getTime() < min.getTime()) min = d;
+    }
+    return min ? isoDate(min) : "2026-01-01";
+  })();
+  const maxEnd = (() => {
+    let max: Date | null = null;
+    for (const b of birthMap.values()) {
+      const d = addDaysUTC(b, 394);
+      if (!max || d.getTime() > max.getTime()) max = d;
+    }
+    return max ? isoDate(max) : etapa;
+  })();
 
   const tamizajes: TamizajeRow[] = [];
   for (const part of chunk(dnis, 900)) {
     const placeholders = part.map(() => "?").join(",");
     const [rowsT] = await pool.query(
-      `SELECT id, TRIM(dni) AS dni, fecha_atencion, cie_10, diagnostico, hemoglobina, lab1, resultado
-       FROM (
-         SELECT
-           rt.id,
-           rt.dni,
-           rt.fecha_atencion,
-           rt.cie_10,
-           rt.diagnostico,
-           rt.hemoglobina,
-           rt.lab1,
-           rt.resultado,
-           ROW_NUMBER() OVER (PARTITION BY TRIM(rt.dni) ORDER BY rt.fecha_atencion DESC, rt.id DESC) AS rn
-         FROM registro_tamizaje rt
-         WHERE TRIM(rt.dni) IN (${placeholders})
-           AND rt.fecha_atencion IS NOT NULL
-       ) t
-       WHERE t.rn = 1
-       ORDER BY dni ASC`,
-      part,
+      `SELECT id, dni, fecha_atencion, cie_10, diagnostico, hemoglobina, lab1, resultado
+       FROM registro_tamizaje
+       WHERE dni IN (${placeholders})
+         AND fecha_atencion IS NOT NULL
+         AND fecha_atencion BETWEEN ? AND ?
+       ORDER BY dni ASC, fecha_atencion DESC, id DESC`,
+      [...part, minStart, maxEnd],
     );
     for (const r of rowsT as any[]) {
       tamizajes.push({
@@ -392,65 +401,95 @@ export async function computeNcMetricsForEtapa(params: {
     }
   }
 
-  const byTamizajeDni = new Map<string, TamizajeRow>();
+  const byTamizajeDni = new Map<string, TamizajeRow[]>();
   for (const t of tamizajes) {
     const dni = String(t.dni ?? "").trim();
     if (!dni) continue;
-    if (!byTamizajeDni.has(dni)) byTamizajeDni.set(dni, t);
+    const arr = byTamizajeDni.get(dni) ?? [];
+    arr.push(t);
+    byTamizajeDni.set(dni, arr);
   }
 
+  const findLastInRange = (dni: string, startISO: string, endISO: string) => {
+    const arr = byTamizajeDni.get(dni);
+    if (!arr || !arr.length) return null;
+    for (const t of arr) {
+      const fa = String(t.fecha_atencion ?? "").slice(0, 10);
+      if (!fa) continue;
+      if (fa >= startISO && fa <= endISO) return t;
+    }
+    return null;
+  };
+
+  const isHbMissing = (hb: number | null) => hb == null || !Number.isFinite(hb) || hb <= 0;
+  const isHbAtipico = (hb: number) => hb < 6.0 || hb > 18.0;
+
+  let denomTotalAdj = 0;
+  let denom6Adj = 0;
+  let denom12Adj = 0;
   let num6 = 0;
   let num12 = 0;
-  const ninosConTamizaje = byTamizajeDni.size;
+  let ninosConTamizaje = 0;
 
   for (const c of candidates) {
     const dni = c.dni;
-    const t = byTamizajeDni.get(dni) ?? null;
+    const birth = c.birth;
 
-    if (c.grupo === "6m") {
-      if (!t) {
-        if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Sin tamizaje (sin registros HIS)" });
-        exclNum.set(
-          "Sin tamizaje (sin registros HIS)",
-          (exclNum.get("Sin tamizaje (sin registros HIS)") ?? 0) + 1,
-        );
-        continue;
-      }
-      const cons = hbConsistente(t.hemoglobina, t.cie_10, t.lab1);
-      if (!cons.ok) {
-        if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: cons.motivo });
-        exclNum.set(cons.motivo, (exclNum.get(cons.motivo) ?? 0) + 1);
-        continue;
-      }
+    const start = c.grupo === "6m" ? isoDate(addDaysUTC(birth, 170)) : isoDate(addDaysUTC(birth, 365));
+    const end = c.grupo === "6m" ? isoDate(addDaysUTC(birth, 209)) : isoDate(addDaysUTC(birth, 394));
+    const t = findLastInRange(dni, start, end);
+
+    if (t) {
       const hb = Number(t.hemoglobina ?? NaN);
-      if (Number.isFinite(hb) && hb >= 10.5) {
-        num6 += 1;
-      } else {
-        if (params.includeDetails) excl.push({ dni, grupo: "6m", motivo: "Anemia (HB < 10.5)" });
-        exclNum.set("Anemia (HB < 10.5)", (exclNum.get("Anemia (HB < 10.5)") ?? 0) + 1);
+      const cie = String(t.cie_10 ?? "").trim();
+      if (isHbMissing(Number.isFinite(hb) ? hb : null)) {
+        if (cie) {
+          const motivo = "Inconsistencia: CIE10 con hemoglobina 0/vacía";
+          if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo });
+          exclDenom.set(motivo, (exclDenom.get(motivo) ?? 0) + 1);
+          continue;
+        }
+      } else if (isHbAtipico(hb)) {
+        const motivo = "Inconsistencia: Hemoglobina atípica (<6 o >18)";
+        if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo });
+        exclDenom.set(motivo, (exclDenom.get(motivo) ?? 0) + 1);
+        continue;
       }
+    }
+
+    denomTotalAdj += 1;
+    if (c.grupo === "6m") denom6Adj += 1;
+    else denom12Adj += 1;
+
+    if (!t) {
+      if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo: "SIN TAMIZAJE" });
+      exclNum.set("SIN TAMIZAJE", (exclNum.get("SIN TAMIZAJE") ?? 0) + 1);
+      continue;
+    }
+
+    const hbVal = Number(t.hemoglobina ?? NaN);
+    if (isHbMissing(Number.isFinite(hbVal) ? hbVal : null)) {
+      if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo: "SIN TAMIZAJE" });
+      exclNum.set("SIN TAMIZAJE", (exclNum.get("SIN TAMIZAJE") ?? 0) + 1);
+      continue;
+    }
+
+    const cons = hbConsistente(hbVal, t.cie_10, t.lab1);
+    if (!cons.ok) {
+      if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo: cons.motivo });
+      exclNum.set(cons.motivo, (exclNum.get(cons.motivo) ?? 0) + 1);
+      continue;
+    }
+
+    ninosConTamizaje += 1;
+
+    if (hbVal >= 10.5) {
+      if (c.grupo === "6m") num6 += 1;
+      else num12 += 1;
     } else {
-      if (!t) {
-        if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: "Sin tamizaje (sin registros HIS)" });
-        exclNum.set(
-          "Sin tamizaje (sin registros HIS)",
-          (exclNum.get("Sin tamizaje (sin registros HIS)") ?? 0) + 1,
-        );
-        continue;
-      }
-      const cons = hbConsistente(t.hemoglobina, t.cie_10, t.lab1);
-      if (!cons.ok) {
-        if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: cons.motivo });
-        exclNum.set(cons.motivo, (exclNum.get(cons.motivo) ?? 0) + 1);
-        continue;
-      }
-      const hb = Number(t.hemoglobina ?? NaN);
-      if (Number.isFinite(hb) && hb >= 10.5) {
-        num12 += 1;
-      } else {
-        if (params.includeDetails) excl.push({ dni, grupo: "12m", motivo: "Anemia (HB < 10.5)" });
-        exclNum.set("Anemia (HB < 10.5)", (exclNum.get("Anemia (HB < 10.5)") ?? 0) + 1);
-      }
+      const motivo = "Anemia (HB < 10.5)";
+      if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo });
+      exclNum.set(motivo, (exclNum.get(motivo) ?? 0) + 1);
     }
   }
 
@@ -464,9 +503,9 @@ export async function computeNcMetricsForEtapa(params: {
     total_con_seguro_valido: totalSeguroValido,
     tamizaje_registros_encontrados: tamizajes.length,
     tamizaje_ninos_con_registro: ninosConTamizaje,
-    denom_total: denomTotal,
-    denom_6m: denom6,
-    denom_12m: denom12,
+    denom_total: denomTotalAdj,
+    denom_6m: denom6Adj,
+    denom_12m: denom12Adj,
     num_total: num6 + num12,
     num_6m: num6,
     num_12m: num12,
@@ -655,6 +694,112 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
     if (!byTamizajeDni.has(dni)) byTamizajeDni.set(dni, t);
   }
 
+  const denomDnis = baseItems.filter((x) => denomInfo.get(x.dni)?.ok).map((x) => x.dni);
+  const birthMap = new Map<string, Date>();
+  for (const dni of denomDnis) {
+    const b = denomInfo.get(dni)?.birth;
+    if (b) birthMap.set(dni, b);
+  }
+
+  const minStart = (() => {
+    let min: Date | null = null;
+    for (const b of birthMap.values()) {
+      const d = addDaysUTC(b, 170);
+      if (!min || d.getTime() < min.getTime()) min = d;
+    }
+    return min ? isoDate(min) : "2026-01-01";
+  })();
+  const maxEnd = (() => {
+    let max: Date | null = null;
+    for (const b of birthMap.values()) {
+      const d = addDaysUTC(b, 394);
+      if (!max || d.getTime() > max.getTime()) max = d;
+    }
+    return max ? isoDate(max) : etapa;
+  })();
+
+  const tamizajesVentana: TamizajeRow[] = [];
+  if (denomDnis.length) {
+    for (const part of chunk(denomDnis, 900)) {
+      const placeholders = part.map(() => "?").join(",");
+      const [rowsT] = await pool.query(
+        `SELECT id, dni, fecha_atencion, cie_10, diagnostico, hemoglobina, lab1, resultado
+         FROM registro_tamizaje
+         WHERE dni IN (${placeholders})
+           AND fecha_atencion IS NOT NULL
+           AND fecha_atencion BETWEEN ? AND ?
+         ORDER BY dni ASC, fecha_atencion DESC, id DESC`,
+        [...part, minStart, maxEnd],
+      );
+      for (const r of rowsT as any[]) {
+        tamizajesVentana.push({
+          id: r.id == null ? null : Number(r.id),
+          dni: r.dni == null ? null : String(r.dni).trim(),
+          fecha_atencion: fmtDateISO(r.fecha_atencion),
+          cie_10: r.cie_10 == null ? null : String(r.cie_10),
+          diagnostico: r.diagnostico == null ? null : String(r.diagnostico),
+          hemoglobina: r.hemoglobina == null ? null : Number(r.hemoglobina),
+          lab1: r.lab1 == null ? null : String(r.lab1),
+          resultado: r.resultado == null ? null : String(r.resultado),
+        });
+      }
+    }
+  }
+
+  const byTamizajeVentanaDni = new Map<string, TamizajeRow[]>();
+  for (const t of tamizajesVentana) {
+    const dni = String(t.dni ?? "").trim();
+    if (!dni) continue;
+    const arr = byTamizajeVentanaDni.get(dni) ?? [];
+    arr.push(t);
+    byTamizajeVentanaDni.set(dni, arr);
+  }
+
+  const findLastInRange = (dni: string, startISO: string, endISO: string) => {
+    const arr = byTamizajeVentanaDni.get(dni);
+    if (!arr || !arr.length) return null;
+    for (const t of arr) {
+      const fa = String(t.fecha_atencion ?? "").slice(0, 10);
+      if (!fa) continue;
+      if (fa >= startISO && fa <= endISO) return t;
+    }
+    return null;
+  };
+
+  const isHbMissing = (hb: number | null) => hb == null || !Number.isFinite(hb) || hb <= 0;
+  const isHbAtipico = (hb: number) => hb < 6.0 || hb > 18.0;
+
+  const tamizajeUsado = new Map<string, TamizajeRow | null>();
+  for (const dni of denomDnis) {
+    const den = denomInfo.get(dni);
+    if (!den || !den.ok || !den.birth || (den.grupo !== "6m" && den.grupo !== "12m")) continue;
+    const start = den.grupo === "6m" ? isoDate(addDaysUTC(den.birth, 170)) : isoDate(addDaysUTC(den.birth, 365));
+    const end = den.grupo === "6m" ? isoDate(addDaysUTC(den.birth, 209)) : isoDate(addDaysUTC(den.birth, 394));
+    const t = findLastInRange(dni, start, end);
+    tamizajeUsado.set(dni, t);
+
+    if (!t) continue;
+    const hb = Number(t.hemoglobina ?? NaN);
+    const cie = String(t.cie_10 ?? "").trim();
+    if (isHbMissing(Number.isFinite(hb) ? hb : null) && cie) {
+      denomInfo.set(dni, {
+        grupo: den.grupo,
+        ok: false,
+        motivo: "Inconsistencia: CIE10 con hemoglobina 0/vacía",
+        birth: den.birth,
+      });
+      continue;
+    }
+    if (!isHbMissing(Number.isFinite(hb) ? hb : null) && isHbAtipico(hb)) {
+      denomInfo.set(dni, {
+        grupo: den.grupo,
+        ok: false,
+        motivo: "Inconsistencia: Hemoglobina atípica (<6 o >18)",
+        birth: den.birth,
+      });
+    }
+  }
+
   const out: NcMatrixRow[] = [];
   for (const it of baseItems) {
     const den = denomInfo.get(it.dni) ?? { grupo: "-", ok: false, motivo: "Sin evaluación", birth: null };
@@ -707,16 +852,19 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
       row.resultado = t.resultado ?? "";
     }
 
-    if (den.ok) {
-      if (!t) {
-        row.motivo_exclusion_numerador = "Sin tamizaje (sin registros HIS)";
+    if (den.ok && (den.grupo === "6m" || den.grupo === "12m")) {
+      const tw = tamizajeUsado.get(it.dni) ?? null;
+      if (!tw) {
+        row.motivo_exclusion_numerador = "SIN TAMIZAJE";
       } else {
-        const cons = hbConsistente(t.hemoglobina, t.cie_10, t.lab1);
-        if (!cons.ok) {
-          row.motivo_exclusion_numerador = cons.motivo;
+        const hb = Number(tw.hemoglobina ?? NaN);
+        if (isHbMissing(Number.isFinite(hb) ? hb : null)) {
+          row.motivo_exclusion_numerador = "SIN TAMIZAJE";
         } else {
-          const hb = Number(t.hemoglobina ?? NaN);
-          if (Number.isFinite(hb) && hb >= 10.5) {
+          const cons = hbConsistente(hb, tw.cie_10, tw.lab1);
+          if (!cons.ok) {
+            row.motivo_exclusion_numerador = cons.motivo;
+          } else if (hb >= 10.5) {
             row.en_numerador = "SI";
             row.motivo_exclusion_numerador = "";
           } else {
