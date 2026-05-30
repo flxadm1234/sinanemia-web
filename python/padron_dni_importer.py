@@ -455,85 +455,95 @@ def run_import(job_id: str, activo_path: str, observado_path: str, transito_path
     )
     db.commit()
 
-    key_expr = """
-      COALESCE(
-        NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[3]'))), ''),
-        NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[5]'))), '')
-      )
-    """
-    update_sql = f"""
+    def _s(v):
+        if v is None:
+            return None
+        t = str(v).strip()
+        if not t or t.upper() == "NULL":
+            return None
+        return t
+
+    def _full_name(a, b, c):
+        parts = [_s(a), _s(b), _s(c)]
+        parts = [p for p in parts if p]
+        return " ".join(parts) if parts else None
+
+    def _key_from_payload(payload):
+        cnv = normalize_dni(payload[3] if len(payload) > 3 else None)
+        dni_num = normalize_dni(payload[5] if len(payload) > 5 else None)
+        return cnv or dni_num
+
+    updates_by_key = {}
+    for excel_row, ub, dni, payload in rows_a + rows_o + rows_t:
+        key = _key_from_payload(payload)
+        if not key:
+            continue
+        updates_by_key[key] = payload
+
+    update_stmt = """
       UPDATE padronnominal pn
-      JOIN (
-        SELECT
-          a.key_value,
-          a.nino_appat,
-          a.nino_apmat,
-          a.nino_nombres,
-          a.madre_appat,
-          a.madre_apmat,
-          a.madre_nombres,
-          a.jefe_dni,
-          a.jefe_appat,
-          a.jefe_apmat,
-          a.jefe_nombres,
-          a.madre_celular
-        FROM (
-          SELECT
-            r0.id,
-            {key_expr} AS key_value,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[8]'))), '') AS nino_appat,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[9]'))), '') AS nino_apmat,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[10]'))), '') AS nino_nombres,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[45]'))), '') AS madre_appat,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[46]'))), '') AS madre_apmat,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[47]'))), '') AS madre_nombres,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[54]'))), '') AS jefe_dni,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[55]'))), '') AS jefe_appat,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[56]'))), '') AS jefe_apmat,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[57]'))), '') AS jefe_nombres,
-            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[48]'))), '') AS madre_celular
-          FROM padron_dni_raw r0
-          WHERE r0.job_id = %s AND JSON_VALID(r0.payload)
-        ) a
-        JOIN (
-          SELECT MAX(id) AS id
-          FROM (
-            SELECT
-              r1.id,
-              {key_expr.replace("r0.", "r1.")} AS key_value
-            FROM padron_dni_raw r1
-            WHERE r1.job_id = %s AND JSON_VALID(r1.payload)
-          ) b
-          WHERE b.key_value IS NOT NULL
-          GROUP BY b.key_value
-        ) m ON m.id = a.id
-        WHERE a.key_value IS NOT NULL
-      ) src ON TRIM(pn.dni) = src.key_value
       SET
-        pn.nombres = COALESCE(
-          NULLIF(TRIM(COALESCE(pn.nombres, '')), ''),
-          TRIM(CONCAT_WS(' ', src.nino_appat, src.nino_apmat, src.nino_nombres))
-        ),
-        pn.appatmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.appatmadre, '')), ''), src.madre_appat),
-        pn.apmatmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.apmatmadre, '')), ''), src.madre_apmat),
-        pn.nombresmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.nombresmadre, '')), ''), src.madre_nombres),
-        pn.dni_padre = COALESCE(NULLIF(TRIM(COALESCE(pn.dni_padre, '')), ''), src.jefe_dni),
-        pn.nombre_padre = COALESCE(
-          NULLIF(TRIM(COALESCE(pn.nombre_padre, '')), ''),
-          TRIM(CONCAT_WS(' ', src.jefe_appat, src.jefe_apmat, src.jefe_nombres))
-        ),
-        pn.telefonopn = COALESCE(NULLIF(TRIM(COALESCE(pn.telefonopn, '')), ''), src.madre_celular)
+        pn.nombres = COALESCE(NULLIF(TRIM(COALESCE(pn.nombres,'')), ''), %s),
+        pn.appatmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.appatmadre,'')), ''), %s),
+        pn.apmatmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.apmatmadre,'')), ''), %s),
+        pn.nombresmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.nombresmadre,'')), ''), %s),
+        pn.dni_padre = COALESCE(NULLIF(TRIM(COALESCE(pn.dni_padre,'')), ''), %s),
+        pn.nombre_padre = COALESCE(NULLIF(TRIM(COALESCE(pn.nombre_padre,'')), ''), %s),
+        pn.telefonopn = COALESCE(NULLIF(TRIM(COALESCE(pn.telefonopn,'')), ''), %s)
       WHERE
         pn.ubigeo = %s
+        AND TRIM(pn.dni) = %s
         AND (
           pn.nombres IS NULL OR TRIM(pn.nombres) = '' OR UPPER(TRIM(pn.nombres)) = 'NULL'
         )
     """
 
-    cur.execute(update_sql, [job_id, job_id, ub_a])
-    updated_pn = cur.rowcount or 0
-    db.commit()
-    log_line(f"[padronnominal] updated_rows={updated_pn} job={job_id}")
+    keys = list(updates_by_key.keys())
+    updated_pn = 0
+    if keys:
+        batch_u = 400
+        done_u = 0
+        for i in range(0, len(keys), batch_u):
+            part_keys = keys[i : i + batch_u]
+            values = []
+            for k in part_keys:
+                p = updates_by_key[k]
+                nino_nombre = _full_name(p[8] if len(p) > 8 else None, p[9] if len(p) > 9 else None, p[10] if len(p) > 10 else None)
+                madre_appat = _s(p[45] if len(p) > 45 else None)
+                madre_apmat = _s(p[46] if len(p) > 46 else None)
+                madre_nombres = _s(p[47] if len(p) > 47 else None)
+                madre_cel = normalize_dni(p[48] if len(p) > 48 else None)
+                padre_dni = normalize_dni(p[54] if len(p) > 54 else None)
+                padre_nombre = _full_name(p[55] if len(p) > 55 else None, p[56] if len(p) > 56 else None, p[57] if len(p) > 57 else None)
+                values.append(
+                    (
+                        nino_nombre,
+                        madre_appat,
+                        madre_apmat,
+                        madre_nombres,
+                        padre_dni,
+                        padre_nombre,
+                        madre_cel,
+                        ub_a,
+                        k,
+                    )
+                )
+            if values:
+                cur.executemany(update_stmt, values)
+                db.commit()
+                updated_pn += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+            done_u += len(part_keys)
+            progress = 98 + int((done_u / max(1, len(keys))) * 2)
+            job_update(
+                cur,
+                job_id,
+                progress=min(progress, 99),
+                message=f"Actualizando padrón nominal... {done_u}/{len(keys)}",
+            )
+            db.commit()
+
+    log_line(f"[padronnominal] updated_rows={updated_pn} job={job_id} keys={len(keys)}")
 
     job_update(
         cur,
