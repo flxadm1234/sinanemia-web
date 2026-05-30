@@ -4,8 +4,24 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-function parseYmd(s: string) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || "").trim());
+function parseYmd(v: unknown) {
+  if (v instanceof Date) {
+    const iso = v.toISOString();
+    const s0 = iso.slice(0, 10);
+    const m0 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s0);
+    if (!m0) return null;
+    const y0 = Number(m0[1]);
+    const mo0 = Number(m0[2]);
+    const d0 = Number(m0[3]);
+    if (!Number.isFinite(y0) || !Number.isFinite(mo0) || !Number.isFinite(d0)) return null;
+    const dt0 = new Date(Date.UTC(y0, mo0 - 1, d0));
+    if (Number.isNaN(dt0.getTime())) return null;
+    return dt0;
+  }
+
+  const s = String(v ?? "").trim();
+  const s10 = s.length >= 10 ? s.slice(0, 10) : s;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s10);
   if (!m) return null;
   const y = Number(m[1]);
   const mo = Number(m[2]);
@@ -16,8 +32,9 @@ function parseYmd(s: string) {
   return dt;
 }
 
-function parseDmy(s: string) {
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || "").trim());
+function parseDmy(v: unknown) {
+  const s = String(v ?? "").trim();
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
   if (!m) return null;
   const d = Number(m[1]);
   const mo = Number(m[2]);
@@ -158,7 +175,7 @@ export async function computePadronDniDocTypeStats(params: { ubigeo: number }) {
   );
   const job = (jobRows as any[])[0] as any | undefined;
   if (!job?.id || !job?.fecha_corte) return null;
-  const fechaCorte = parseYmd(String(job.fecha_corte ?? ""));
+  const fechaCorte = parseYmd(job.fecha_corte);
   if (!fechaCorte) return null;
 
   const [rows] = await pool.query(
