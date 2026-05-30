@@ -192,7 +192,7 @@ export async function listPadronReporte(params: {
           SELECT
             r0.id,
             r0.job_id,
-            NULLIF(TRIM(COALESCE(r0.dni,'')), '') AS dni_key,
+            NULLIF(TRIM(COALESCE(r0.dni,'')), '') AS dni_stored,
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
@@ -201,6 +201,22 @@ export async function listPadronReporte(params: {
               ),
               ''
             ) AS cnv_key,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(r0.payload, '$[5]')
+                )
+              ),
+              ''
+            ) AS dni_key,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(r0.payload, '$[2]')
+                )
+              ),
+              ''
+            ) AS codpad_key,
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
@@ -309,6 +325,22 @@ export async function listPadronReporte(params: {
                     ),
                     ''
                   ),
+                  NULLIF(
+                    TRIM(
+                      JSON_UNQUOTE(
+                        JSON_EXTRACT(r0.payload, '$[5]')
+                      )
+                    ),
+                    ''
+                  ),
+                  NULLIF(
+                    TRIM(
+                      JSON_UNQUOTE(
+                        JSON_EXTRACT(r0.payload, '$[2]')
+                      )
+                    ),
+                    ''
+                  ),
                   NULLIF(TRIM(COALESCE(r0.dni,'')), '')
                 )
               ORDER BY r0.id DESC
@@ -323,27 +355,29 @@ export async function listPadronReporte(params: {
         pn.idpn, pn.tipo, pn.rango, pn.ccpp, pn.zona, pn.mz, pn.direccion, pn.referencia, pn.codeess, pn.tipodoc,
         pn.dni,
         COALESCE(
-          NULLIF(TRIM(COALESCE(pn.nombres,'')), ''),
+          NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.nombres,''))), 'NULL'), ''),
           NULLIF(TRIM(CONCAT_WS(' ', pdr_cnv.nino_appat, pdr_cnv.nino_apmat, pdr_cnv.nino_nombres)), ''),
-          NULLIF(TRIM(CONCAT_WS(' ', pdr_dni.nino_appat, pdr_dni.nino_apmat, pdr_dni.nino_nombres)), '')
+          NULLIF(TRIM(CONCAT_WS(' ', pdr_dni.nino_appat, pdr_dni.nino_apmat, pdr_dni.nino_nombres)), ''),
+          NULLIF(TRIM(CONCAT_WS(' ', pdr_cod.nino_appat, pdr_cod.nino_apmat, pdr_cod.nino_nombres)), '')
         ) AS nombres,
         pn.fecha_nac,
-        COALESCE(NULLIF(TRIM(COALESCE(pn.dnimadre,'')), ''), pdr_cnv.madre_dni, pdr_dni.madre_dni) AS dnimadre,
-        COALESCE(NULLIF(TRIM(COALESCE(pn.appatmadre,'')), ''), pdr_cnv.madre_appat, pdr_dni.madre_appat) AS appatmadre,
-        COALESCE(NULLIF(TRIM(COALESCE(pn.apmatmadre,'')), ''), pdr_cnv.madre_apmat, pdr_dni.madre_apmat) AS apmatmadre,
-        COALESCE(NULLIF(TRIM(COALESCE(pn.nombresmadre,'')), ''), pdr_cnv.madre_nombres, pdr_dni.madre_nombres) AS nombresmadre,
-        COALESCE(NULLIF(TRIM(COALESCE(pn.dni_padre,'')), ''), pdr_cnv.jefe_dni, pdr_dni.jefe_dni) AS dni_padre,
+        COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.dnimadre,''))), 'NULL'), ''), pdr_cnv.madre_dni, pdr_dni.madre_dni, pdr_cod.madre_dni) AS dnimadre,
+        COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.appatmadre,''))), 'NULL'), ''), pdr_cnv.madre_appat, pdr_dni.madre_appat, pdr_cod.madre_appat) AS appatmadre,
+        COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.apmatmadre,''))), 'NULL'), ''), pdr_cnv.madre_apmat, pdr_dni.madre_apmat, pdr_cod.madre_apmat) AS apmatmadre,
+        COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.nombresmadre,''))), 'NULL'), ''), pdr_cnv.madre_nombres, pdr_dni.madre_nombres, pdr_cod.madre_nombres) AS nombresmadre,
+        COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.dni_padre,''))), 'NULL'), ''), pdr_cnv.jefe_dni, pdr_dni.jefe_dni, pdr_cod.jefe_dni) AS dni_padre,
         COALESCE(
-          NULLIF(TRIM(COALESCE(pn.nombre_padre,'')), ''),
+          NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.nombre_padre,''))), 'NULL'), ''),
           NULLIF(TRIM(CONCAT_WS(' ', pdr_cnv.jefe_appat, pdr_cnv.jefe_apmat, pdr_cnv.jefe_nombres)), ''),
-          NULLIF(TRIM(CONCAT_WS(' ', pdr_dni.jefe_appat, pdr_dni.jefe_apmat, pdr_dni.jefe_nombres)), '')
+          NULLIF(TRIM(CONCAT_WS(' ', pdr_dni.jefe_appat, pdr_dni.jefe_apmat, pdr_dni.jefe_nombres)), ''),
+          NULLIF(TRIM(CONCAT_WS(' ', pdr_cod.jefe_appat, pdr_cod.jefe_apmat, pdr_cod.jefe_nombres)), '')
         ) AS nombre_padre,
         pn.idocurrencia, pn.idocurrencia2,
         pn.nuevadireccion, pn.nuevareferencia,
         pn.observacion, pn.obspadron,
         pn.actorsocial, pn.responsable,
         pn.telefono,
-        COALESCE(NULLIF(TRIM(COALESCE(pn.telefonopn,'')), ''), pdr_cnv.madre_celular, pdr_dni.madre_celular) AS telefonopn,
+        COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.telefonopn,''))), 'NULL'), ''), pdr_cnv.madre_celular, pdr_dni.madre_celular, pdr_cod.madre_celular) AS telefonopn,
         pn.adulto, pn.cantidada,
         pn.etapa, pn.estadovd, pn.fechacita, pn.nrovd,
         pn.eess_ua, pn.departamento, pn.provincia, pn.distrito,
@@ -397,6 +431,7 @@ export async function listPadronReporte(params: {
      LEFT JOIN pdj ON pdj.ubigeo = pn.ubigeo AND pdj.periodo = DATE(pn.etapa)
      LEFT JOIN pdrx pdr_cnv ON pdr_cnv.job_id = pdj.job_id AND pdr_cnv.cnv_key = TRIM(pn.dni)
      LEFT JOIN pdrx pdr_dni ON pdr_dni.job_id = pdj.job_id AND pdr_dni.dni_key = TRIM(pn.dni)
+     LEFT JOIN pdrx pdr_cod ON pdr_cod.job_id = pdj.job_id AND pdr_cod.codpad_key = TRIM(pn.dni)
      LEFT JOIN (
         SELECT
           ubigeo,

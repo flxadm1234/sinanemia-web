@@ -267,10 +267,10 @@ def extract_rows(ws, tipo: str):
         u = to_int(v)
         if u and u > 0:
             col_ubigeo = fixed_ubigeo_col
-    col_dni = find_col(headers_norm, ["NUMERODEDOCUMENTONACIONALDEIDENTIFICACIONDNI", "DNI"])
+    fixed_codpad_col = 2
+    fixed_cnv_col = 3
     fixed_dni_col = 5
-    if col_dni is None and (ws.max_column or 0) >= fixed_dni_col + 1:
-        col_dni = fixed_dni_col
+    col_dni = fixed_dni_col if (ws.max_column or 0) >= fixed_dni_col + 1 else None
     if col_ubigeo is None:
         raise Exception("No se encontró la columna de UBIGEO en la plantilla.")
 
@@ -295,15 +295,13 @@ def extract_rows(ws, tipo: str):
         if len(row_vals) < max_col:
             row_vals.extend([None] * (max_col - len(row_vals)))
 
-        u = to_int(row_vals[col_ubigeo] if col_ubigeo is not None and col_ubigeo < len(row_vals) else None)
-        if (not u or u <= 0) and fixed_u:
-            u = fixed_u
-        if u and u > 0:
-            ubigeos.add(int(u))
+        u_cell = to_int(row_vals[col_ubigeo] if col_ubigeo is not None and col_ubigeo < len(row_vals) else None)
 
         dni = None
-        if col_dni is not None:
-            dni = normalize_dni(row_vals[col_dni])
+        cnv = normalize_dni(row_vals[fixed_cnv_col] if fixed_cnv_col < len(row_vals) else None)
+        dni_num = normalize_dni(row_vals[col_dni] if col_dni is not None and col_dni < len(row_vals) else None)
+        codpad = normalize_dni(row_vals[fixed_codpad_col] if fixed_codpad_col < len(row_vals) else None)
+        dni = cnv or dni_num or codpad
 
         has_any = False
         for v in row_vals[: min(max_col, 12)]:
@@ -313,12 +311,18 @@ def extract_rows(ws, tipo: str):
             if s:
                 has_any = True
                 break
-        if not has_any and not dni and not u:
+        if not has_any and not dni and not u_cell:
             empty_run += 1
             if empty_run >= 30:
                 break
             continue
         empty_run = 0
+
+        u = u_cell
+        if (not u or u <= 0) and fixed_u:
+            u = fixed_u
+        if u and u > 0:
+            ubigeos.add(int(u))
 
         payload = []
         for v in row_vals:
