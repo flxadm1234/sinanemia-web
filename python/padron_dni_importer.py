@@ -152,6 +152,25 @@ def best_ubigeo_col(ws, header_row, ubigeo_cols):
     return best
 
 
+def detect_ubigeo_col_t(ws):
+    fixed_col_t = 20
+    scan_end = 2000
+    for r in range(6, scan_end + 1):
+        v = ws.cell(row=r, column=fixed_col_t).value
+        u = to_int(v)
+        if u and u > 0:
+            return int(u)
+    return None
+
+
+def pick_sheet(wb):
+    for ws in wb.worksheets:
+        u = detect_ubigeo_col_t(ws)
+        if u:
+            return ws
+    return wb.worksheets[0]
+
+
 def sheet_headers(ws, header_row):
     max_col = ws.max_column or 1
     headers = []
@@ -241,6 +260,7 @@ def extract_rows(ws, tipo: str):
     headers_norm = [normalize_header(h) for h in headers]
     ubigeo_cols = [i for i, h in enumerate(headers_norm) if h and ("UBIGEO" in h)]
     col_ubigeo = best_ubigeo_col(ws, header_row, ubigeo_cols)
+    fixed_u = detect_ubigeo_col_t(ws)
     fixed_ubigeo_col = 19
     if (ws.max_column or 0) >= fixed_ubigeo_col + 1:
         v = ws.cell(row=6, column=fixed_ubigeo_col + 1).value
@@ -259,13 +279,15 @@ def extract_rows(ws, tipo: str):
     empty_run = 0
     out = []
 
-    max_col = max(ws.max_column or 1, len(headers))
-    max_row = ws.max_row or data_start
+    max_col = max(ws.max_column or 0, len(headers), 70)
+    max_row = ws.max_row if (ws.max_row and ws.max_row > 0) else 20000
 
     for r in range(data_start, max_row + 1):
         row_vals = [ws.cell(row=r, column=c).value for c in range(1, max_col + 1)]
 
         u = to_int(row_vals[col_ubigeo] if col_ubigeo is not None else None)
+        if (not u or u <= 0) and fixed_u:
+            u = fixed_u
         if u and u > 0:
             ubigeos.add(int(u))
 
@@ -299,7 +321,10 @@ def extract_rows(ws, tipo: str):
         out.append((r, int(u) if u and u > 0 else None, dni, payload))
 
     if not ubigeos:
-        raise Exception("No se pudo determinar el ubigeo desde el Excel.")
+        t6 = ws.cell(row=6, column=20).value
+        raise Exception(
+            f"No se pudo determinar el ubigeo desde el Excel. T6={to_text(t6)} max_row={ws.max_row} max_col={ws.max_column}"
+        )
 
     if len(ubigeos) > 1:
         ubigeos_str = ",".join([str(x) for x in sorted(list(ubigeos))[:10]])
@@ -328,9 +353,9 @@ def run_import(job_id: str, activo_path: str, observado_path: str, transito_path
     wb_a = load_workbook(filename=activo_path, read_only=True, data_only=True)
     wb_o = load_workbook(filename=observado_path, read_only=True, data_only=True)
     wb_t = load_workbook(filename=transito_path, read_only=True, data_only=True)
-    ws_a = wb_a.worksheets[0]
-    ws_o = wb_o.worksheets[0]
-    ws_t = wb_t.worksheets[0]
+    ws_a = pick_sheet(wb_a)
+    ws_o = pick_sheet(wb_o)
+    ws_t = pick_sheet(wb_t)
 
     ub_a, headers, rows_a = extract_rows(ws_a, "ACTIVO")
     ub_o, headers_o, rows_o = extract_rows(ws_o, "ACTIVO_OBSERVADO")
