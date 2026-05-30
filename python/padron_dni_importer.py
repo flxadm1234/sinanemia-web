@@ -448,12 +448,103 @@ def run_import(job_id: str, activo_path: str, observado_path: str, transito_path
     job_update(
         cur,
         job_id,
+        progress=98,
+        processed_rows=processed_total,
+        inserted_rows=inserted_total,
+        message="Actualizando padrón nominal...",
+    )
+    db.commit()
+
+    key_expr = """
+      COALESCE(
+        NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[3]'))), ''),
+        NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[5]'))), '')
+      )
+    """
+    update_sql = f"""
+      UPDATE padronnominal pn
+      JOIN (
+        SELECT
+          a.key_value,
+          a.nino_appat,
+          a.nino_apmat,
+          a.nino_nombres,
+          a.madre_appat,
+          a.madre_apmat,
+          a.madre_nombres,
+          a.jefe_dni,
+          a.jefe_appat,
+          a.jefe_apmat,
+          a.jefe_nombres,
+          a.madre_celular
+        FROM (
+          SELECT
+            r0.id,
+            {key_expr} AS key_value,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[8]'))), '') AS nino_appat,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[9]'))), '') AS nino_apmat,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[10]'))), '') AS nino_nombres,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[45]'))), '') AS madre_appat,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[46]'))), '') AS madre_apmat,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[47]'))), '') AS madre_nombres,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[54]'))), '') AS jefe_dni,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[55]'))), '') AS jefe_appat,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[56]'))), '') AS jefe_apmat,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[57]'))), '') AS jefe_nombres,
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[48]'))), '') AS madre_celular
+          FROM padron_dni_raw r0
+          WHERE r0.job_id = %s AND JSON_VALID(r0.payload)
+        ) a
+        JOIN (
+          SELECT MAX(id) AS id
+          FROM (
+            SELECT
+              r1.id,
+              {key_expr.replace("r0.", "r1.")} AS key_value
+            FROM padron_dni_raw r1
+            WHERE r1.job_id = %s AND JSON_VALID(r1.payload)
+          ) b
+          WHERE b.key_value IS NOT NULL
+          GROUP BY b.key_value
+        ) m ON m.id = a.id
+        WHERE a.key_value IS NOT NULL
+      ) src ON TRIM(pn.dni) = src.key_value
+      SET
+        pn.nombres = COALESCE(
+          NULLIF(TRIM(COALESCE(pn.nombres, '')), ''),
+          TRIM(CONCAT_WS(' ', src.nino_appat, src.nino_apmat, src.nino_nombres))
+        ),
+        pn.appatmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.appatmadre, '')), ''), src.madre_appat),
+        pn.apmatmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.apmatmadre, '')), ''), src.madre_apmat),
+        pn.nombresmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.nombresmadre, '')), ''), src.madre_nombres),
+        pn.dni_padre = COALESCE(NULLIF(TRIM(COALESCE(pn.dni_padre, '')), ''), src.jefe_dni),
+        pn.nombre_padre = COALESCE(
+          NULLIF(TRIM(COALESCE(pn.nombre_padre, '')), ''),
+          TRIM(CONCAT_WS(' ', src.jefe_appat, src.jefe_apmat, src.jefe_nombres))
+        ),
+        pn.telefonopn = COALESCE(NULLIF(TRIM(COALESCE(pn.telefonopn, '')), ''), src.madre_celular)
+      WHERE
+        pn.ubigeo = %s
+        AND DATE(pn.etapa) = %s
+        AND (
+          pn.nombres IS NULL OR TRIM(pn.nombres) = '' OR UPPER(TRIM(pn.nombres)) = 'NULL'
+        )
+    """
+
+    cur.execute(update_sql, [job_id, job_id, ub_a, periodo])
+    updated_pn = cur.rowcount or 0
+    db.commit()
+    log_line(f"[padronnominal] updated_rows={updated_pn} job={job_id}")
+
+    job_update(
+        cur,
+        job_id,
         status="done",
         progress=100,
         processed_rows=processed_total,
         inserted_rows=inserted_total,
         finished_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-        message=f"Completado. Insertados: {inserted_total}",
+        message=f"Completado. Insertados: {inserted_total}. Padrón actualizado: {updated_pn}",
     )
     db.commit()
 
