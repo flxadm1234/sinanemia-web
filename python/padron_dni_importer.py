@@ -287,10 +287,15 @@ def extract_rows(ws, tipo: str):
     else:
         max_row = 20000
 
-    for r in range(data_start, max_row + 1):
-        row_vals = [ws.cell(row=r, column=c).value for c in range(1, max_col + 1)]
+    for r, row_vals_t in enumerate(
+        ws.iter_rows(min_row=data_start, max_row=max_row, max_col=max_col, values_only=True),
+        start=data_start,
+    ):
+        row_vals = list(row_vals_t)
+        if len(row_vals) < max_col:
+            row_vals.extend([None] * (max_col - len(row_vals)))
 
-        u = to_int(row_vals[col_ubigeo] if col_ubigeo is not None else None)
+        u = to_int(row_vals[col_ubigeo] if col_ubigeo is not None and col_ubigeo < len(row_vals) else None)
         if (not u or u <= 0) and fixed_u:
             u = fixed_u
         if u and u > 0:
