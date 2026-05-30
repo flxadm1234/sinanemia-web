@@ -114,9 +114,10 @@ def find_header_row(ws):
             if t:
                 vals.append(t)
         s = set(vals)
-        if "CODIGODEUBIGEODELDISTRITO" in s or "CODIGODEUBIGEO" in s:
-            if "NUMERODEDOCUMENTONACIONALDEIDENTIFICACIONDNI" in s or "DNI" in s:
-                return i
+        has_ubigeo = any(("UBIGEO" in v) for v in s)
+        has_dni = any(("DNI" in v) for v in s) or ("NUMERODEDOCUMENTONACIONALDEIDENTIFICACIONDNI" in s)
+        if has_ubigeo and has_dni:
+            return i
     return None
 
 
@@ -128,6 +129,27 @@ def find_col(headers, candidates):
             if h == c or h.startswith(c) or c in h:
                 return idx
     return None
+
+
+def best_ubigeo_col(ws, header_row, ubigeo_cols):
+    if not ubigeo_cols:
+        return None
+    max_row = ws.max_row or 0
+    data_start = header_row + 1
+    scan_end = min(max_row, data_start + 250)
+    best = None
+    best_score = -1
+    for idx in ubigeo_cols:
+        score = 0
+        for r in range(data_start, scan_end + 1):
+            v = ws.cell(row=r, column=idx + 1).value
+            u = to_int(v)
+            if u and u > 0:
+                score += 1
+        if score > best_score:
+            best_score = score
+            best = idx
+    return best
 
 
 def sheet_headers(ws, header_row):
@@ -207,12 +229,13 @@ def extract_rows(ws, tipo: str):
 
     headers = sheet_headers(ws, header_row)
     headers_norm = [normalize_header(h) for h in headers]
-    col_ubigeo = find_col(headers_norm, ["CODIGODEUBIGEODELDISTRITO", "CODIGODEUBIGEO"])
+    ubigeo_cols = [i for i, h in enumerate(headers_norm) if h and ("UBIGEO" in h)]
+    col_ubigeo = best_ubigeo_col(ws, header_row, ubigeo_cols)
     col_dni = find_col(headers_norm, ["NUMERODEDOCUMENTONACIONALDEIDENTIFICACIONDNI", "DNI"])
     if col_ubigeo is None:
         raise Exception("No se encontró la columna de UBIGEO en la plantilla.")
 
-    ubigeo = None
+    ubigeos = set()
     data_start = header_row + 1
     empty_run = 0
     out = []
@@ -224,8 +247,8 @@ def extract_rows(ws, tipo: str):
         row_vals = [ws.cell(row=r, column=c).value for c in range(1, max_col + 1)]
 
         u = to_int(row_vals[col_ubigeo] if col_ubigeo is not None else None)
-        if ubigeo is None and u:
-            ubigeo = u
+        if u and u > 0:
+            ubigeos.add(int(u))
 
         dni = None
         if col_dni is not None:
@@ -254,12 +277,21 @@ def extract_rows(ws, tipo: str):
             else:
                 payload.append(v if v is not None else "")
 
-        out.append((r, ubigeo, dni, payload))
+        out.append((r, int(u) if u and u > 0 else None, dni, payload))
 
-    if not ubigeo:
+    if not ubigeos:
         raise Exception("No se pudo determinar el ubigeo desde el Excel.")
 
-    return ubigeo, headers, out
+    if len(ubigeos) > 1:
+        ubigeos_str = ",".join([str(x) for x in sorted(list(ubigeos))[:10]])
+        raise Exception(f"Se detectaron múltiples ubigeos en el Excel ({ubigeos_str}).")
+
+    ubigeo_final = int(list(ubigeos)[0])
+    fixed = []
+    for row_num, u, dni, payload in out:
+        fixed.append((row_num, ubigeo_final, dni, payload))
+
+    return ubigeo_final, headers, fixed
 
 
 def run_import(job_id: str, activo_path: str, observado_path: str, transito_path: str, fecha_corte: date):
@@ -407,4 +439,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
