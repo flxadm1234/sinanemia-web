@@ -31,6 +31,9 @@ function buildLinks(user: SessionUser): NavLink[] {
     links.push({ href: "/admin/carga-vd", label: "Padrón de niños" });
   }
   links.push({ href: "/admin/visitas", label: "Carga Reporte de actividades" });
+  if (user.tipo !== "COORDINADOR" && user.tipo !== "ACTOR SOCIAL") {
+    links.push({ href: "/admin/padron-dni", label: "Carga DNI" });
+  }
   links.push({ href: "/admin/metas", label: "Metas" });
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "COORDINADOR") {
     links.push({ href: "/asignacion", label: "Asignación" });

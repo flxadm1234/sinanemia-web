@@ -62,6 +62,14 @@ export function AppShell(props: {
           >
             Carga Reporte de actividades
           </Link>
+          {user.tipo !== "COORDINADOR" && user.tipo !== "ACTOR SOCIAL" ? (
+            <Link
+              href="/admin/padron-dni"
+              className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+            >
+              Carga DNI
+            </Link>
+          ) : null}
           <Link
             href="/admin/metas"
             className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
