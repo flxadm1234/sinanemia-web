@@ -275,12 +275,17 @@ def extract_rows(ws, tipo: str):
         raise Exception("No se encontró la columna de UBIGEO en la plantilla.")
 
     ubigeos = set()
+    if fixed_u:
+        ubigeos.add(int(fixed_u))
     data_start = 6
     empty_run = 0
     out = []
 
     max_col = max(ws.max_column or 0, len(headers), 70)
-    max_row = ws.max_row if (ws.max_row and ws.max_row > 0) else 20000
+    if ws.max_row and ws.max_row >= data_start:
+        max_row = ws.max_row
+    else:
+        max_row = 20000
 
     for r in range(data_start, max_row + 1):
         row_vals = [ws.cell(row=r, column=c).value for c in range(1, max_col + 1)]
