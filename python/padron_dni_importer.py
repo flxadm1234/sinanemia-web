@@ -225,18 +225,24 @@ def validate_fecha_corte_rules(cur, job_id: str, ubigeo: int, periodo: date, fec
 def extract_rows(ws, tipo: str):
     header_row = find_header_row(ws)
     if not header_row:
-        raise Exception("No se encontró la fila de encabezados (CODIGO UBIGEO / DNI). Revisa la plantilla.")
+        header_row = 5
 
     headers = sheet_headers(ws, header_row)
     headers_norm = [normalize_header(h) for h in headers]
     ubigeo_cols = [i for i, h in enumerate(headers_norm) if h and ("UBIGEO" in h)]
     col_ubigeo = best_ubigeo_col(ws, header_row, ubigeo_cols)
+    if (ws.max_column or 0) >= 20:
+        fixed_col = 19
+        v = ws.cell(row=6, column=fixed_col + 1).value
+        u = to_int(v)
+        if u and u > 0:
+            col_ubigeo = fixed_col
     col_dni = find_col(headers_norm, ["NUMERODEDOCUMENTONACIONALDEIDENTIFICACIONDNI", "DNI"])
     if col_ubigeo is None:
         raise Exception("No se encontró la columna de UBIGEO en la plantilla.")
 
     ubigeos = set()
-    data_start = header_row + 1
+    data_start = max(header_row + 1, 6)
     empty_run = 0
     out = []
 
