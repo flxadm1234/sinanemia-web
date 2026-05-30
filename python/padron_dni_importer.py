@@ -153,10 +153,20 @@ def best_ubigeo_col(ws, header_row, ubigeo_cols):
 
 
 def sheet_headers(ws, header_row):
+    max_col = ws.max_column or 1
     headers = []
-    for c in ws[header_row]:
-        raw = str(c.value or "").strip()
-        headers.append(raw)
+    for col in range(1, max_col + 1):
+        raw = str(ws.cell(row=header_row, column=col).value or "").strip()
+        if raw:
+            headers.append(raw)
+            continue
+        fallback = ""
+        for r in range(header_row - 1, 0, -1):
+            v = str(ws.cell(row=r, column=col).value or "").strip()
+            if v:
+                fallback = v
+                break
+        headers.append(fallback)
     return headers
 
 
@@ -231,22 +241,25 @@ def extract_rows(ws, tipo: str):
     headers_norm = [normalize_header(h) for h in headers]
     ubigeo_cols = [i for i, h in enumerate(headers_norm) if h and ("UBIGEO" in h)]
     col_ubigeo = best_ubigeo_col(ws, header_row, ubigeo_cols)
-    if (ws.max_column or 0) >= 20:
-        fixed_col = 19
-        v = ws.cell(row=6, column=fixed_col + 1).value
+    fixed_ubigeo_col = 19
+    if (ws.max_column or 0) >= fixed_ubigeo_col + 1:
+        v = ws.cell(row=6, column=fixed_ubigeo_col + 1).value
         u = to_int(v)
         if u and u > 0:
-            col_ubigeo = fixed_col
+            col_ubigeo = fixed_ubigeo_col
     col_dni = find_col(headers_norm, ["NUMERODEDOCUMENTONACIONALDEIDENTIFICACIONDNI", "DNI"])
+    fixed_dni_col = 5
+    if col_dni is None and (ws.max_column or 0) >= fixed_dni_col + 1:
+        col_dni = fixed_dni_col
     if col_ubigeo is None:
         raise Exception("No se encontró la columna de UBIGEO en la plantilla.")
 
     ubigeos = set()
-    data_start = max(header_row + 1, 6)
+    data_start = 6
     empty_run = 0
     out = []
 
-    max_col = ws.max_column or 1
+    max_col = max(ws.max_column or 1, len(headers))
     max_row = ws.max_row or data_start
 
     for r in range(data_start, max_row + 1):
