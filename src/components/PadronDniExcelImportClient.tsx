@@ -36,6 +36,7 @@ export function PadronDniExcelImportClient() {
   const [fileActivo, setFileActivo] = useState<File | null>(null);
   const [fileObs, setFileObs] = useState<File | null>(null);
   const [fileTran, setFileTran] = useState<File | null>(null);
+  const [updatePadron, setUpdatePadron] = useState(false);
 
   const [jobId, setJobId] = useState<string>("");
   const [job, setJob] = useState<Job | null>(null);
@@ -113,6 +114,10 @@ export function PadronDniExcelImportClient() {
       setError("Para avance, la fecha de corte no puede ser el día 01 del mes.");
       return;
     }
+    if (updatePadron && modo !== "inicio") {
+      setError("La opción de actualizar padrón nominal solo está disponible para Inicio de mes.");
+      return;
+    }
     if (!fileActivo || !fileObs || !fileTran) {
       setError("Debes adjuntar los 3 archivos (Activo, Activo-Observado, Tránsito).");
       return;
@@ -123,6 +128,7 @@ export function PadronDniExcelImportClient() {
       const fd = new FormData();
       fd.append("modo", modo);
       fd.append("fecha_corte", fechaCorte);
+      fd.append("update_padron", updatePadron ? "1" : "0");
       fd.append("file_activo", fileActivo);
       fd.append("file_activo_observado", fileObs);
       fd.append("file_transito", fileTran);
@@ -232,6 +238,21 @@ export function PadronDniExcelImportClient() {
         </div>
       </div>
 
+      <div className="mt-5 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+        <label className="inline-flex items-center gap-2 text-sm text-zinc-800">
+          <input
+            type="checkbox"
+            checked={updatePadron}
+            onChange={(e) => setUpdatePadron(e.target.checked)}
+            disabled={modo !== "inicio"}
+          />
+          Actualizar nómina del mes seleccionado (padronnominal)
+        </label>
+        <div className="mt-1 text-xs text-zinc-500">
+          Solo disponible para Inicio de mes. Completa nombres/madre/padre y teléfono en padronnominal cuando estén vacíos.
+        </div>
+      </div>
+
       <div className="mt-5 flex items-center justify-end">
         <button
           type="button"
@@ -278,4 +299,3 @@ export function PadronDniExcelImportClient() {
     </div>
   );
 }
-

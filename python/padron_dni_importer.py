@@ -352,7 +352,14 @@ def extract_rows(ws, tipo: str):
     return ubigeo_final, headers, fixed
 
 
-def run_import(job_id: str, activo_path: str, observado_path: str, transito_path: str, fecha_corte: date):
+def run_import(
+    job_id: str,
+    activo_path: str,
+    observado_path: str,
+    transito_path: str,
+    fecha_corte: date,
+    update_padron: bool,
+):
     load_dotenv(os.getenv("PADRON_DNI_DOTENV", ".env.local"), override=False)
     load_dotenv(override=False)
 
@@ -445,15 +452,20 @@ def run_import(job_id: str, activo_path: str, observado_path: str, transito_path
     insert_many("ACTIVO_OBSERVADO", rows_o)
     insert_many("TRANSITO", rows_t)
 
-    job_update(
-        cur,
-        job_id,
-        progress=98,
-        processed_rows=processed_total,
-        inserted_rows=inserted_total,
-        message="Actualizando padrón nominal...",
-    )
-    db.commit()
+    updated_pn = 0
+    if update_padron:
+        if fecha_corte != periodo:
+            raise Exception("La actualización de padrón nominal solo está permitida para inicio de mes (día 01).")
+
+        job_update(
+            cur,
+            job_id,
+            progress=98,
+            processed_rows=processed_total,
+            inserted_rows=inserted_total,
+            message="Actualizando padrón nominal...",
+        )
+        db.commit()
 
     def _s(v):
         if v is None:
@@ -492,58 +504,64 @@ def run_import(job_id: str, activo_path: str, observado_path: str, transito_path
         pn.telefonopn = COALESCE(NULLIF(TRIM(COALESCE(pn.telefonopn,'')), ''), %s)
       WHERE
         pn.ubigeo = %s
+        AND DATE(pn.etapa) = %s
         AND TRIM(pn.dni) = %s
         AND (
           pn.nombres IS NULL OR TRIM(pn.nombres) = '' OR UPPER(TRIM(pn.nombres)) = 'NULL'
         )
     """
 
-    keys = list(updates_by_key.keys())
-    updated_pn = 0
-    if keys:
-        batch_u = 400
-        done_u = 0
-        for i in range(0, len(keys), batch_u):
-            part_keys = keys[i : i + batch_u]
-            values = []
-            for k in part_keys:
-                p = updates_by_key[k]
-                nino_nombre = _full_name(p[8] if len(p) > 8 else None, p[9] if len(p) > 9 else None, p[10] if len(p) > 10 else None)
-                madre_appat = _s(p[45] if len(p) > 45 else None)
-                madre_apmat = _s(p[46] if len(p) > 46 else None)
-                madre_nombres = _s(p[47] if len(p) > 47 else None)
-                madre_cel = normalize_dni(p[48] if len(p) > 48 else None)
-                padre_dni = normalize_dni(p[54] if len(p) > 54 else None)
-                padre_nombre = _full_name(p[55] if len(p) > 55 else None, p[56] if len(p) > 56 else None, p[57] if len(p) > 57 else None)
-                values.append(
-                    (
-                        nino_nombre,
-                        madre_appat,
-                        madre_apmat,
-                        madre_nombres,
-                        padre_dni,
-                        padre_nombre,
-                        madre_cel,
-                        ub_a,
-                        k,
+    if update_padron:
+        keys = list(updates_by_key.keys())
+        if keys:
+            batch_u = 400
+            done_u = 0
+            for i in range(0, len(keys), batch_u):
+                part_keys = keys[i : i + batch_u]
+                values = []
+                for k in part_keys:
+                    p = updates_by_key[k]
+                    nino_nombre = _full_name(
+                        p[8] if len(p) > 8 else None, p[9] if len(p) > 9 else None, p[10] if len(p) > 10 else None
                     )
+                    madre_appat = _s(p[45] if len(p) > 45 else None)
+                    madre_apmat = _s(p[46] if len(p) > 46 else None)
+                    madre_nombres = _s(p[47] if len(p) > 47 else None)
+                    madre_cel = normalize_dni(p[48] if len(p) > 48 else None)
+                    padre_dni = normalize_dni(p[54] if len(p) > 54 else None)
+                    padre_nombre = _full_name(
+                        p[55] if len(p) > 55 else None, p[56] if len(p) > 56 else None, p[57] if len(p) > 57 else None
+                    )
+                    values.append(
+                        (
+                            nino_nombre,
+                            madre_appat,
+                            madre_apmat,
+                            madre_nombres,
+                            padre_dni,
+                            padre_nombre,
+                            madre_cel,
+                            ub_a,
+                            periodo,
+                            k,
+                        )
+                    )
+                if values:
+                    cur.executemany(update_stmt, values)
+                    db.commit()
+                    updated_pn += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+
+                done_u += len(part_keys)
+                progress = 98 + int((done_u / max(1, len(keys))) * 2)
+                job_update(
+                    cur,
+                    job_id,
+                    progress=min(progress, 99),
+                    message=f"Actualizando padrón nominal... {done_u}/{len(keys)}",
                 )
-            if values:
-                cur.executemany(update_stmt, values)
                 db.commit()
-                updated_pn += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
 
-            done_u += len(part_keys)
-            progress = 98 + int((done_u / max(1, len(keys))) * 2)
-            job_update(
-                cur,
-                job_id,
-                progress=min(progress, 99),
-                message=f"Actualizando padrón nominal... {done_u}/{len(keys)}",
-            )
-            db.commit()
-
-    log_line(f"[padronnominal] updated_rows={updated_pn} job={job_id} keys={len(keys)}")
+        log_line(f"[padronnominal] updated_rows={updated_pn} job={job_id} keys={len(keys)}")
 
     job_update(
         cur,
@@ -553,7 +571,11 @@ def run_import(job_id: str, activo_path: str, observado_path: str, transito_path
         processed_rows=processed_total,
         inserted_rows=inserted_total,
         finished_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-        message=f"Completado. Insertados: {inserted_total}. Padrón actualizado: {updated_pn}",
+        message=(
+            f"Completado. Insertados: {inserted_total}. Padrón actualizado: {updated_pn}"
+            if update_padron
+            else f"Completado. Insertados: {inserted_total}"
+        ),
     )
     db.commit()
 
@@ -565,6 +587,7 @@ def main():
     ap.add_argument("--observado", required=True)
     ap.add_argument("--transito", required=True)
     ap.add_argument("--fecha_corte", required=True)
+    ap.add_argument("--update_padron", default="0")
     args = ap.parse_args()
 
     try:
@@ -573,7 +596,8 @@ def main():
         raise Exception("Fecha de corte inválida (YYYY-MM-DD).")
 
     try:
-        run_import(args.job, args.activo, args.observado, args.transito, fecha)
+        update_padron = str(args.update_padron or "0").strip() == "1"
+        run_import(args.job, args.activo, args.observado, args.transito, fecha, update_padron)
     except Exception as e:
         try:
             load_dotenv(os.getenv("PADRON_DNI_DOTENV", ".env.local"), override=False)

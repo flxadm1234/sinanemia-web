@@ -59,6 +59,7 @@ async function startPythonJob(params: {
   observadoPath: string;
   transitoPath: string;
   fechaCorteISO: string;
+  updatePadron: boolean;
 }) {
   const venvPython = path.join("python", ".venv", "bin", "python3");
   const pythonBin =
@@ -85,7 +86,7 @@ async function startPythonJob(params: {
   try {
     fsSync.writeSync(
       fd,
-      `[bootstrap] pythonBin=${pythonBin} script=${script} activo=${params.activoPath} observado=${params.observadoPath} transito=${params.transitoPath} fecha_corte=${params.fechaCorteISO}\n`,
+      `[bootstrap] pythonBin=${pythonBin} script=${script} activo=${params.activoPath} observado=${params.observadoPath} transito=${params.transitoPath} fecha_corte=${params.fechaCorteISO} update_padron=${params.updatePadron ? 1 : 0}\n`,
     );
   } catch {}
 
@@ -103,6 +104,8 @@ async function startPythonJob(params: {
       params.transitoPath,
       "--fecha_corte",
       params.fechaCorteISO,
+      "--update_padron",
+      params.updatePadron ? "1" : "0",
     ],
     {
       detached: true,
@@ -146,6 +149,7 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const fechaCorteRaw = String(formData.get("fecha_corte") ?? "").trim();
     const modo = String(formData.get("modo") ?? "").trim().toLowerCase();
+    const updatePadron = String(formData.get("update_padron") ?? "0").trim() === "1";
     const fecha = parseISODate(fechaCorteRaw);
     if (!fecha) return NextResponse.json({ error: "Fecha de corte inválida (YYYY-MM-DD)." }, { status: 400 });
     const periodo = monthStartISO(fecha);
@@ -156,6 +160,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Para inicio de mes, la fecha de corte debe ser el día 01 del mes." }, { status: 400 });
     if (modo === "avance" && fechaISO === periodo)
       return NextResponse.json({ error: "Para avance, la fecha de corte no puede ser el día 01 del mes." }, { status: 400 });
+    if (updatePadron && modo !== "inicio")
+      return NextResponse.json({ error: "La actualización de padrón nominal solo está disponible para Inicio de mes." }, { status: 400 });
 
     const fActivo = formData.get("file_activo");
     const fObs = formData.get("file_activo_observado");
@@ -190,10 +196,11 @@ export async function POST(request: Request) {
     const pool = getDbPool();
     await pool.query(
       `INSERT INTO padron_dni_import_jobs
-        (id, status, progress, total_rows, processed_rows, inserted_rows, periodo, fecha_corte, file_activo_name, file_activo_observado_name, file_transito_name, requested_by)
-       VALUES (?, 'queued', 0, 0, 0, 0, ?, ?, ?, ?, ?, ?)`,
+        (id, status, progress, total_rows, processed_rows, inserted_rows, update_padron, periodo, fecha_corte, file_activo_name, file_activo_observado_name, file_transito_name, requested_by)
+       VALUES (?, 'queued', 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
       [
         jobId,
+        updatePadron ? 1 : 0,
         periodo,
         fechaISO,
         path.basename(activoPath),
@@ -203,7 +210,7 @@ export async function POST(request: Request) {
       ],
     );
 
-    await startPythonJob({ jobId, activoPath, observadoPath, transitoPath, fechaCorteISO: fechaISO });
+    await startPythonJob({ jobId, activoPath, observadoPath, transitoPath, fechaCorteISO: fechaISO, updatePadron });
 
     return NextResponse.json({ ok: true, jobId });
   } catch (e) {
@@ -211,4 +218,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "padron_dni_import_failed" }, { status: 500 });
   }
 }
-

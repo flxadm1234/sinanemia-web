@@ -10,6 +10,7 @@ export type PadronDniImportJob = {
   total_rows: number;
   processed_rows: number;
   inserted_rows: number;
+  update_padron?: number | null;
   periodo: string | null;
   fecha_corte: string | null;
   ubigeo: number | null;
@@ -36,6 +37,7 @@ export async function ensurePadronDniTables() {
       total_rows INT NOT NULL DEFAULT 0,
       processed_rows INT NOT NULL DEFAULT 0,
       inserted_rows INT NOT NULL DEFAULT 0,
+      update_padron TINYINT NOT NULL DEFAULT 0,
       periodo DATE NULL,
       fecha_corte DATE NULL,
       ubigeo INT NULL,
@@ -53,6 +55,9 @@ export async function ensurePadronDniTables() {
       KEY idx_fecha (fecha_corte)
     ) ENGINE=InnoDB
   `);
+  try {
+    await pool.query(`ALTER TABLE padron_dni_import_jobs ADD COLUMN update_padron TINYINT NOT NULL DEFAULT 0`);
+  } catch {}
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS padron_dni_raw (
@@ -123,4 +128,3 @@ export async function getPadronDniJobCounts(jobId: string) {
   for (const r of rows as any[]) out[String(r.tipo)] = Number(r.c ?? 0);
   return out as Partial<Record<PadronDniTipo, number>>;
 }
-
