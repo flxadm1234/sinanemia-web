@@ -525,13 +525,12 @@ def run_import(job_id: str, activo_path: str, observado_path: str, transito_path
         pn.telefonopn = COALESCE(NULLIF(TRIM(COALESCE(pn.telefonopn, '')), ''), src.madre_celular)
       WHERE
         pn.ubigeo = %s
-        AND DATE(pn.etapa) = %s
         AND (
           pn.nombres IS NULL OR TRIM(pn.nombres) = '' OR UPPER(TRIM(pn.nombres)) = 'NULL'
         )
     """
 
-    cur.execute(update_sql, [job_id, job_id, ub_a, periodo])
+    cur.execute(update_sql, [job_id, job_id, ub_a])
     updated_pn = cur.rowcount or 0
     db.commit()
     log_line(f"[padronnominal] updated_rows={updated_pn} job={job_id}")
