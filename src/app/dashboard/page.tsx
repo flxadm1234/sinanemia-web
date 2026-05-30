@@ -16,6 +16,7 @@ import { computeNcMetricsForEtapa } from "@/lib/ncReporte";
 import { NcLineChart } from "@/components/NcLineChart";
 import { DownloadFileButton } from "@/components/DownloadFileButton";
 import { DashboardFiltersClient } from "@/components/DashboardFiltersClient";
+import { DownloadIconButton } from "@/components/DownloadIconButton";
 import {
   computeVisitasGeoSeries,
   computeVisitasMetaDetalleMes,
@@ -442,6 +443,7 @@ export default async function DashboardPage(props: {
                             <th className="px-3 py-2 font-semibold text-zinc-700">Tipo</th>
                             <th className="px-3 py-2 font-semibold text-zinc-700">N</th>
                             <th className="px-3 py-2 font-semibold text-zinc-700">%</th>
+                            <th className="px-3 py-2 font-semibold text-zinc-700 text-right"> </th>
                           </tr>
                         </thead>
                         <tbody className="bg-zinc-50">
@@ -450,6 +452,20 @@ export default async function DashboardPage(props: {
                               <td className="px-3 py-2 text-zinc-800">{r.label}</td>
                               <td className="px-3 py-2 font-semibold text-zinc-900">{r.count}</td>
                               <td className="px-3 py-2 text-zinc-700">{r.pct}%</td>
+                              <td className="px-3 py-2 text-right">
+                                {role === "INVITADO" ? (
+                                  <span className="text-zinc-400">—</span>
+                                ) : (
+                                  <DownloadIconButton
+                                    href={`/api/reportes/padron-dni-doc-excel?ubigeo=${encodeURIComponent(
+                                      String(scopeUbigeo),
+                                    )}&doc_key=${encodeURIComponent(r.doc_key)}`}
+                                    filename={`padron_dni_${String(scopeUbigeo)}_${padronDniDocStats.fecha_corte}_${r.doc_key}.xls`}
+                                    overlayLabel="Generando Excel..."
+                                    title="Descargar Excel"
+                                  />
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
