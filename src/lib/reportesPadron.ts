@@ -196,7 +196,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[3]')
+                  JSON_EXTRACT(r0.payload, '$[3]')
                 )
               ),
               ''
@@ -204,7 +204,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[8]')
+                  JSON_EXTRACT(r0.payload, '$[8]')
                 )
               ),
               ''
@@ -212,7 +212,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[9]')
+                  JSON_EXTRACT(r0.payload, '$[9]')
                 )
               ),
               ''
@@ -220,7 +220,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[10]')
+                  JSON_EXTRACT(r0.payload, '$[10]')
                 )
               ),
               ''
@@ -228,7 +228,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[44]')
+                  JSON_EXTRACT(r0.payload, '$[44]')
                 )
               ),
               ''
@@ -236,7 +236,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[45]')
+                  JSON_EXTRACT(r0.payload, '$[45]')
                 )
               ),
               ''
@@ -244,7 +244,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[46]')
+                  JSON_EXTRACT(r0.payload, '$[46]')
                 )
               ),
               ''
@@ -252,7 +252,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[47]')
+                  JSON_EXTRACT(r0.payload, '$[47]')
                 )
               ),
               ''
@@ -260,7 +260,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[48]')
+                  JSON_EXTRACT(r0.payload, '$[48]')
                 )
               ),
               ''
@@ -268,7 +268,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[54]')
+                  JSON_EXTRACT(r0.payload, '$[54]')
                 )
               ),
               ''
@@ -276,7 +276,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[55]')
+                  JSON_EXTRACT(r0.payload, '$[55]')
                 )
               ),
               ''
@@ -284,7 +284,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[56]')
+                  JSON_EXTRACT(r0.payload, '$[56]')
                 )
               ),
               ''
@@ -292,7 +292,7 @@ export async function listPadronReporte(params: {
             NULLIF(
               TRIM(
                 JSON_UNQUOTE(
-                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[57]')
+                  JSON_EXTRACT(r0.payload, '$[57]')
                 )
               ),
               ''
@@ -304,7 +304,7 @@ export async function listPadronReporte(params: {
                   NULLIF(
                     TRIM(
                       JSON_UNQUOTE(
-                        JSON_EXTRACT(CAST(r0.payload AS JSON), '$[3]')
+                        JSON_EXTRACT(r0.payload, '$[3]')
                       )
                     ),
                     ''
@@ -315,6 +315,7 @@ export async function listPadronReporte(params: {
             ) AS rn_key
           FROM padron_dni_raw r0
           JOIN pdj ON pdj.job_id = r0.job_id
+          WHERE JSON_VALID(r0.payload)
         ) y
         WHERE rn_key = 1
      )
