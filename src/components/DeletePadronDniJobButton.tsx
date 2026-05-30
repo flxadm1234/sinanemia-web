@@ -7,14 +7,17 @@ export function DeletePadronDniJobButton(props: { jobId: string }) {
   const [submitting, setSubmitting] = useState(false);
   return (
     <form
-      action={async (fd) => {
+      action={deletePadronDniJobAction}
+      onSubmit={(e) => {
         const ok = confirm("¿Eliminar esta carga? Se eliminarán todos los registros asociados.");
-        if (!ok) return;
+        if (!ok) {
+          e.preventDefault();
+          return;
+        }
         setSubmitting(true);
-        fd.set("jobId", props.jobId);
-        await deletePadronDniJobAction(fd);
       }}
     >
+      <input type="hidden" name="jobId" value={props.jobId} />
       <button
         type="submit"
         disabled={submitting}
@@ -25,4 +28,3 @@ export function DeletePadronDniJobButton(props: { jobId: string }) {
     </form>
   );
 }
-
