@@ -267,6 +267,7 @@ def run_import(job_id: str, file_path: str, config_id: int):
             continue
         ubigeo = to_int(get_cell(row_vals, cfg.get("col_ubigeo")))
         fecha_nac = to_date(get_cell(row_vals, cfg.get("col_fecha_nac")))
+        actorsocial = normalize_dni(get_cell(row_vals, cfg.get("col_actorsocial")))
 
         records.append(
             {
@@ -278,8 +279,8 @@ def run_import(job_id: str, file_path: str, config_id: int):
                 "direccion": to_text(get_cell(row_vals, cfg.get("col_direccion"))),
                 "dnimadre": normalize_dni(get_cell(row_vals, cfg.get("col_dnimadre"))),
                 "telefono": to_text(get_cell(row_vals, cfg.get("col_telefono"))),
-                "actorsocial": to_text(get_cell(row_vals, cfg.get("col_actorsocial"))),
-                "responsable": to_text(get_cell(row_vals, cfg.get("col_responsable"))),
+                "actorsocial": actorsocial,
+                "responsable": None,
                 "departamento": to_text(get_cell(row_vals, cfg.get("col_departamento"))),
                 "provincia": to_text(get_cell(row_vals, cfg.get("col_provincia"))),
                 "distrito": to_text(get_cell(row_vals, cfg.get("col_distrito"))),
@@ -326,6 +327,7 @@ def run_import(job_id: str, file_path: str, config_id: int):
         values = []
         computed = []
         groups = {}
+        actor_by_ubigeo = {}
 
         for r in batch:
             dni = normalize_dni(r.get("dni"))
@@ -352,10 +354,35 @@ def run_import(job_id: str, file_path: str, config_id: int):
             groups.setdefault(k, set()).add(dni)
             computed.append((r, ubigeo_i, etapa_val, dni))
 
+            actor_dni = normalize_dni(r.get("actorsocial"))
+            if actor_dni:
+                actor_by_ubigeo.setdefault(ubigeo_i, set()).add(actor_dni)
+
         existing_by_key = {}
         for k, dset in groups.items():
             u, e = k
             existing_by_key[k] = fetch_existing_dni_by_ubigeo_etapa(cur, u, e, sorted(dset))
+
+        actor_cdr = {}
+        for u, dset in actor_by_ubigeo.items():
+            part = sorted(dset)
+            if not part:
+                continue
+            placeholders = ",".join(["%s"] * len(part))
+            sql = f"""
+              SELECT TRIM(dni) AS dni, cdr
+              FROM persona
+              WHERE ubigeo = %s
+                AND tipo = 'ACTOR SOCIAL'
+                AND estado = 1
+                AND TRIM(dni) IN ({placeholders})
+            """
+            cur.execute(sql, [u] + part)
+            for row in cur.fetchall():
+                dni_actor = normalize_dni(row[0])
+                cdr = normalize_dni(row[1])
+                if dni_actor and cdr:
+                    actor_cdr[(u, dni_actor)] = cdr
 
         for r, ubigeo_i, etapa_val, dni in computed:
             k3 = (ubigeo_i, etapa_val, dni)
@@ -384,6 +411,11 @@ def run_import(job_id: str, file_path: str, config_id: int):
             last_ido = to_int(last.get("idocurrencia")) or 0
             last_ido2 = to_int(last.get("idocurrencia2")) or last_ido
 
+            actor_dni = normalize_dni(r.get("actorsocial"))
+            if not actor_dni:
+                actor_dni = None
+            responsable = actor_cdr.get((ubigeo_i, actor_dni), None) if actor_dni else None
+
             values.append(
                 (
                     r.get("rango") or None,
@@ -400,8 +432,8 @@ def run_import(job_id: str, file_path: str, config_id: int):
                     r.get("fecha_fin_vd") or None,
                     ubigeo_i,
                     "1",
-                    r.get("actorsocial") or None,
-                    r.get("responsable") or None,
+                    actor_dni,
+                    responsable,
                     r.get("eess_ua") or None,
                     last_ido,
                     last_ido2,
