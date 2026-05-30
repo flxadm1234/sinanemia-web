@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { DashboardPdfButton } from "@/components/DashboardPdfButton";
 import {
+  computePadronDniDocTypeStats,
   estadosvdDistribucion,
   listDashboardMonthsByUbigeo,
   listDistinctUbigeosFromMeses,
@@ -136,6 +137,8 @@ export default async function DashboardPage(props: {
         responsable: role === "COORDINADOR" ? user.dni : undefined,
       })
     )[0] ?? null;
+
+  const padronDniDocStats = scopeUbigeo ? await computePadronDniDocTypeStats({ ubigeo: Number(scopeUbigeo) }) : null;
 
   const showGeo = role === "SUPER ADMIN" || role === "SUPERVISOR";
   const dept = showGeo ? await resumenPorDepartamento({ etapa, limit: 50 }) : [];
@@ -405,6 +408,70 @@ export default async function DashboardPage(props: {
             </div>
           </div>
         ) : null}
+
+        <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
+          <div className="text-sm font-semibold text-zinc-900">PADRON NOMINAL</div>
+          {padronDniDocStats ? (
+            <div className="mt-1 text-xs text-zinc-500">
+              Último corte: <span className="font-semibold">{padronDniDocStats.fecha_corte}</span>
+            </div>
+          ) : (
+            <div className="mt-1 text-xs text-zinc-500">Sin carga DNI disponible para este ubigeo.</div>
+          )}
+
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+              <div className="text-sm font-semibold text-zinc-900">TIPO DE DOCUMENTO (0-12 MESES)</div>
+              {padronDniDocStats ? (
+                <>
+                  <div className="mt-2 text-xs text-zinc-600">
+                    Niños 0–12 meses:{" "}
+                    <span className="font-semibold">{padronDniDocStats.total_0_12m}</span>
+                    {padronDniDocStats.invalid_birthdate ? (
+                      <span className="ml-2 text-zinc-500">
+                        (sin fecha nacimiento válida: {padronDniDocStats.invalid_birthdate})
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {padronDniDocStats.breakdown.length ? (
+                    <div className="mt-3 overflow-hidden rounded-xl ring-1 ring-black/5">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-white">
+                          <tr>
+                            <th className="px-3 py-2 font-semibold text-zinc-700">Tipo</th>
+                            <th className="px-3 py-2 font-semibold text-zinc-700">N</th>
+                            <th className="px-3 py-2 font-semibold text-zinc-700">%</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-zinc-50">
+                          {padronDniDocStats.breakdown.map((r) => (
+                            <tr key={r.doc_key} className="border-t border-zinc-200/60">
+                              <td className="px-3 py-2 text-zinc-800">{r.label}</td>
+                              <td className="px-3 py-2 font-semibold text-zinc-900">{r.count}</td>
+                              <td className="px-3 py-2 text-zinc-700">{r.pct}%</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs text-zinc-600">No hay registros con edad 0–12 meses.</div>
+                  )}
+                </>
+              ) : (
+                <div className="mt-2 text-xs text-zinc-600">—</div>
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
+              <div className="text-sm font-semibold text-zinc-900">
+                META ACTUALIZACIÓN DEL PADRÓN NOMINAL (0-12 MESES)
+              </div>
+              <div className="mt-2 text-sm text-zinc-600">En mantenimiento</div>
+            </div>
+          </div>
+        </div>
 
         {ncEnabled ? (
           ncOkUbigeo && ncSeries.length && ncSelected ? (

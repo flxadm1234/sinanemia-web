@@ -4,6 +4,59 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
+function parseYmd(s: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || "").trim());
+  if (!m) return null;
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+function parseDmy(s: string) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || "").trim());
+  if (!m) return null;
+  const d = Number(m[1]);
+  const mo = Number(m[2]);
+  const y = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+function daysBetweenUTC(a: Date, b: Date) {
+  const ms = a.getTime() - b.getTime();
+  return Math.floor(ms / (24 * 60 * 60 * 1000));
+}
+
+function normalizeDocKey(v: unknown) {
+  const raw = String(v ?? "").trim();
+  if (!raw) return "SIN DATO";
+  const parts = raw
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .filter((x) => x === "1" || x === "2" || x === "3" || x === "4");
+  if (!parts.length) return "SIN DATO";
+  const uniq = Array.from(new Set(parts.map(Number)))
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b)
+    .map(String);
+  return uniq.length ? uniq.join(",") : "SIN DATO";
+}
+
+function docKeyLabel(docKey: string) {
+  const map: Record<string, string> = { "1": "DNI", "2": "CUI", "3": "CNV", "4": "COD.PAD" };
+  if (!docKey || docKey === "SIN DATO") return "SIN DATO";
+  const parts = docKey.split(",").map((x) => x.trim()).filter(Boolean);
+  const labels = parts.map((p) => map[p] || p);
+  return `${docKey} (${labels.join(" + ")})`;
+}
+
 export type DashboardMonth = {
   ubigeo: string;
   year: number;
@@ -80,6 +133,77 @@ function assignedWhere() {
 
 function ninosWhere() {
   return "TRIM(COALESCE(tipovd,'')) = '1'";
+}
+
+export type PadronDniDocTypeStat = {
+  job_id: string;
+  fecha_corte: string;
+  total_0_12m: number;
+  invalid_birthdate: number;
+  breakdown: { doc_key: string; label: string; count: number; pct: number }[];
+};
+
+export async function computePadronDniDocTypeStats(params: { ubigeo: number }) {
+  const ubigeo = Number(params.ubigeo);
+  if (!Number.isFinite(ubigeo) || ubigeo <= 0) return null;
+
+  const pool = getDbPool();
+  const [jobRows] = await pool.query(
+    `SELECT id, fecha_corte
+     FROM padron_dni_import_jobs
+     WHERE ubigeo = ? AND status = 'done'
+     ORDER BY fecha_corte DESC, created_at DESC, id DESC
+     LIMIT 1`,
+    [ubigeo],
+  );
+  const job = (jobRows as any[])[0] as any | undefined;
+  if (!job?.id || !job?.fecha_corte) return null;
+  const fechaCorte = parseYmd(String(job.fecha_corte ?? ""));
+  if (!fechaCorte) return null;
+
+  const [rows] = await pool.query(
+    `SELECT
+       JSON_UNQUOTE(JSON_EXTRACT(payload, '$[1]')) AS doc_raw,
+       JSON_UNQUOTE(JSON_EXTRACT(payload, '$[12]')) AS nac_raw
+     FROM padron_dni_raw
+     WHERE job_id = ? AND JSON_VALID(payload)`,
+    [String(job.id)],
+  );
+
+  const counts = new Map<string, number>();
+  let total = 0;
+  let invalidBirthdate = 0;
+
+  for (const r of rows as any[]) {
+    const docKey = normalizeDocKey(r?.doc_raw);
+    const nacRaw = String(r?.nac_raw ?? "").trim();
+    const nac = parseYmd(nacRaw) ?? parseDmy(nacRaw);
+    if (!nac) {
+      invalidBirthdate += 1;
+      continue;
+    }
+    const ageDays = daysBetweenUTC(fechaCorte, nac);
+    if (ageDays < 0 || ageDays > 365) continue;
+    total += 1;
+    counts.set(docKey, (counts.get(docKey) ?? 0) + 1);
+  }
+
+  const breakdown = Array.from(counts.entries())
+    .map(([doc_key, count]) => ({
+      doc_key,
+      label: docKeyLabel(doc_key),
+      count,
+      pct: total > 0 ? Math.round((count / total) * 1000) / 10 : 0,
+    }))
+    .sort((a, b) => b.count - a.count || a.doc_key.localeCompare(b.doc_key));
+
+  return {
+    job_id: String(job.id),
+    fecha_corte: String(job.fecha_corte),
+    total_0_12m: total,
+    invalid_birthdate: invalidBirthdate,
+    breakdown,
+  } satisfies PadronDniDocTypeStat;
 }
 
 export async function countAsignados(params: {

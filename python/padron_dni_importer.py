@@ -495,13 +495,34 @@ def run_import(
     update_stmt = """
       UPDATE padronnominal pn
       SET
-        pn.nombres = COALESCE(NULLIF(TRIM(COALESCE(pn.nombres,'')), ''), %s),
-        pn.appatmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.appatmadre,'')), ''), %s),
-        pn.apmatmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.apmatmadre,'')), ''), %s),
-        pn.nombresmadre = COALESCE(NULLIF(TRIM(COALESCE(pn.nombresmadre,'')), ''), %s),
-        pn.dni_padre = COALESCE(NULLIF(TRIM(COALESCE(pn.dni_padre,'')), ''), %s),
-        pn.nombre_padre = COALESCE(NULLIF(TRIM(COALESCE(pn.nombre_padre,'')), ''), %s),
-        pn.telefonopn = COALESCE(NULLIF(TRIM(COALESCE(pn.telefonopn,'')), ''), %s)
+        pn.nombres = CASE
+          WHEN pn.nombres IS NULL OR TRIM(pn.nombres) = '' OR UPPER(TRIM(pn.nombres)) = 'NULL' THEN %s
+          ELSE pn.nombres
+        END,
+        pn.appatmadre = CASE
+          WHEN pn.appatmadre IS NULL OR TRIM(pn.appatmadre) = '' OR UPPER(TRIM(pn.appatmadre)) = 'NULL' THEN %s
+          ELSE pn.appatmadre
+        END,
+        pn.apmatmadre = CASE
+          WHEN pn.apmatmadre IS NULL OR TRIM(pn.apmatmadre) = '' OR UPPER(TRIM(pn.apmatmadre)) = 'NULL' THEN %s
+          ELSE pn.apmatmadre
+        END,
+        pn.nombresmadre = CASE
+          WHEN pn.nombresmadre IS NULL OR TRIM(pn.nombresmadre) = '' OR UPPER(TRIM(pn.nombresmadre)) = 'NULL' THEN %s
+          ELSE pn.nombresmadre
+        END,
+        pn.dni_padre = CASE
+          WHEN pn.dni_padre IS NULL OR TRIM(pn.dni_padre) = '' OR UPPER(TRIM(pn.dni_padre)) = 'NULL' THEN %s
+          ELSE pn.dni_padre
+        END,
+        pn.nombre_padre = CASE
+          WHEN pn.nombre_padre IS NULL OR TRIM(pn.nombre_padre) = '' OR UPPER(TRIM(pn.nombre_padre)) = 'NULL' THEN %s
+          ELSE pn.nombre_padre
+        END,
+        pn.telefonopn = CASE
+          WHEN pn.telefonopn IS NULL OR TRIM(pn.telefonopn) = '' OR UPPER(TRIM(pn.telefonopn)) = 'NULL' THEN %s
+          ELSE pn.telefonopn
+        END
       WHERE
         pn.ubigeo = %s
         AND DATE(pn.etapa) = %s
