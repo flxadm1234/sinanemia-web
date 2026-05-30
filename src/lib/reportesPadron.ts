@@ -170,16 +170,179 @@ export async function listPadronReporte(params: {
   const limit = Math.min(Math.max(params.limit ?? 200000, 1), 200000);
 
   const [rows] = await pool.query(
-    `SELECT
+    `WITH pdj AS (
+        SELECT ubigeo, periodo, job_id
+        FROM (
+          SELECT
+            ubigeo,
+            periodo,
+            id AS job_id,
+            ROW_NUMBER() OVER (
+              PARTITION BY ubigeo, periodo
+              ORDER BY fecha_corte DESC, created_at DESC, id DESC
+            ) AS rn
+          FROM padron_dni_import_jobs
+          WHERE status = 'done'
+        ) x
+        WHERE rn = 1
+     ),
+     pdrx AS (
+        SELECT *
+        FROM (
+          SELECT
+            r0.id,
+            r0.job_id,
+            NULLIF(TRIM(COALESCE(r0.dni,'')), '') AS dni_key,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[3]')
+                )
+              ),
+              ''
+            ) AS cnv_key,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[8]')
+                )
+              ),
+              ''
+            ) AS nino_appat,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[9]')
+                )
+              ),
+              ''
+            ) AS nino_apmat,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[10]')
+                )
+              ),
+              ''
+            ) AS nino_nombres,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[44]')
+                )
+              ),
+              ''
+            ) AS madre_dni,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[45]')
+                )
+              ),
+              ''
+            ) AS madre_appat,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[46]')
+                )
+              ),
+              ''
+            ) AS madre_apmat,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[47]')
+                )
+              ),
+              ''
+            ) AS madre_nombres,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[48]')
+                )
+              ),
+              ''
+            ) AS madre_celular,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[54]')
+                )
+              ),
+              ''
+            ) AS jefe_dni,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[55]')
+                )
+              ),
+              ''
+            ) AS jefe_appat,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[56]')
+                )
+              ),
+              ''
+            ) AS jefe_apmat,
+            NULLIF(
+              TRIM(
+                JSON_UNQUOTE(
+                  JSON_EXTRACT(CAST(r0.payload AS JSON), '$[57]')
+                )
+              ),
+              ''
+            ) AS jefe_nombres,
+            ROW_NUMBER() OVER (
+              PARTITION BY
+                r0.job_id,
+                COALESCE(
+                  NULLIF(
+                    TRIM(
+                      JSON_UNQUOTE(
+                        JSON_EXTRACT(CAST(r0.payload AS JSON), '$[3]')
+                      )
+                    ),
+                    ''
+                  ),
+                  NULLIF(TRIM(COALESCE(r0.dni,'')), '')
+                )
+              ORDER BY r0.id DESC
+            ) AS rn_key
+          FROM padron_dni_raw r0
+          JOIN pdj ON pdj.job_id = r0.job_id
+        ) y
+        WHERE rn_key = 1
+     )
+     SELECT
         pn.idpn, pn.tipo, pn.rango, pn.ccpp, pn.zona, pn.mz, pn.direccion, pn.referencia, pn.codeess, pn.tipodoc,
-        pn.dni, pn.nombres, pn.fecha_nac,
-        pn.dnimadre, pn.appatmadre, pn.apmatmadre, pn.nombresmadre,
-        pn.dni_padre, pn.nombre_padre,
+        pn.dni,
+        COALESCE(
+          NULLIF(TRIM(COALESCE(pn.nombres,'')), ''),
+          NULLIF(TRIM(CONCAT_WS(' ', pdr_cnv.nino_appat, pdr_cnv.nino_apmat, pdr_cnv.nino_nombres)), ''),
+          NULLIF(TRIM(CONCAT_WS(' ', pdr_dni.nino_appat, pdr_dni.nino_apmat, pdr_dni.nino_nombres)), '')
+        ) AS nombres,
+        pn.fecha_nac,
+        COALESCE(NULLIF(TRIM(COALESCE(pn.dnimadre,'')), ''), pdr_cnv.madre_dni, pdr_dni.madre_dni) AS dnimadre,
+        COALESCE(NULLIF(TRIM(COALESCE(pn.appatmadre,'')), ''), pdr_cnv.madre_appat, pdr_dni.madre_appat) AS appatmadre,
+        COALESCE(NULLIF(TRIM(COALESCE(pn.apmatmadre,'')), ''), pdr_cnv.madre_apmat, pdr_dni.madre_apmat) AS apmatmadre,
+        COALESCE(NULLIF(TRIM(COALESCE(pn.nombresmadre,'')), ''), pdr_cnv.madre_nombres, pdr_dni.madre_nombres) AS nombresmadre,
+        COALESCE(NULLIF(TRIM(COALESCE(pn.dni_padre,'')), ''), pdr_cnv.jefe_dni, pdr_dni.jefe_dni) AS dni_padre,
+        COALESCE(
+          NULLIF(TRIM(COALESCE(pn.nombre_padre,'')), ''),
+          NULLIF(TRIM(CONCAT_WS(' ', pdr_cnv.jefe_appat, pdr_cnv.jefe_apmat, pdr_cnv.jefe_nombres)), ''),
+          NULLIF(TRIM(CONCAT_WS(' ', pdr_dni.jefe_appat, pdr_dni.jefe_apmat, pdr_dni.jefe_nombres)), '')
+        ) AS nombre_padre,
         pn.idocurrencia, pn.idocurrencia2,
         pn.nuevadireccion, pn.nuevareferencia,
         pn.observacion, pn.obspadron,
         pn.actorsocial, pn.responsable,
-        pn.telefono, pn.telefonopn,
+        pn.telefono,
+        COALESCE(NULLIF(TRIM(COALESCE(pn.telefonopn,'')), ''), pdr_cnv.madre_celular, pdr_dni.madre_celular) AS telefonopn,
         pn.adulto, pn.cantidada,
         pn.etapa, pn.estadovd, pn.fechacita, pn.nrovd,
         pn.eess_ua, pn.departamento, pn.provincia, pn.distrito,
@@ -230,6 +393,9 @@ export async function listPadronReporte(params: {
         FROM padronnominal pn0
         WHERE ${where.join(" AND ")}
      ) pn
+     LEFT JOIN pdj ON pdj.ubigeo = pn.ubigeo AND pdj.periodo = DATE(pn.etapa)
+     LEFT JOIN pdrx pdr_cnv ON pdr_cnv.job_id = pdj.job_id AND pdr_cnv.cnv_key = TRIM(pn.dni)
+     LEFT JOIN pdrx pdr_dni ON pdr_dni.job_id = pdj.job_id AND pdr_dni.dni_key = TRIM(pn.dni)
      LEFT JOIN (
         SELECT
           ubigeo,
