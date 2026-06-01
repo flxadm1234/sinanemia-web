@@ -242,7 +242,12 @@ export async function updatePersonaAction(formData: FormData) {
       ? `Coordinador (CDR) actualizado. Padrón nominal actualizado para el actor social ${String(current.dni ?? "").trim()} en etapa ${etapa}: ${affectedPadron} registros.`
       : "Usuario actualizado correctamente.";
     redirect(`/admin/personas?ok=1&msg=${qs(msg)}`);
-  } catch {
+  } catch (e: any) {
+    const digest = String(e?.digest ?? "");
+    const msg0 = String(e?.message ?? e ?? "");
+    if (digest.includes("NEXT_REDIRECT") || msg0 === "NEXT_REDIRECT" || digest.includes("NEXT_NOT_FOUND")) {
+      throw e;
+    }
     try {
       await conn.rollback();
     } catch {}
