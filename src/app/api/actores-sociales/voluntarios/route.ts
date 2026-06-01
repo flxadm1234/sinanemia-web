@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getDbPool } from "@/lib/db";
-import { findCoordinadorByDni } from "@/lib/persona";
+import { ensurePersonaVoluntarioColumn, findCoordinadorByDni } from "@/lib/persona";
 
 export async function GET(request: Request) {
   const session = await getSession();
@@ -20,6 +20,8 @@ export async function GET(request: Request) {
   if (!Number.isFinite(ubigeo) || ubigeo <= 0) {
     return NextResponse.json({ error: "invalid_ubigeo" }, { status: 400 });
   }
+
+  await ensurePersonaVoluntarioColumn();
 
   const pool = getDbPool();
   const [rows] = await pool.query(
@@ -55,4 +57,3 @@ export async function GET(request: Request) {
     ),
   );
 }
-

@@ -1,6 +1,13 @@
 import { getDbPool } from "@/lib/db";
 import { z } from "zod";
 
+export async function ensurePersonaVoluntarioColumn() {
+  const pool = getDbPool();
+  try {
+    await pool.query("ALTER TABLE persona ADD COLUMN voluntario TINYINT NOT NULL DEFAULT 0");
+  } catch {}
+}
+
 export const PersonaTipo = z.enum([
   "SUPER ADMIN",
   "ADMINISTRADOR",

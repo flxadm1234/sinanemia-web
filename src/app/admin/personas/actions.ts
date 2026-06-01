@@ -5,6 +5,7 @@ import { requireAdminOrSuperAdmin, requireSuperAdmin } from "@/lib/auth";
 import {
   createPersona,
   deletePersonaById,
+  ensurePersonaVoluntarioColumn,
   findPersonaById,
   getRoleFromPersonaTipo,
   updatePersonaEstado,
@@ -132,6 +133,9 @@ const personaUpdateSchema = z.object({
 
 export async function updatePersonaAction(formData: FormData) {
   const user = await requireAdminOrSuperAdmin();
+  if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
+    await ensurePersonaVoluntarioColumn();
+  }
   const parsed = personaUpdateSchema.safeParse({
     idpersona: formData.get("idpersona"),
     nombrecompleto: String(formData.get("nombrecompleto") ?? ""),

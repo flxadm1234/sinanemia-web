@@ -396,6 +396,9 @@ export async function reaperturaMensualAction(formData: FormData) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    try {
+      await conn.query("ALTER TABLE persona ADD COLUMN voluntario TINYINT NOT NULL DEFAULT 0");
+    } catch {}
 
     const [rowsTarget] = await conn.query(
       `SELECT TRIM(dni) AS dni, TRIM(COALESCE(actorsocial,'')) AS actorsocial, TRIM(COALESCE(responsable,'')) AS responsable
@@ -500,25 +503,35 @@ export async function reaperturaMensualAction(formData: FormData) {
 
     let changed = 0;
     if (updates.length) {
-      await conn.query(
-        "CREATE TEMPORARY TABLE tmp_reapertura (dni VARCHAR(15) PRIMARY KEY, actorsocial VARCHAR(15) NULL, responsable VARCHAR(15) NULL) ENGINE=MEMORY",
-      );
-      const rowsToInsert = updates.map((u) => [u[4], u[0], u[1]]);
-      const batchInsert = 900;
-      for (let i = 0; i < rowsToInsert.length; i += batchInsert) {
-        const part = rowsToInsert.slice(i, i + batchInsert);
-        await conn.query("INSERT INTO tmp_reapertura (dni, actorsocial, responsable) VALUES ?", [part]);
+      try {
+        await conn.query(
+          "CREATE TEMPORARY TABLE tmp_reapertura (dni VARCHAR(15) PRIMARY KEY, actorsocial VARCHAR(15) NULL, responsable VARCHAR(15) NULL) ENGINE=MEMORY",
+        );
+        const rowsToInsert = updates.map((u) => [u[4], u[0], u[1]]);
+        const batchInsert = 900;
+        for (let i = 0; i < rowsToInsert.length; i += batchInsert) {
+          const part = rowsToInsert.slice(i, i + batchInsert);
+          await conn.query("INSERT INTO tmp_reapertura (dni, actorsocial, responsable) VALUES ?", [part]);
+        }
+        const [r2] = await conn.query(
+          `UPDATE padronnominal pn
+           JOIN tmp_reapertura t ON TRIM(pn.dni) = t.dni
+           SET pn.actorsocial = t.actorsocial, pn.responsable = t.responsable
+           WHERE pn.ubigeo = ?
+             AND DATE_FORMAT(pn.etapa,'%Y-%m-01') = ?
+             AND TRIM(COALESCE(pn.tipovd,'')) = '1'`,
+          [ubigeo, etapa],
+        );
+        changed = Number((r2 as any)?.changedRows ?? 0);
+      } catch {
+        for (const u of updates) {
+          const [r2] = await conn.query(
+            "UPDATE padronnominal SET actorsocial = ?, responsable = ? WHERE ubigeo = ? AND DATE_FORMAT(etapa,'%Y-%m-01') = ? AND TRIM(dni) = ?",
+            u,
+          );
+          changed += Number((r2 as any)?.changedRows ?? 0);
+        }
       }
-      const [r2] = await conn.query(
-        `UPDATE padronnominal pn
-         JOIN tmp_reapertura t ON TRIM(pn.dni) = t.dni
-         SET pn.actorsocial = t.actorsocial, pn.responsable = t.responsable
-         WHERE pn.ubigeo = ?
-           AND DATE_FORMAT(pn.etapa,'%Y-%m-01') = ?
-           AND TRIM(COALESCE(pn.tipovd,'')) = '1'`,
-        [ubigeo, etapa],
-      );
-      changed = Number((r2 as any)?.changedRows ?? 0);
     }
 
     await conn.commit();
@@ -526,12 +539,18 @@ export async function reaperturaMensualAction(formData: FormData) {
     redirect(
       `/admin/padronnominal?tab=reapertura&ok=1&rows=${dniList.length}&rows2=${matchedHist}&chg1=${assignedVol}&chg2=${changed}`,
     );
-  } catch {
+  } catch (e: any) {
     try {
       await conn.rollback();
     } catch {}
+    const msg = String(e?.message ?? e ?? "")
+      .replaceAll("\n", " ")
+      .replaceAll("\r", " ")
+      .slice(0, 220);
     redirect(
-      `/admin/padronnominal?tab=reapertura&err=1&msg=${qs("No se pudo completar la reapertura. Revisa la BD e inténtalo nuevamente.")}`,
+      `/admin/padronnominal?tab=reapertura&err=1&msg=${qs(
+        msg ? `No se pudo completar la reapertura: ${msg}` : "No se pudo completar la reapertura. Revisa la BD e inténtalo nuevamente.",
+      )}`,
     );
   } finally {
     conn.release();
