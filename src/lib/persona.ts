@@ -21,6 +21,7 @@ export type PersonaSafe = {
   estado: number | null;
   ubigeo: number | null;
   cdr: string;
+  voluntario?: number | null;
   telefono?: string | null;
   sectorizacion?: number | null;
 };
@@ -45,7 +46,7 @@ function normalizeTipo(tipo: string | null | undefined) {
 export async function findPersonaById(idpersona: number) {
   const pool = getDbPool();
   const [rows] = await pool.query(
-    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono, direccion, email, clave FROM persona WHERE idpersona = ? LIMIT 1",
+    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, voluntario, telefono, direccion, email, clave FROM persona WHERE idpersona = ? LIMIT 1",
     [idpersona],
   );
   const row = (rows as any[])[0] as

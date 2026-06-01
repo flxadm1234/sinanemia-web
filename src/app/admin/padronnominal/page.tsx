@@ -6,10 +6,12 @@ import { ActorSocialCombobox } from "@/components/ActorSocialCombobox";
 import { CoordinatorCombobox } from "@/components/CoordinatorCombobox";
 import { FormSubmitButton } from "@/components/FormSubmitButton";
 import { ActorCdrBulkChangeClient } from "@/components/ActorCdrBulkChangeClient";
+import { ReaperturaMensualClient } from "@/components/ReaperturaMensualClient";
 import {
   bulkActorCdrAction,
   bulkActorSocialAction,
   bulkResponsableAction,
+  reaperturaMensualAction,
   rectifyCoordinadorAction,
 } from "./actions";
 
@@ -34,6 +36,8 @@ export default async function PadronNominalAdminPage(props: {
         ? "coordinador"
         : tab === "actores"
           ? "actores"
+          : tab === "reapertura"
+            ? "reapertura"
           : "actor";
 
   const etapaSel =
@@ -89,6 +93,17 @@ export default async function PadronNominalAdminPage(props: {
                 aplicados:{" "}
                 <span className="font-semibold">{Number.isFinite(changed1) ? changed1 : 0}</span> actores /{" "}
                 <span className="font-semibold">{Number.isFinite(changed2) ? changed2 : 0}</span> padrón
+              </>
+            ) : activeTab === "reapertura" ? (
+              <>
+                Reapertura completada. Niños (etapa) encontrados:{" "}
+                <span className="font-semibold">{Number.isFinite(affected) ? affected : 0}</span> · Coincidencias
+                por histórico:{" "}
+                <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span> · Asignados a
+                voluntarios:{" "}
+                <span className="font-semibold">{Number.isFinite(changed1) ? changed1 : 0}</span> · Cambios
+                aplicados:{" "}
+                <span className="font-semibold">{Number.isFinite(changed2) ? changed2 : 0}</span>
               </>
             ) : (
               <>
@@ -159,6 +174,17 @@ export default async function PadronNominalAdminPage(props: {
             }
           >
             Cambiar coordinador de actores
+          </Link>
+          <Link
+            href="/admin/padronnominal?tab=reapertura"
+            className={
+              "rounded-xl px-4 py-2 text-sm font-semibold " +
+              (activeTab === "reapertura"
+                ? "bg-zinc-900 text-white"
+                : "bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50")
+            }
+          >
+            Reapertura mensual
           </Link>
         </div>
 
@@ -247,6 +273,21 @@ export default async function PadronNominalAdminPage(props: {
                 />
               </div>
             </form>
+          </div>
+        ) : activeTab === "reapertura" ? (
+          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
+            <div className="text-sm font-semibold text-zinc-900">Reapertura Mensual</div>
+            <div className="mt-1 text-sm text-zinc-600">
+              Reutiliza asignaciones de meses previos para el mes seleccionado. Incluye asignación a voluntarios para
+              casos “no encontrado / fallecido / otra ciudad / otro distrito”.
+            </div>
+
+            <ReaperturaMensualClient
+              isSuperAdmin={user.tipo === "SUPER ADMIN"}
+              ubigeoDefault={ubigeoDefault}
+              etapaDefault={etapaDefault}
+              action={reaperturaMensualAction}
+            />
           </div>
         ) : activeTab === "responsable" ? (
           <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">

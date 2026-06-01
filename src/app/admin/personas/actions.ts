@@ -124,6 +124,7 @@ const personaUpdateSchema = z.object({
     .optional()
     .transform((v) => (v ? Number(v) : null)),
   cdr: z.string().trim().optional(),
+  voluntario: z.coerce.number().int().min(0).max(1).optional(),
   telefono: z.string().trim().optional(),
   direccion: z.string().trim().optional(),
   email: z.string().trim().optional(),
@@ -138,6 +139,7 @@ export async function updatePersonaAction(formData: FormData) {
     clave: String(formData.get("clave") ?? ""),
     ubigeo: String(formData.get("ubigeo") ?? ""),
     cdr: String(formData.get("cdr") ?? ""),
+    voluntario: formData.get("voluntario"),
     telefono: String(formData.get("telefono") ?? ""),
     direccion: String(formData.get("direccion") ?? ""),
     email: String(formData.get("email") ?? ""),
@@ -166,6 +168,9 @@ export async function updatePersonaAction(formData: FormData) {
   }
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
     if (data.cdr !== undefined && data.cdr.trim()) patch.cdr = data.cdr.trim();
+  }
+  if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
+    if (role === "ACTOR SOCIAL" && data.voluntario !== undefined) patch.voluntario = data.voluntario;
   }
   if (data.telefono !== undefined) patch.telefono = data.telefono.trim();
   if (data.direccion !== undefined) patch.direccion = data.direccion.trim();

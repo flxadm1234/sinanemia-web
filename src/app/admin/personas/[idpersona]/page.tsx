@@ -29,6 +29,7 @@ export default async function AdminPersonaDetailPage(props: {
   const role = getRoleFromPersonaTipo(persona.tipo);
   const allowUbigeo = user.tipo === "SUPER ADMIN";
   const allowCdr = user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN";
+  const allowVoluntario = allowCdr && role === "ACTOR SOCIAL";
 
   return (
     <AppShell user={user} title="Detalle de usuario">
@@ -166,6 +167,25 @@ export default async function AdminPersonaDetailPage(props: {
                 </>
               )}
             </div>
+
+            {allowVoluntario ? (
+              <div>
+                <label className="block text-sm font-medium text-zinc-900">Voluntario</label>
+                <select
+                  name="voluntario"
+                  defaultValue={String((persona as any).voluntario ?? 0)}
+                  className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                >
+                  <option value="0">No</option>
+                  <option value="1">Sí</option>
+                </select>
+                <div className="mt-1 text-xs text-zinc-500">
+                  Se usa para asignación automática en la Reapertura mensual.
+                </div>
+              </div>
+            ) : (
+              <input type="hidden" name="voluntario" value={String((persona as any).voluntario ?? 0)} />
+            )}
 
             <div>
               <label className="block text-sm font-medium text-zinc-900">
