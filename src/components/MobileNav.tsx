@@ -42,6 +42,9 @@ function buildLinks(user: SessionUser): NavLink[] {
     links.push({ href: "/admin/padronnominal", label: "Configurar actor social y CVD" });
   }
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
+    links.push({ href: "/admin/regulacion-vd", label: "Regulación VD" });
+  }
+  if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
     links.push({ href: "/admin/reportes/padron", label: "Reportes" });
   }
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {

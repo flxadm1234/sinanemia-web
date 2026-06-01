@@ -94,6 +94,14 @@ export function AppShell(props: {
           ) : null}
           {user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" ? (
             <Link
+              href="/admin/regulacion-vd"
+              className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+            >
+              Regulación VD
+            </Link>
+          ) : null}
+          {user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN" ? (
+            <Link
               href="/admin/reportes/padron"
               className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
             >
