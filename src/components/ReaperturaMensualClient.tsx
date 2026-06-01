@@ -201,8 +201,8 @@ export function ReaperturaMensualClient(props: {
         <div className="text-sm font-semibold text-zinc-900">Reapertura Mensual</div>
         <div className="mt-1 text-sm text-zinc-600">
           Copia <span className="font-semibold">actorsocial</span> y <span className="font-semibold">responsable</span>{" "}
-          desde el mes anterior. Si no existe en el mes anterior, busca hacia atrás hasta 6 meses. Si en el mes anterior
-          el niño tiene idocurrencia 2/6/7/8/10, se asigna a un voluntario (seleccionado) de manera equitativa.
+          desde el mes anterior (mismo ubigeo). Si no existe en el mes anterior, busca hacia atrás hasta 6 meses. Si en el
+          mes anterior el niño tiene idocurrencia 2/6/7/8/10, se asigna a un voluntario (seleccionado) de manera equitativa.
         </div>
 
         <div className="mt-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -323,4 +323,3 @@ export function ReaperturaMensualClient(props: {
     </form>
   );
 }
-
