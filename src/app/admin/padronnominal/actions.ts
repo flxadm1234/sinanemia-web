@@ -562,3 +562,203 @@ export async function reaperturaMensualAction(formData: FormData) {
   }
 }
 
+const hisSchema = z.object({
+  ubigeo: z.coerce.number().int().positive().optional(),
+  etapa: etapaSchema,
+  diresa: z.string().trim().min(1).max(50),
+  overwrite: z.coerce.number().int().min(0).max(1).optional(),
+  voluntarios: z.string().trim().min(2),
+});
+
+function normText(v: unknown) {
+  return String(v ?? "")
+    .trim()
+    .replaceAll(/\s+/g, " ")
+    .toUpperCase();
+}
+
+export async function reasignacionHisAction(formData: FormData) {
+  const user = await requireAdminOrSuperAdmin();
+  const parsed = hisSchema.safeParse({
+    ubigeo: formData.get("ubigeo"),
+    etapa: String(formData.get("etapa") ?? ""),
+    diresa: String(formData.get("diresa") ?? ""),
+    overwrite: formData.get("overwrite"),
+    voluntarios: String(formData.get("voluntarios") ?? ""),
+  });
+  if (!parsed.success) {
+    redirect(`/admin/padronnominal?tab=his&err=1&msg=${qs("Datos inválidos.")}`);
+  }
+
+  const ubigeo = user.tipo === "SUPER ADMIN" ? parsed.data.ubigeo ?? null : user.ubigeo ?? null;
+  if (!ubigeo) {
+    redirect(`/admin/padronnominal?tab=his&err=1&msg=${qs("Falta ubigeo.")}`);
+  }
+  const etapa = parsed.data.etapa;
+  const diresaExpected = normText(parsed.data.diresa);
+  const overwrite = Number(parsed.data.overwrite ?? 0) === 1;
+
+  let voluntariosRaw: unknown = null;
+  try {
+    voluntariosRaw = JSON.parse(parsed.data.voluntarios);
+  } catch {
+    voluntariosRaw = null;
+  }
+  if (!Array.isArray(voluntariosRaw)) {
+    redirect(`/admin/padronnominal?tab=his&err=1&msg=${qs("Selección de voluntarios inválida.")}`);
+  }
+  const voluntarios = voluntariosRaw
+    .map((x) => String(x ?? "").trim())
+    .filter((x) => x.length >= 6);
+  const voluntariosUniq = Array.from(new Set(voluntarios));
+  if (!voluntariosUniq.length) {
+    redirect(`/admin/padronnominal?tab=his&err=1&msg=${qs("Selecciona al menos un voluntario.")}`);
+  }
+
+  const pool = getDbPool();
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    try {
+      await conn.query("ALTER TABLE persona ADD COLUMN voluntario TINYINT NOT NULL DEFAULT 0");
+    } catch {}
+
+    const [rowsTarget] = await conn.query(
+      `SELECT TRIM(dni) AS dni, TRIM(COALESCE(actorsocial,'')) AS actorsocial, TRIM(COALESCE(responsable,'')) AS responsable
+       FROM padronnominal
+       WHERE ubigeo = ?
+         AND DATE_FORMAT(etapa,'%Y-%m-01') = ?
+         AND TRIM(COALESCE(dni,'')) <> ''
+         AND TRIM(COALESCE(tipovd,'')) = '1'`,
+      [ubigeo, etapa],
+    );
+    const targets = (rowsTarget as any[]).map((r) => ({
+      dni: String(r.dni ?? "").trim(),
+      actorsocial: String(r.actorsocial ?? "").trim(),
+      responsable: String(r.responsable ?? "").trim(),
+    }));
+    const dniList = targets.map((t) => t.dni).filter(Boolean);
+    if (!dniList.length) {
+      await conn.rollback();
+      redirect(`/admin/padronnominal?tab=his&err=1&msg=${qs("No hay niños (tipovd=1) en la etapa seleccionada.")}`);
+    }
+
+    const vPlaceholders = voluntariosUniq.map(() => "?").join(",");
+    const [rowsVol] = await conn.query(
+      `SELECT TRIM(dni) AS dni, TRIM(COALESCE(cdr,'')) AS cdr
+       FROM persona
+       WHERE ubigeo = ?
+         AND UPPER(tipo) LIKE 'ACTOR SOCIAL%'
+         AND estado = 1
+         AND voluntario = 1
+         AND TRIM(dni) IN (${vPlaceholders})
+       ORDER BY dni ASC`,
+      [ubigeo, ...voluntariosUniq],
+    );
+    const vols = (rowsVol as any[])
+      .map((r) => ({ dni: String(r.dni ?? "").trim(), cdr: String(r.cdr ?? "").trim() }))
+      .filter((r) => r.dni);
+    if (!vols.length) {
+      await conn.rollback();
+      redirect(`/admin/padronnominal?tab=his&err=1&msg=${qs("No se encontraron voluntarios activos para la selección indicada.")}`);
+    }
+    const volsSorted = vols.slice().sort((a, b) => a.dni.localeCompare(b.dni));
+
+    const latestByDni = new Map<string, { diresa: string }>();
+    const chunk = 900;
+    for (let i = 0; i < dniList.length; i += chunk) {
+      const part = dniList.slice(i, i + chunk);
+      const placeholders = part.map(() => "?").join(",");
+      const [rowsHis] = await conn.query(
+        `SELECT dni, periodo, diresa, id
+         FROM atenciones
+         WHERE TRIM(dni) IN (${placeholders})
+         ORDER BY TRIM(dni) ASC, periodo DESC, id DESC`,
+        [...part],
+      );
+      for (const r of rowsHis as any[]) {
+        const dni = String(r.dni ?? "").trim();
+        if (!dni) continue;
+        if (latestByDni.has(dni)) continue;
+        latestByDni.set(dni, { diresa: normText(r.diresa) });
+      }
+    }
+
+    let withHis = 0;
+    let mismatch = 0;
+    let rr = 0;
+    const updates: Array<[string, string, string]> = [];
+
+    const targetsSorted = targets.slice().sort((a, b) => a.dni.localeCompare(b.dni));
+    for (const t of targetsSorted) {
+      const his = latestByDni.get(t.dni);
+      if (!his) continue;
+      withHis += 1;
+      if (!his.diresa || his.diresa === diresaExpected) continue;
+      mismatch += 1;
+
+      const hasAssign = Boolean(t.actorsocial && t.actorsocial !== "0");
+      if (!overwrite && hasAssign) continue;
+
+      const v = volsSorted[rr % volsSorted.length]!;
+      rr += 1;
+      updates.push([t.dni, v.dni, v.cdr || ""]);
+    }
+
+    let changed = 0;
+    if (updates.length) {
+      try {
+        await conn.query(
+          "CREATE TEMPORARY TABLE tmp_his (dni VARCHAR(15) PRIMARY KEY, actorsocial VARCHAR(15) NULL, responsable VARCHAR(15) NULL) ENGINE=MEMORY",
+        );
+        const rowsToInsert = updates.map((u) => [u[0], u[1], u[2]]);
+        for (let i = 0; i < rowsToInsert.length; i += 900) {
+          const part = rowsToInsert.slice(i, i + 900);
+          await conn.query("INSERT INTO tmp_his (dni, actorsocial, responsable) VALUES ?", [part]);
+        }
+        const [r2] = await conn.query(
+          `UPDATE padronnominal pn
+           JOIN tmp_his t ON TRIM(pn.dni) = t.dni
+           SET pn.actorsocial = t.actorsocial, pn.responsable = t.responsable
+           WHERE pn.ubigeo = ?
+             AND DATE_FORMAT(pn.etapa,'%Y-%m-01') = ?
+             AND TRIM(COALESCE(pn.tipovd,'')) = '1'`,
+          [ubigeo, etapa],
+        );
+        changed = Number((r2 as any)?.changedRows ?? 0);
+      } catch {
+        for (const u of updates) {
+          const [r2] = await conn.query(
+            "UPDATE padronnominal SET actorsocial = ?, responsable = ? WHERE ubigeo = ? AND DATE_FORMAT(etapa,'%Y-%m-01') = ? AND TRIM(dni) = ?",
+            [u[1], u[2], ubigeo, etapa, u[0]],
+          );
+          changed += Number((r2 as any)?.changedRows ?? 0);
+        }
+      }
+    }
+
+    await conn.commit();
+    revalidatePath("/admin/padronnominal");
+    redirect(
+      `/admin/padronnominal?tab=his&ok=1&rows=${dniList.length}&rows2=${withHis}&chg1=${mismatch}&chg2=${changed}`,
+    );
+  } catch (e: any) {
+    const digest = String(e?.digest ?? "");
+    const msg0 = String(e?.message ?? e ?? "");
+    if (digest.includes("NEXT_REDIRECT") || msg0 === "NEXT_REDIRECT" || digest.includes("NEXT_NOT_FOUND")) {
+      throw e;
+    }
+    try {
+      await conn.rollback();
+    } catch {}
+    const msg = msg0.replaceAll("\n", " ").replaceAll("\r", " ").slice(0, 220);
+    redirect(
+      `/admin/padronnominal?tab=his&err=1&msg=${qs(
+        msg ? `No se pudo completar la reasignación por HIS: ${msg}` : "No se pudo completar la reasignación por HIS.",
+      )}`,
+    );
+  } finally {
+    conn.release();
+  }
+}
+

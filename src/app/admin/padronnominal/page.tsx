@@ -7,11 +7,13 @@ import { CoordinatorCombobox } from "@/components/CoordinatorCombobox";
 import { FormSubmitButton } from "@/components/FormSubmitButton";
 import { ActorCdrBulkChangeClient } from "@/components/ActorCdrBulkChangeClient";
 import { ReaperturaMensualClient } from "@/components/ReaperturaMensualClient";
+import { ReasignacionHisClient } from "@/components/ReasignacionHisClient";
 import {
   bulkActorCdrAction,
   bulkActorSocialAction,
   bulkResponsableAction,
   reaperturaMensualAction,
+  reasignacionHisAction,
   rectifyCoordinadorAction,
 } from "./actions";
 
@@ -38,6 +40,8 @@ export default async function PadronNominalAdminPage(props: {
           ? "actores"
           : tab === "reapertura"
             ? "reapertura"
+            : tab === "his"
+              ? "his"
           : "actor";
 
   const etapaSel =
@@ -103,6 +107,15 @@ export default async function PadronNominalAdminPage(props: {
                 voluntarios:{" "}
                 <span className="font-semibold">{Number.isFinite(changed1) ? changed1 : 0}</span> · Cambios
                 aplicados:{" "}
+                <span className="font-semibold">{Number.isFinite(changed2) ? changed2 : 0}</span>
+              </>
+            ) : activeTab === "his" ? (
+              <>
+                Reasignación por HIS completada. Niños (etapa) encontrados:{" "}
+                <span className="font-semibold">{Number.isFinite(affected) ? affected : 0}</span> · Con HIS (último
+                periodo):{" "}
+                <span className="font-semibold">{Number.isFinite(affected2) ? affected2 : 0}</span> · DIRESA distinta:{" "}
+                <span className="font-semibold">{Number.isFinite(changed1) ? changed1 : 0}</span> · Cambios aplicados:{" "}
                 <span className="font-semibold">{Number.isFinite(changed2) ? changed2 : 0}</span>
               </>
             ) : (
@@ -185,6 +198,17 @@ export default async function PadronNominalAdminPage(props: {
             }
           >
             Reapertura mensual
+          </Link>
+          <Link
+            href="/admin/padronnominal?tab=his"
+            className={
+              "rounded-xl px-4 py-2 text-sm font-semibold " +
+              (activeTab === "his"
+                ? "bg-zinc-900 text-white"
+                : "bg-white text-zinc-900 border border-zinc-200 hover:bg-zinc-50")
+            }
+          >
+            Reasignación por HIS
           </Link>
         </div>
 
@@ -287,6 +311,20 @@ export default async function PadronNominalAdminPage(props: {
               ubigeoDefault={ubigeoDefault}
               etapaDefault={etapaDefault}
               action={reaperturaMensualAction}
+            />
+          </div>
+        ) : activeTab === "his" ? (
+          <div className="rounded-2xl bg-white ring-1 ring-black/5 p-5">
+            <div className="text-sm font-semibold text-zinc-900">Reasignación por HIS</div>
+            <div className="mt-1 text-sm text-zinc-600">
+              Reasigna a voluntarios cuando el último HIS (tabla atenciones) tenga DIRESA distinta a la indicada.
+            </div>
+
+            <ReasignacionHisClient
+              isSuperAdmin={user.tipo === "SUPER ADMIN"}
+              ubigeoDefault={ubigeoDefault}
+              etapaDefault={etapaDefault}
+              action={reasignacionHisAction}
             />
           </div>
         ) : activeTab === "responsable" ? (
