@@ -540,10 +540,15 @@ export async function reaperturaMensualAction(formData: FormData) {
       `/admin/padronnominal?tab=reapertura&ok=1&rows=${dniList.length}&rows2=${matchedHist}&chg1=${assignedVol}&chg2=${changed}`,
     );
   } catch (e: any) {
+    const digest = String(e?.digest ?? "");
+    const msg0 = String(e?.message ?? e ?? "");
+    if (digest.includes("NEXT_REDIRECT") || msg0 === "NEXT_REDIRECT" || digest.includes("NEXT_NOT_FOUND")) {
+      throw e;
+    }
     try {
       await conn.rollback();
     } catch {}
-    const msg = String(e?.message ?? e ?? "")
+    const msg = msg0
       .replaceAll("\n", " ")
       .replaceAll("\r", " ")
       .slice(0, 220);
