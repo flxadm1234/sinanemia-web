@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireAdminOrSuperAdmin } from "@/lib/auth";
-import { listPersonasPage } from "@/lib/persona";
+import { ensurePersonaVoluntarioColumn, listPersonasPage } from "@/lib/persona";
 import { AppShell } from "@/components/AppShell";
 import { deletePersonaAction, setEstadoAction } from "./actions";
 import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
@@ -20,6 +20,7 @@ export default async function AdminPersonasPage(props: {
   }>;
 }) {
   const user = await requireAdminOrSuperAdmin();
+  await ensurePersonaVoluntarioColumn();
   const { estado, q, tipo, ok, err, msg, page } = await props.searchParams;
 
   const pageSize = 50;
@@ -201,13 +202,14 @@ export default async function AdminPersonasPage(props: {
 
         <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-black/5">
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <table className="min-w-[1320px] text-sm">
               <thead className="bg-zinc-50 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600">
                 <tr>
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">DNI</th>
                   <th className="px-4 py-3">Nombre</th>
                   <th className="px-4 py-3">Tipo</th>
+                  <th className="px-4 py-3">Voluntario</th>
                   <th className="px-4 py-3">CDR</th>
                   <th className="px-4 py-3">Ubigeo</th>
                   <th className="px-4 py-3">Teléfono</th>
@@ -227,6 +229,7 @@ export default async function AdminPersonasPage(props: {
                     String(r.tipo ?? "").toUpperCase().startsWith("ACTOR SOCIAL");
                   const hasSector = (r.sectorizacion ?? null) === 1;
                   const ninos = isActor ? ninosMap.get(r.dni) ?? 0 : 0;
+                  const voluntario = Number(r.voluntario ?? 0) === 1;
                   return (
                     <tr key={r.idpersona} className="hover:bg-zinc-50/50">
                       <td className="px-4 py-3 text-zinc-700">{r.idpersona}</td>
@@ -235,6 +238,22 @@ export default async function AdminPersonasPage(props: {
                       </td>
                       <td className="px-4 py-3 text-zinc-800">{nombre}</td>
                       <td className="px-4 py-3 text-zinc-700">{r.tipo ?? "-"}</td>
+                      <td className="px-4 py-3">
+                        {isActor ? (
+                          <span
+                            className={
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold " +
+                              (voluntario
+                                ? "bg-blue-50 text-blue-700 ring-1 ring-blue-200"
+                                : "bg-zinc-100 text-zinc-700 ring-1 ring-zinc-200")
+                            }
+                          >
+                            {voluntario ? "SI" : "NO"}
+                          </span>
+                        ) : (
+                          <span className="text-zinc-400">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-zinc-700">{r.cdr}</td>
                       <td className="px-4 py-3 text-zinc-700">
                         {r.ubigeo ?? "-"}
@@ -322,7 +341,7 @@ export default async function AdminPersonasPage(props: {
                 })}
                 {rows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={11}>
+                    <td className="px-4 py-10 text-center text-zinc-500" colSpan={12}>
                       No hay resultados con los filtros actuales.
                     </td>
                   </tr>

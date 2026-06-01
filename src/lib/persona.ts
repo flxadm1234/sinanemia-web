@@ -145,6 +145,7 @@ export async function listPersonasPage(params: {
   limit: number;
   offset: number;
 }) {
+  await ensurePersonaVoluntarioColumn();
   const pool = getDbPool();
   const where: string[] = [];
   const values: any[] = [];
@@ -192,7 +193,7 @@ export async function listPersonasPage(params: {
   const total = Number((countRows as any[])[0]?.total ?? 0);
 
   const [rows] = await pool.query(
-    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, telefono, " +
+    "SELECT idpersona, dni, nombrecompleto, apellidos, tipo, estado, ubigeo, cdr, voluntario, telefono, " +
       "(SELECT 1 FROM sectorizacion_actor sa WHERE sa.dni_actor_social = persona.dni LIMIT 1) AS sectorizacion " +
       `FROM persona${whereSql} ORDER BY idpersona DESC LIMIT ? OFFSET ?`,
     [...values, limit, offset],
