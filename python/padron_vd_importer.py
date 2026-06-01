@@ -204,13 +204,13 @@ INSERT INTO padronnominal (
   telefono, etapa, nrovd, fecha_inicio_vd, fecha_fin_vd, ubigeo,
   tipovd, actorsocial, responsable, eess_ua,
   idocurrencia, idocurrencia2, obspadron, fechacita,
-  departamento, provincia, distrito, referencia
+  departamento, provincia, distrito, referencia, estado
 ) VALUES (
   %s,%s,%s,%s,%s,%s,%s,
   %s,%s,%s,%s,%s,%s,
   %s,%s,%s,%s,
   %s,%s,%s,%s,
-  %s,%s,%s,%s
+  %s,%s,%s,%s,%s
 )
 """
 
@@ -443,6 +443,7 @@ def run_import(job_id: str, file_path: str, config_id: int):
                     prov,
                     dist,
                     referencia,
+                    1,
                 )
             )
 
