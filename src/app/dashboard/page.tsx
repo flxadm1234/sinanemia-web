@@ -3,6 +3,7 @@ import { AppShell } from "@/components/AppShell";
 import { DashboardPdfButton } from "@/components/DashboardPdfButton";
 import {
   computePadronDniDocTypeStats,
+  computePadronMetaUpdateStats,
   estadosvdDistribucion,
   listDashboardMonthsByUbigeo,
   listDistinctUbigeosFromMeses,
@@ -140,6 +141,10 @@ export default async function DashboardPage(props: {
     )[0] ?? null;
 
   const padronDniDocStats = scopeUbigeo ? await computePadronDniDocTypeStats({ ubigeo: Number(scopeUbigeo) }) : null;
+  const padronMetaStats =
+    scopeUbigeo && selectedMonth?.etapa
+      ? await computePadronMetaUpdateStats({ ubigeo: Number(scopeUbigeo), periodo: selectedMonth.etapa })
+      : null;
 
   const showGeo = role === "SUPER ADMIN" || role === "SUPERVISOR";
   const dept = showGeo ? await resumenPorDepartamento({ etapa, limit: 50 }) : [];
@@ -481,10 +486,67 @@ export default async function DashboardPage(props: {
             </div>
 
             <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">
-              <div className="text-sm font-semibold text-zinc-900">
-                META ACTUALIZACIÓN DEL PADRÓN NOMINAL (0-12 MESES)
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm font-semibold text-zinc-900">
+                  META ACTUALIZACIÓN DEL PADRÓN NOMINAL (0-12 MESES)
+                </div>
+                {role === "INVITADO" || !padronMetaStats ? null : (
+                  <DownloadIconButton
+                    href={`/api/reportes/padron-meta-update-excel?ubigeo=${encodeURIComponent(
+                      String(scopeUbigeo),
+                    )}&periodo=${encodeURIComponent(padronMetaStats.periodo)}`}
+                    filename={`padron_meta_${String(scopeUbigeo)}_${padronMetaStats.periodo}.xls`}
+                    overlayLabel="Generando Excel..."
+                    title="Descargar Excel"
+                  />
+                )}
               </div>
-              <div className="mt-2 text-sm text-zinc-600">En mantenimiento</div>
+
+              {padronMetaStats ? (
+                <>
+                  <div className="mt-2 text-xs text-zinc-600">
+                    Periodo: <span className="font-semibold">{padronMetaStats.periodo}</span> · Corte (inicio):{" "}
+                    <span className="font-semibold">{padronMetaStats.fecha_corte}</span> · Cierre:{" "}
+                    <span className="font-semibold">{padronMetaStats.fecha_cierre}</span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl bg-white ring-1 ring-black/5 p-3">
+                      <div className="text-xs text-zinc-600">Niños 0–12 meses (al cierre)</div>
+                      <div className="mt-1 text-xl font-semibold text-zinc-900">
+                        {padronMetaStats.total_0_12m}
+                      </div>
+                      {padronMetaStats.invalid_birthdate ? (
+                        <div className="mt-1 text-[11px] text-zinc-500">
+                          Sin fecha nacimiento válida: {padronMetaStats.invalid_birthdate}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="rounded-xl bg-white ring-1 ring-black/5 p-3">
+                      <div className="text-xs text-zinc-600">Meta (con faltantes)</div>
+                      <div className="mt-1 text-xl font-semibold text-zinc-900">
+                        {padronMetaStats.denom_meta}
+                      </div>
+                      <div className="mt-1 text-[11px] text-zinc-500">
+                        Actualizados: {padronMetaStats.numer_actualizados} · Avance:{" "}
+                        <span className="font-semibold">{padronMetaStats.pct_actualizados}%</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-xs text-zinc-700">
+                    Faltantes: DNI{" "}
+                    <span className="font-semibold">{padronMetaStats.missing.dni}</span> · Programas{" "}
+                    <span className="font-semibold">{padronMetaStats.missing.programas}</span> · Dirección{" "}
+                    <span className="font-semibold">{padronMetaStats.missing.direccion}</span> · EESS{" "}
+                    <span className="font-semibold">{padronMetaStats.missing.eess}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-2 text-sm text-zinc-600">
+                  Sin carga DNI de inicio de mes para este periodo.
+                </div>
+              )}
             </div>
           </div>
         </div>

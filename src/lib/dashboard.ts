@@ -223,6 +223,143 @@ export async function computePadronDniDocTypeStats(params: { ubigeo: number }) {
   } satisfies PadronDniDocTypeStat;
 }
 
+function isBlank(v: unknown) {
+  const s = String(v ?? "").trim();
+  if (!s) return true;
+  if (String(s).trim().toUpperCase() === "NULL") return true;
+  return false;
+}
+
+function endOfMonthUTC(periodo: Date) {
+  const y = periodo.getUTCFullYear();
+  const m = periodo.getUTCMonth() + 1;
+  const dt = new Date(Date.UTC(y, m, 0));
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+export type PadronMetaUpdateStat = {
+  job_id: string;
+  periodo: string;
+  fecha_corte: string;
+  fecha_cierre: string;
+  total_0_12m: number;
+  invalid_birthdate: number;
+  denom_meta: number;
+  numer_actualizados: number;
+  pct_actualizados: number;
+  missing: { dni: number; programas: number; direccion: number; eess: number };
+};
+
+export async function computePadronMetaUpdateStats(params: { ubigeo: number; periodo: string }) {
+  const ubigeo = Number(params.ubigeo);
+  if (!Number.isFinite(ubigeo) || ubigeo <= 0) return null;
+
+  const periodoDt = parseYmd(params.periodo);
+  if (!periodoDt) return null;
+  const cierre = endOfMonthUTC(periodoDt);
+  if (!cierre) return null;
+  const periodoISO = periodoDt.toISOString().slice(0, 10);
+  const cierreISO = cierre.toISOString().slice(0, 10);
+
+  const pool = getDbPool();
+  const [jobRows] = await pool.query(
+    `SELECT id, fecha_corte, periodo
+     FROM padron_dni_import_jobs
+     WHERE ubigeo = ? AND status = 'done' AND DATE(periodo) = DATE(?) AND DATE(fecha_corte) = DATE(periodo)
+     ORDER BY created_at DESC, id DESC
+     LIMIT 1`,
+    [ubigeo, periodoISO],
+  );
+  const job = (jobRows as any[])[0] as any | undefined;
+  if (!job?.id || !job?.fecha_corte) return null;
+
+  const [rows] = await pool.query(
+    `SELECT
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[1]')) AS doc_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[12]')) AS nac_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[39]')) AS prog_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[25]')) AS zona_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[14]')) AS eje_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[15]')) AS desc_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[16]')) AS ref_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[33]')) AS eess_raw
+     FROM padron_dni_raw
+     WHERE job_id = ? AND JSON_VALID(payload)`,
+    [String(job.id)],
+  );
+
+  let total = 0;
+  let invalidBirthdate = 0;
+  let denomMeta = 0;
+  let missDni = 0;
+  let missProg = 0;
+  let missDir = 0;
+  let missEess = 0;
+
+  for (const r of rows as any[]) {
+    const nacRaw = String(r?.nac_raw ?? "").trim();
+    const nac = parseYmd(nacRaw) ?? parseDmy(nacRaw);
+    if (!nac) {
+      invalidBirthdate += 1;
+      continue;
+    }
+
+    const ageDays = daysBetweenUTC(cierre, nac);
+    if (ageDays < 0 || ageDays > 364) continue;
+    total += 1;
+
+    const docKey = normalizeDocKey(r?.doc_raw);
+    const parts = docKey === "SIN DATO" ? [] : docKey.split(",").map((x) => x.trim()).filter(Boolean);
+    const missingDni = !parts.includes("1");
+
+    const progRaw = String(r?.prog_raw ?? "").trim();
+    const missingProg = isBlank(progRaw);
+
+    const zona = String(r?.zona_raw ?? "").trim().toUpperCase();
+    const eje = String(r?.eje_raw ?? "").trim();
+    const desc = String(r?.desc_raw ?? "").trim();
+    const ref = String(r?.ref_raw ?? "").trim();
+
+    let missingDir = true;
+    if (zona.includes("URB")) {
+      missingDir = isBlank(eje) || isBlank(desc) || isBlank(ref);
+    } else if (zona.includes("RUR")) {
+      missingDir = isBlank(desc) || isBlank(ref);
+    } else {
+      missingDir = true;
+    }
+
+    const eessRaw = String(r?.eess_raw ?? "").trim();
+    const missingEess = isBlank(eessRaw);
+
+    const missingAny = missingDni || missingProg || missingDir || missingEess;
+    if (missingAny) {
+      denomMeta += 1;
+      if (missingDni) missDni += 1;
+      if (missingProg) missProg += 1;
+      if (missingDir) missDir += 1;
+      if (missingEess) missEess += 1;
+    }
+  }
+
+  const numerActualizados = Math.max(0, total - denomMeta);
+  const pctActualizados = total > 0 ? Math.round((numerActualizados / total) * 1000) / 10 : 0;
+
+  return {
+    job_id: String(job.id),
+    periodo: periodoISO,
+    fecha_corte: String(job.fecha_corte),
+    fecha_cierre: cierreISO,
+    total_0_12m: total,
+    invalid_birthdate: invalidBirthdate,
+    denom_meta: denomMeta,
+    numer_actualizados: numerActualizados,
+    pct_actualizados: pctActualizados,
+    missing: { dni: missDni, programas: missProg, direccion: missDir, eess: missEess },
+  } satisfies PadronMetaUpdateStat;
+}
+
 export async function countAsignados(params: {
   etapa: string;
   ubigeo?: string;
