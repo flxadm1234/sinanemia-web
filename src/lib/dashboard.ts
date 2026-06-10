@@ -239,16 +239,24 @@ function endOfMonthUTC(periodo: Date) {
 }
 
 export type PadronMetaUpdateStat = {
-  job_id: string;
+  job_inicio_id: string;
+  job_ultimo_id: string;
   periodo: string;
-  fecha_corte: string;
+  fecha_corte_inicio: string;
+  fecha_corte_ultimo: string;
   fecha_cierre: string;
   total_0_12m: number;
   invalid_birthdate: number;
   denom_meta: number;
   numer_actualizados: number;
   pct_actualizados: number;
-  missing: { dni: number; programas: number; direccion: number; eess: number };
+  missing_inicio: { dni: number; programas: number; direccion: number; eess: number };
+  avance_por_variable: {
+    dni: { denom: number; numer: number; pct: number };
+    programas: { denom: number; numer: number; pct: number };
+    direccion: { denom: number; numer: number; pct: number };
+    eess: { denom: number; numer: number; pct: number };
+  };
 };
 
 export async function computePadronMetaUpdateStats(params: { ubigeo: number; periodo: string }) {
@@ -263,7 +271,7 @@ export async function computePadronMetaUpdateStats(params: { ubigeo: number; per
   const cierreISO = cierre.toISOString().slice(0, 10);
 
   const pool = getDbPool();
-  const [jobRows] = await pool.query(
+  const [jobInicioRows] = await pool.query(
     `SELECT id, fecha_corte, periodo
      FROM padron_dni_import_jobs
      WHERE ubigeo = ? AND status = 'done' AND DATE(periodo) = DATE(?) AND DATE(fecha_corte) = DATE(periodo)
@@ -271,11 +279,23 @@ export async function computePadronMetaUpdateStats(params: { ubigeo: number; per
      LIMIT 1`,
     [ubigeo, periodoISO],
   );
-  const job = (jobRows as any[])[0] as any | undefined;
-  if (!job?.id || !job?.fecha_corte) return null;
+  const jobInicio = (jobInicioRows as any[])[0] as any | undefined;
+  if (!jobInicio?.id || !jobInicio?.fecha_corte) return null;
 
-  const [rows] = await pool.query(
+  const [jobUltimoRows] = await pool.query(
+    `SELECT id, fecha_corte, periodo
+     FROM padron_dni_import_jobs
+     WHERE ubigeo = ? AND status = 'done' AND DATE(periodo) = DATE(?)
+     ORDER BY fecha_corte DESC, created_at DESC, id DESC
+     LIMIT 1`,
+    [ubigeo, periodoISO],
+  );
+  const jobUltimo = (jobUltimoRows as any[])[0] as any | undefined;
+  if (!jobUltimo?.id || !jobUltimo?.fecha_corte) return null;
+
+  const [rowsInicio] = await pool.query(
     `SELECT
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[2]')) AS codpad_raw,
       JSON_UNQUOTE(JSON_EXTRACT(payload, '$[1]')) AS doc_raw,
       JSON_UNQUOTE(JSON_EXTRACT(payload, '$[12]')) AS nac_raw,
       JSON_UNQUOTE(JSON_EXTRACT(payload, '$[39]')) AS prog_raw,
@@ -286,8 +306,13 @@ export async function computePadronMetaUpdateStats(params: { ubigeo: number; per
       JSON_UNQUOTE(JSON_EXTRACT(payload, '$[33]')) AS eess_raw
      FROM padron_dni_raw
      WHERE job_id = ? AND JSON_VALID(payload)`,
-    [String(job.id)],
+    [String(jobInicio.id)],
   );
+
+  const inicioByCodpad = new Map<
+    string,
+    { missDni: boolean; missProg: boolean; missDir: boolean; missEess: boolean }
+  >();
 
   let total = 0;
   let invalidBirthdate = 0;
@@ -297,7 +322,10 @@ export async function computePadronMetaUpdateStats(params: { ubigeo: number; per
   let missDir = 0;
   let missEess = 0;
 
-  for (const r of rows as any[]) {
+  for (const r of rowsInicio as any[]) {
+    const codpad = String(r?.codpad_raw ?? "").trim();
+    if (!codpad) continue;
+
     const nacRaw = String(r?.nac_raw ?? "").trim();
     const nac = parseYmd(nacRaw) ?? parseDmy(nacRaw);
     if (!nac) {
@@ -340,23 +368,123 @@ export async function computePadronMetaUpdateStats(params: { ubigeo: number; per
       if (missingProg) missProg += 1;
       if (missingDir) missDir += 1;
       if (missingEess) missEess += 1;
+      inicioByCodpad.set(codpad, {
+        missDni: missingDni,
+        missProg: missingProg,
+        missDir: missingDir,
+        missEess: missingEess,
+      });
     }
   }
 
-  const numerActualizados = Math.max(0, total - denomMeta);
-  const pctActualizados = total > 0 ? Math.round((numerActualizados / total) * 1000) / 10 : 0;
+  const [rowsUltimo] = await pool.query(
+    `SELECT
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[2]')) AS codpad_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[1]')) AS doc_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[39]')) AS prog_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[25]')) AS zona_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[14]')) AS eje_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[15]')) AS desc_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[16]')) AS ref_raw,
+      JSON_UNQUOTE(JSON_EXTRACT(payload, '$[33]')) AS eess_raw
+     FROM padron_dni_raw
+     WHERE job_id = ? AND JSON_VALID(payload)`,
+    [String(jobUltimo.id)],
+  );
+
+  const ultimoByCodpad = new Map<
+    string,
+    { missDni: boolean; missProg: boolean; missDir: boolean; missEess: boolean }
+  >();
+  for (const r of rowsUltimo as any[]) {
+    const codpad = String(r?.codpad_raw ?? "").trim();
+    if (!codpad) continue;
+
+    const docKey = normalizeDocKey(r?.doc_raw);
+    const parts = docKey === "SIN DATO" ? [] : docKey.split(",").map((x) => x.trim()).filter(Boolean);
+    const missingDni = !parts.includes("1");
+    const missingProg = isBlank(String(r?.prog_raw ?? "").trim());
+
+    const zona = String(r?.zona_raw ?? "").trim().toUpperCase();
+    const eje = String(r?.eje_raw ?? "").trim();
+    const desc = String(r?.desc_raw ?? "").trim();
+    const ref = String(r?.ref_raw ?? "").trim();
+    let missingDir = true;
+    if (zona.includes("URB")) {
+      missingDir = isBlank(eje) || isBlank(desc) || isBlank(ref);
+    } else if (zona.includes("RUR")) {
+      missingDir = isBlank(desc) || isBlank(ref);
+    } else {
+      missingDir = true;
+    }
+
+    const missingEess = isBlank(String(r?.eess_raw ?? "").trim());
+    ultimoByCodpad.set(codpad, {
+      missDni: missingDni,
+      missProg: missingProg,
+      missDir: missingDir,
+      missEess: missingEess,
+    });
+  }
+
+  let updatedTargets = 0;
+  let denomDni = 0;
+  let fixedDni = 0;
+  let denomProg = 0;
+  let fixedProg = 0;
+  let denomDir = 0;
+  let fixedDir = 0;
+  let denomEess = 0;
+  let fixedEess = 0;
+
+  for (const [codpad, miss0] of inicioByCodpad.entries()) {
+    const missNow = ultimoByCodpad.get(codpad) ?? miss0;
+
+    if (miss0.missDni) {
+      denomDni += 1;
+      if (!missNow.missDni) fixedDni += 1;
+    }
+    if (miss0.missProg) {
+      denomProg += 1;
+      if (!missNow.missProg) fixedProg += 1;
+    }
+    if (miss0.missDir) {
+      denomDir += 1;
+      if (!missNow.missDir) fixedDir += 1;
+    }
+    if (miss0.missEess) {
+      denomEess += 1;
+      if (!missNow.missEess) fixedEess += 1;
+    }
+
+    const stillMissing = missNow.missDni || missNow.missProg || missNow.missDir || missNow.missEess;
+    if (!stillMissing) updatedTargets += 1;
+  }
+
+  const numerActualizados = denomMeta > 0 ? updatedTargets : 0;
+  const pctActualizados = denomMeta > 0 ? Math.round((numerActualizados / denomMeta) * 1000) / 10 : 0;
+
+  const pctVar = (numer: number, denom: number) => (denom > 0 ? Math.round((numer / denom) * 1000) / 10 : 0);
 
   return {
-    job_id: String(job.id),
+    job_inicio_id: String(jobInicio.id),
+    job_ultimo_id: String(jobUltimo.id),
     periodo: periodoISO,
-    fecha_corte: String(job.fecha_corte),
+    fecha_corte_inicio: String(jobInicio.fecha_corte),
+    fecha_corte_ultimo: String(jobUltimo.fecha_corte),
     fecha_cierre: cierreISO,
     total_0_12m: total,
     invalid_birthdate: invalidBirthdate,
     denom_meta: denomMeta,
     numer_actualizados: numerActualizados,
     pct_actualizados: pctActualizados,
-    missing: { dni: missDni, programas: missProg, direccion: missDir, eess: missEess },
+    missing_inicio: { dni: missDni, programas: missProg, direccion: missDir, eess: missEess },
+    avance_por_variable: {
+      dni: { denom: denomDni, numer: fixedDni, pct: pctVar(fixedDni, denomDni) },
+      programas: { denom: denomProg, numer: fixedProg, pct: pctVar(fixedProg, denomProg) },
+      direccion: { denom: denomDir, numer: fixedDir, pct: pctVar(fixedDir, denomDir) },
+      eess: { denom: denomEess, numer: fixedEess, pct: pctVar(fixedEess, denomEess) },
+    },
   } satisfies PadronMetaUpdateStat;
 }
 

@@ -506,7 +506,8 @@ export default async function DashboardPage(props: {
                 <>
                   <div className="mt-2 text-xs text-zinc-600">
                     Periodo: <span className="font-semibold">{padronMetaStats.periodo}</span> · Corte (inicio):{" "}
-                    <span className="font-semibold">{padronMetaStats.fecha_corte}</span> · Cierre:{" "}
+                    <span className="font-semibold">{padronMetaStats.fecha_corte_inicio}</span> · Último corte:{" "}
+                    <span className="font-semibold">{padronMetaStats.fecha_corte_ultimo}</span> · Cierre:{" "}
                     <span className="font-semibold">{padronMetaStats.fecha_cierre}</span>
                   </div>
 
@@ -523,7 +524,7 @@ export default async function DashboardPage(props: {
                       ) : null}
                     </div>
                     <div className="rounded-xl bg-white ring-1 ring-black/5 p-3">
-                      <div className="text-xs text-zinc-600">Meta (con faltantes)</div>
+                      <div className="text-xs text-zinc-600">Meta (faltantes al inicio)</div>
                       <div className="mt-1 text-xl font-semibold text-zinc-900">
                         {padronMetaStats.denom_meta}
                       </div>
@@ -535,11 +536,37 @@ export default async function DashboardPage(props: {
                   </div>
 
                   <div className="mt-3 text-xs text-zinc-700">
-                    Faltantes: DNI{" "}
-                    <span className="font-semibold">{padronMetaStats.missing.dni}</span> · Programas{" "}
-                    <span className="font-semibold">{padronMetaStats.missing.programas}</span> · Dirección{" "}
-                    <span className="font-semibold">{padronMetaStats.missing.direccion}</span> · EESS{" "}
-                    <span className="font-semibold">{padronMetaStats.missing.eess}</span>
+                    Faltantes al inicio: DNI{" "}
+                    <span className="font-semibold">{padronMetaStats.missing_inicio.dni}</span> · Programas{" "}
+                    <span className="font-semibold">{padronMetaStats.missing_inicio.programas}</span> · Dirección{" "}
+                    <span className="font-semibold">{padronMetaStats.missing_inicio.direccion}</span> · EESS{" "}
+                    <span className="font-semibold">{padronMetaStats.missing_inicio.eess}</span>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {(
+                      [
+                        ["DNI", padronMetaStats.avance_por_variable.dni],
+                        ["Programas sociales", padronMetaStats.avance_por_variable.programas],
+                        ["Dirección", padronMetaStats.avance_por_variable.direccion],
+                        ["Último EESS", padronMetaStats.avance_por_variable.eess],
+                      ] as const
+                    ).map(([label, v]) => (
+                      <div key={label} className="rounded-xl bg-white ring-1 ring-black/5 p-3">
+                        <div className="flex items-center justify-between text-xs text-zinc-700">
+                          <div className="font-semibold text-zinc-900">{label}</div>
+                          <div>
+                            {v.numer}/{v.denom} · <span className="font-semibold">{v.pct}%</span>
+                          </div>
+                        </div>
+                        <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-zinc-100">
+                          <div
+                            className="h-2 rounded-full bg-emerald-500"
+                            style={{ width: `${Math.max(0, Math.min(100, v.pct))}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </>
               ) : (

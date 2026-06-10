@@ -33,6 +33,18 @@ function th(v: unknown) {
   return `<th style="background:#F8FAFC">${escapeHtml(v)}</th>`;
 }
 
+function thBg(v: unknown, bg: string) {
+  return `<th style="background:${bg}">${escapeHtml(v)}</th>`;
+}
+
+function tdBg(v: unknown, bg: string) {
+  return `<td style="background:${bg}">${escapeHtml(v)}</td>`;
+}
+
+function tdTextBg(v: unknown, bg: string) {
+  return `<td style="background:${bg};mso-number-format:'\\@'">${escapeHtml(v)}</td>`;
+}
+
 function parseYmd(v: unknown) {
   if (v instanceof Date) {
     const iso = v.toISOString().slice(0, 10);
@@ -134,45 +146,49 @@ export async function GET(request: Request) {
   const cierreISO = cierre.toISOString().slice(0, 10);
 
   const pool = getDbPool();
-  const [jobRows] = await pool.query(
-    `SELECT id, fecha_corte, headers_json
+  const [jobInicioRows] = await pool.query(
+    `SELECT id, fecha_corte
      FROM padron_dni_import_jobs
      WHERE ubigeo = ? AND status = 'done' AND DATE(periodo) = DATE(?) AND DATE(fecha_corte) = DATE(periodo)
      ORDER BY created_at DESC, id DESC
      LIMIT 1`,
     [ubigeo, periodoISO],
   );
-  const job = (jobRows as any[])[0] as any | undefined;
-  if (!job?.id || !job?.fecha_corte) return NextResponse.json({ error: "no_job" }, { status: 404 });
+  const jobInicio = (jobInicioRows as any[])[0] as any | undefined;
+  if (!jobInicio?.id || !jobInicio?.fecha_corte) return NextResponse.json({ error: "no_job" }, { status: 404 });
+
+  const [jobUltimoRows] = await pool.query(
+    `SELECT id, fecha_corte, headers_json
+     FROM padron_dni_import_jobs
+     WHERE ubigeo = ? AND status = 'done' AND DATE(periodo) = DATE(?)
+     ORDER BY fecha_corte DESC, created_at DESC, id DESC
+     LIMIT 1`,
+    [ubigeo, periodoISO],
+  );
+  const jobUltimo = (jobUltimoRows as any[])[0] as any | undefined;
+  if (!jobUltimo?.id || !jobUltimo?.fecha_corte) return NextResponse.json({ error: "no_job_last" }, { status: 404 });
 
   let headers: string[] = [];
   try {
-    headers = job.headers_json ? (JSON.parse(String(job.headers_json)) as string[]) : [];
+    headers = jobUltimo.headers_json ? (JSON.parse(String(jobUltimo.headers_json)) as string[]) : [];
   } catch {
     headers = [];
   }
 
-  const [rawRows] = await pool.query(
+  const [rawInicioRows] = await pool.query(
     `SELECT tipo, row_num, dni, payload
      FROM padron_dni_raw
      WHERE job_id = ? AND JSON_VALID(payload)
      ORDER BY tipo ASC, row_num ASC`,
-    [String(job.id)],
+    [String(jobInicio.id)],
   );
 
-  const out: Array<{
-    tipo: string;
-    row_num: number;
-    dni: string;
-    edad_dias: number;
-    falta_dni: boolean;
-    falta_programas: boolean;
-    falta_direccion: boolean;
-    falta_eess: boolean;
-    payload: any[];
-  }> = [];
+  const denomByCodpad = new Map<
+    string,
+    { edad_dias: number; missDni: boolean; missProg: boolean; missDir: boolean; missEess: boolean }
+  >();
 
-  for (const r of rawRows as any[]) {
+  for (const r of rawInicioRows as any[]) {
     let payload: any[] = [];
     try {
       payload = JSON.parse(String(r?.payload ?? "[]"));
@@ -181,12 +197,76 @@ export async function GET(request: Request) {
       continue;
     }
 
+    const codpad = String(payload[2] ?? "").trim();
+    if (!codpad) continue;
+
     const nacRaw = String(payload[12] ?? "").trim();
     const nac = parseYmd(nacRaw) ?? parseDmy(nacRaw);
     if (!nac) continue;
 
     const ageDays = daysBetweenUTC(cierre, nac);
     if (ageDays < 0 || ageDays > 364) continue;
+
+    const docKey = normalizeDocKey(payload[1]);
+    const parts = docKey === "SIN DATO" ? [] : docKey.split(",").map((x) => x.trim()).filter(Boolean);
+    const missDni = !parts.includes("1");
+    const missProg = isBlank(payload[39]);
+
+    const zona = String(payload[25] ?? "").trim().toUpperCase();
+    const eje = payload[14];
+    const desc = payload[15];
+    const ref = payload[16];
+    let missDir = true;
+    if (zona.includes("URB")) {
+      missDir = isBlank(eje) || isBlank(desc) || isBlank(ref);
+    } else if (zona.includes("RUR")) {
+      missDir = isBlank(desc) || isBlank(ref);
+    } else {
+      missDir = true;
+    }
+
+    const missEess = isBlank(payload[33]);
+    const missAny = missDni || missProg || missDir || missEess;
+    if (!missAny) continue;
+
+    denomByCodpad.set(codpad, { edad_dias: ageDays, missDni, missProg, missDir, missEess });
+  }
+
+  const [rawUltimoRows] = await pool.query(
+    `SELECT tipo, row_num, dni, payload
+     FROM padron_dni_raw
+     WHERE job_id = ? AND JSON_VALID(payload)
+     ORDER BY tipo ASC, row_num ASC`,
+    [String(jobUltimo.id)],
+  );
+
+  const out: Array<{
+    tipo: string;
+    row_num: number;
+    dni: string;
+    codpad: string;
+    edad_dias: number;
+    variables_faltantes: string;
+    falta_dni: boolean;
+    falta_programas: boolean;
+    falta_direccion: boolean;
+    falta_eess: boolean;
+    payload: any[];
+  }> = [];
+
+  for (const r of rawUltimoRows as any[]) {
+    let payload: any[] = [];
+    try {
+      payload = JSON.parse(String(r?.payload ?? "[]"));
+      if (!Array.isArray(payload)) payload = [];
+    } catch {
+      continue;
+    }
+
+    const codpad = String(payload[2] ?? "").trim();
+    if (!codpad) continue;
+    const denom0 = denomByCodpad.get(codpad);
+    if (!denom0) continue;
 
     const docKey = normalizeDocKey(payload[1]);
     const parts = docKey === "SIN DATO" ? [] : docKey.split(",").map((x) => x.trim()).filter(Boolean);
@@ -212,11 +292,19 @@ export async function GET(request: Request) {
     const faltaAny = faltaDni || faltaProgramas || faltaDireccion || faltaEess;
     if (!faltaAny) continue;
 
+    const vars: string[] = [];
+    if (faltaDni) vars.push("DNI");
+    if (faltaProgramas) vars.push("PROGRAMAS");
+    if (faltaDireccion) vars.push("DIRECCIÓN");
+    if (faltaEess) vars.push("EESS");
+
     out.push({
       tipo: String(r?.tipo ?? ""),
       row_num: Number(r?.row_num ?? 0),
       dni: String(r?.dni ?? ""),
-      edad_dias: ageDays,
+      codpad,
+      edad_dias: denom0.edad_dias,
+      variables_faltantes: vars.join(" | "),
       falta_dni: faltaDni,
       falta_programas: faltaProgramas,
       falta_direccion: faltaDireccion,
@@ -232,14 +320,18 @@ export async function GET(request: Request) {
     th{font-weight:700}
     .h1{font-size:14pt;font-weight:700}
     .meta td{border:none;padding:2px 0}
-    .tag-si{background:#EFF6FF}
   `;
+
+  const priBg = "#FEF3C7";
+  const prioritizedPayloadIdx = new Set([1, 14, 15, 16, 25, 33, 39]);
 
   const columns = [
     { label: "N°" },
     { label: "Archivo" },
     { label: "Key (CNV/DNI/CODPAD)" },
+    { label: "COD.PAD" },
     { label: "Edad (días) al cierre" },
+    { label: "Variables faltantes" },
     { label: "Falta DNI" },
     { label: "Falta Programas" },
     { label: "Falta Dirección" },
@@ -247,7 +339,19 @@ export async function GET(request: Request) {
     ...headers.map((h, idx) => ({ label: h || `COL_${idx + 1}`, idx })),
   ];
 
-  const thead = `<thead><tr>${columns.map((c) => th((c as any).label)).join("")}</tr></thead>`;
+  const thead = `<thead><tr>${columns
+    .map((c) => {
+      const label = (c as any).label;
+      const idx = (c as any).idx;
+      if (label === "Variables faltantes") return thBg(label, priBg);
+      if (label === "Falta DNI") return thBg(label, priBg);
+      if (label === "Falta Programas") return thBg(label, priBg);
+      if (label === "Falta Dirección") return thBg(label, priBg);
+      if (label === "Falta EESS") return thBg(label, priBg);
+      if (typeof idx === "number" && prioritizedPayloadIdx.has(idx)) return thBg(label, priBg);
+      return th(label);
+    })
+    .join("")}</tr></thead>`;
 
   const body = out
     .map((r, i) => {
@@ -255,16 +359,21 @@ export async function GET(request: Request) {
         td(i + 1),
         tdText(r.tipo),
         tdText(r.dni),
+        tdText(r.codpad),
         td(r.edad_dias),
-        td(r.falta_dni ? "SI" : "NO"),
-        td(r.falta_programas ? "SI" : "NO"),
-        td(r.falta_direccion ? "SI" : "NO"),
-        td(r.falta_eess ? "SI" : "NO"),
+        tdBg(r.variables_faltantes, priBg),
+        tdBg(r.falta_dni ? "SI" : "NO", priBg),
+        tdBg(r.falta_programas ? "SI" : "NO", priBg),
+        tdBg(r.falta_direccion ? "SI" : "NO", priBg),
+        tdBg(r.falta_eess ? "SI" : "NO", priBg),
       ];
       const payloadCells = headers.map((_, idx) => {
         const v = r.payload[idx] ?? "";
         const isText =
           idx === 2 || idx === 3 || idx === 4 || idx === 5 || idx === 45 || idx === 46 || idx === 54;
+        if (prioritizedPayloadIdx.has(idx)) {
+          return isText ? tdTextBg(v, priBg) : tdBg(v, priBg);
+        }
         return isText ? tdText(v) : td(v);
       });
       return `<tr>${[...fixed, ...payloadCells].join("")}</tr>`;
@@ -275,7 +384,12 @@ export async function GET(request: Request) {
     <table class="meta">
       <tr><td class="h1">Meta actualización del Padrón Nominal (0-12 meses)</td></tr>
       <tr><td>Ubigeo: <b>${escapeHtml(ubigeo)}</b> · Periodo: <b>${escapeHtml(periodoISO)}</b></td></tr>
-      <tr><td>Cierre (edad 0–364 días): <b>${escapeHtml(cierreISO)}</b> · Registros con faltantes: <b>${escapeHtml(out.length)}</b></td></tr>
+      <tr><td>Corte inicio: <b>${escapeHtml(String(jobInicio.fecha_corte).slice(0, 10))}</b> · Último corte: <b>${escapeHtml(
+        String(jobUltimo.fecha_corte).slice(0, 10),
+      )}</b></td></tr>
+      <tr><td>Cierre (edad 0–364 días): <b>${escapeHtml(cierreISO)}</b> · Registros con faltantes (pendientes): <b>${escapeHtml(
+        out.length,
+      )}</b></td></tr>
       <tr><td>&nbsp;</td></tr>
     </table>
   `;
@@ -306,4 +420,3 @@ export async function GET(request: Request) {
     },
   });
 }
-
