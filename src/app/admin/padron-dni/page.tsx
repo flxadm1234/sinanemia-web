@@ -33,7 +33,8 @@ export default async function PadronDniPage(props: {
   const pageNum = Number.isFinite(pageNumRaw) && pageNumRaw >= 1 ? Math.floor(pageNumRaw) : 1;
   const offset = (pageNum - 1) * pageSize;
 
-  const res = await listPadronDniJobs({ limit: pageSize, offset });
+  const ubigeoFilter = user.tipo === "SUPER ADMIN" ? null : user.ubigeo;
+  const res = await listPadronDniJobs({ limit: pageSize, offset, ubigeo: ubigeoFilter });
   const rows = res.rows;
   const total = res.total;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -80,7 +81,9 @@ export default async function PadronDniPage(props: {
             <thead className="bg-zinc-50 text-zinc-700">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Fecha de corte</th>
-                <th className="px-4 py-3 text-left font-semibold">Ubigeo</th>
+                {user.tipo === "SUPER ADMIN" ? (
+                  <th className="px-4 py-3 text-left font-semibold">Ubigeo</th>
+                ) : null}
                 <th className="px-4 py-3 text-left font-semibold">Estado</th>
                 <th className="px-4 py-3 text-right font-semibold">Cantidad</th>
                 <th className="px-4 py-3 text-left font-semibold">Descargar</th>
@@ -92,7 +95,9 @@ export default async function PadronDniPage(props: {
                 rows.map((r) => (
                   <tr key={r.id} className="text-zinc-900">
                     <td className="px-4 py-3">{fmtDate(r.fecha_corte)}</td>
-                    <td className="px-4 py-3">{r.ubigeo ?? "—"}</td>
+                    {user.tipo === "SUPER ADMIN" ? (
+                      <td className="px-4 py-3">{r.ubigeo ?? "—"}</td>
+                    ) : null}
                     <td className="px-4 py-3">
                       {r.status === "queued"
                         ? "En cola"
@@ -124,7 +129,7 @@ export default async function PadronDniPage(props: {
                 ))
               ) : (
                 <tr>
-                  <td className="px-4 py-6 text-zinc-500" colSpan={6}>
+                  <td className="px-4 py-6 text-zinc-500" colSpan={user.tipo === "SUPER ADMIN" ? 6 : 5}>
                     No hay registros.
                   </td>
                 </tr>
@@ -164,4 +169,3 @@ export default async function PadronDniPage(props: {
     </AppShell>
   );
 }
-

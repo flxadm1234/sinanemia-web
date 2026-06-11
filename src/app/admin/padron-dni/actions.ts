@@ -1,7 +1,7 @@
 "use server";
 
 import { requireSession } from "@/lib/auth";
-import { deletePadronDniJob, ensurePadronDniTables } from "@/lib/padronDniImport";
+import { deletePadronDniJob, ensurePadronDniTables, getPadronDniJob } from "@/lib/padronDniImport";
 import { redirect } from "next/navigation";
 
 export async function deletePadronDniJobAction(formData: FormData) {
@@ -15,10 +15,16 @@ export async function deletePadronDniJobAction(formData: FormData) {
 
   await ensurePadronDniTables();
   try {
+    const job = await getPadronDniJob(jobId);
+    if (!job) redirect("/admin/padron-dni?err=1");
+    if (user.tipo !== "SUPER ADMIN") {
+      const su = typeof user.ubigeo === "number" && Number.isFinite(user.ubigeo) ? user.ubigeo : null;
+      const ju = typeof job.ubigeo === "number" && Number.isFinite(job.ubigeo) ? job.ubigeo : null;
+      if (!su || !ju || su !== ju) redirect("/admin/padron-dni?err=1");
+    }
     await deletePadronDniJob(jobId);
     redirect("/admin/padron-dni?ok=1");
   } catch {
     redirect("/admin/padron-dni?err=1");
   }
 }
-

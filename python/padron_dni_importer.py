@@ -359,6 +359,7 @@ def run_import(
     transito_path: str,
     fecha_corte: date,
     update_padron: bool,
+    expected_ubigeo=None,
 ):
     load_dotenv(os.getenv("PADRON_DNI_DOTENV", ".env.local"), override=False)
     load_dotenv(override=False)
@@ -384,6 +385,9 @@ def run_import(
 
     if ub_a != ub_o or ub_a != ub_t:
         raise Exception(f"Los 3 archivos no tienen el mismo ubigeo. Activo={ub_a} Observado={ub_o} Transito={ub_t}")
+
+    if expected_ubigeo and int(expected_ubigeo) != int(ub_a):
+        raise Exception(f"El ubigeo del Excel ({ub_a}) no coincide con el ubigeo del usuario ({expected_ubigeo}).")
 
     if len(headers_o) != len(headers) or len(headers_t) != len(headers):
         raise Exception("Los 3 archivos no tienen la misma plantilla (número de columnas).")
@@ -609,6 +613,7 @@ def main():
     ap.add_argument("--transito", required=True)
     ap.add_argument("--fecha_corte", required=True)
     ap.add_argument("--update_padron", default="0")
+    ap.add_argument("--expected_ubigeo", default="")
     args = ap.parse_args()
 
     try:
@@ -618,7 +623,12 @@ def main():
 
     try:
         update_padron = str(args.update_padron or "0").strip() == "1"
-        run_import(args.job, args.activo, args.observado, args.transito, fecha, update_padron)
+        expected_ubigeo = None
+        try:
+            expected_ubigeo = int(str(args.expected_ubigeo or "").strip()) if str(args.expected_ubigeo or "").strip() else None
+        except Exception:
+            expected_ubigeo = None
+        run_import(args.job, args.activo, args.observado, args.transito, fecha, update_padron, expected_ubigeo)
     except Exception as e:
         try:
             load_dotenv(os.getenv("PADRON_DNI_DOTENV", ".env.local"), override=False)

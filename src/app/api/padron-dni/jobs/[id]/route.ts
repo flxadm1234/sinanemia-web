@@ -14,6 +14,10 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const { id } = await ctx.params;
   const job = await getPadronDniJob(String(id || "").trim());
   if (!job) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (session.tipo !== "SUPER ADMIN") {
+    const su = typeof session.ubigeo === "number" && Number.isFinite(session.ubigeo) ? session.ubigeo : null;
+    const ju = typeof job.ubigeo === "number" && Number.isFinite(job.ubigeo) ? job.ubigeo : null;
+    if (!su || !ju || su !== ju) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
   return NextResponse.json({ ok: true, job });
 }
-

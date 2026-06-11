@@ -83,16 +83,24 @@ export async function getPadronDniJob(id: string): Promise<PadronDniImportJob | 
   return ((rows as any[])[0] as PadronDniImportJob | undefined) ?? null;
 }
 
-export async function listPadronDniJobs(params: { limit: number; offset: number }) {
+export async function listPadronDniJobs(params: { limit: number; offset: number; ubigeo?: number | null }) {
   const pool = getDbPool();
-  const [countRows] = await pool.query("SELECT COUNT(*) AS total FROM padron_dni_import_jobs");
+  const ubigeoNum = typeof params.ubigeo === "number" && Number.isFinite(params.ubigeo) ? params.ubigeo : null;
+  const where = ubigeoNum ? "WHERE ubigeo = ?" : "";
+  const whereArgs: any[] = ubigeoNum ? [ubigeoNum] : [];
+
+  const [countRows] = await pool.query(
+    `SELECT COUNT(*) AS total FROM padron_dni_import_jobs ${where}`,
+    whereArgs,
+  );
   const total = Number((countRows as any[])[0]?.total ?? 0);
 
   const [rows] = await pool.query(
     `SELECT * FROM padron_dni_import_jobs
+     ${where}
      ORDER BY created_at DESC
      LIMIT ? OFFSET ?`,
-    [params.limit, params.offset],
+    [...whereArgs, params.limit, params.offset],
   );
   return { total, rows: rows as PadronDniImportJob[] };
 }

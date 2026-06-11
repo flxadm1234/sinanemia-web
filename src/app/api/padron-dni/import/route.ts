@@ -60,6 +60,7 @@ async function startPythonJob(params: {
   transitoPath: string;
   fechaCorteISO: string;
   updatePadron: boolean;
+  expectedUbigeo?: number | null;
 }) {
   const venvPython = path.join("python", ".venv", "bin", "python3");
   const pythonBin =
@@ -86,9 +87,12 @@ async function startPythonJob(params: {
   try {
     fsSync.writeSync(
       fd,
-      `[bootstrap] pythonBin=${pythonBin} script=${script} activo=${params.activoPath} observado=${params.observadoPath} transito=${params.transitoPath} fecha_corte=${params.fechaCorteISO} update_padron=${params.updatePadron ? 1 : 0}\n`,
+      `[bootstrap] pythonBin=${pythonBin} script=${script} activo=${params.activoPath} observado=${params.observadoPath} transito=${params.transitoPath} fecha_corte=${params.fechaCorteISO} update_padron=${params.updatePadron ? 1 : 0} expected_ubigeo=${params.expectedUbigeo ?? ""}\n`,
     );
   } catch {}
+
+  const expectedUbigeoNum =
+    typeof params.expectedUbigeo === "number" && Number.isFinite(params.expectedUbigeo) ? params.expectedUbigeo : null;
 
   const child = spawn(
     pythonBin,
@@ -106,6 +110,7 @@ async function startPythonJob(params: {
       params.fechaCorteISO,
       "--update_padron",
       params.updatePadron ? "1" : "0",
+      ...(expectedUbigeoNum ? ["--expected_ubigeo", String(expectedUbigeoNum)] : []),
     ],
     {
       detached: true,
@@ -163,6 +168,16 @@ export async function POST(request: Request) {
     if (updatePadron && modo !== "inicio")
       return NextResponse.json({ error: "La actualización de padrón nominal solo está disponible para Inicio de mes." }, { status: 400 });
 
+    const expectedUbigeo =
+      session.tipo === "SUPER ADMIN"
+        ? null
+        : typeof session.ubigeo === "number" && Number.isFinite(session.ubigeo)
+          ? session.ubigeo
+          : null;
+    if (session.tipo !== "SUPER ADMIN" && !expectedUbigeo) {
+      return NextResponse.json({ error: "No se pudo determinar el ubigeo del usuario." }, { status: 400 });
+    }
+
     const fActivo = formData.get("file_activo");
     const fObs = formData.get("file_activo_observado");
     const fTran = formData.get("file_transito");
@@ -210,7 +225,15 @@ export async function POST(request: Request) {
       ],
     );
 
-    await startPythonJob({ jobId, activoPath, observadoPath, transitoPath, fechaCorteISO: fechaISO, updatePadron });
+    await startPythonJob({
+      jobId,
+      activoPath,
+      observadoPath,
+      transitoPath,
+      fechaCorteISO: fechaISO,
+      updatePadron,
+      expectedUbigeo,
+    });
 
     return NextResponse.json({ ok: true, jobId });
   } catch (e) {
