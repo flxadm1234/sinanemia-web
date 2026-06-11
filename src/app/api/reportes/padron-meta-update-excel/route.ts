@@ -183,6 +183,10 @@ export async function GET(request: Request) {
     [String(jobInicio.id)],
   );
 
+  const inicioPayloadByCodpad = new Map<
+    string,
+    { tipo: string; row_num: number; dni: string; payload: any[] }
+  >();
   const denomByCodpad = new Map<
     string,
     { edad_dias: number; missDni: boolean; missProg: boolean; missDir: boolean; missEess: boolean }
@@ -229,6 +233,14 @@ export async function GET(request: Request) {
     const missAny = missDni || missProg || missDir || missEess;
     if (!missAny) continue;
 
+    if (!inicioPayloadByCodpad.has(codpad)) {
+      inicioPayloadByCodpad.set(codpad, {
+        tipo: String(r?.tipo ?? ""),
+        row_num: Number(r?.row_num ?? 0),
+        dni: String(r?.dni ?? ""),
+        payload,
+      });
+    }
     denomByCodpad.set(codpad, { edad_dias: ageDays, missDni, missProg, missDir, missEess });
   }
 
@@ -240,20 +252,7 @@ export async function GET(request: Request) {
     [String(jobUltimo.id)],
   );
 
-  const out: Array<{
-    tipo: string;
-    row_num: number;
-    dni: string;
-    codpad: string;
-    edad_dias: number;
-    variables_faltantes: string;
-    falta_dni: boolean;
-    falta_programas: boolean;
-    falta_direccion: boolean;
-    falta_eess: boolean;
-    payload: any[];
-  }> = [];
-
+  const ultimoByCodpad = new Map<string, { tipo: string; row_num: number; dni: string; payload: any[] }>();
   for (const r of rawUltimoRows as any[]) {
     let payload: any[] = [];
     try {
@@ -265,13 +264,44 @@ export async function GET(request: Request) {
 
     const codpad = String(payload[2] ?? "").trim();
     if (!codpad) continue;
-    const denom0 = denomByCodpad.get(codpad);
-    if (!denom0) continue;
+    if (!ultimoByCodpad.has(codpad)) {
+      ultimoByCodpad.set(codpad, {
+        tipo: String(r?.tipo ?? ""),
+        row_num: Number(r?.row_num ?? 0),
+        dni: String(r?.dni ?? ""),
+        payload,
+      });
+    }
+  }
+
+  const out: Array<{
+    tipo: string;
+    row_num: number;
+    dni: string;
+    codpad: string;
+    edad_dias: number;
+    estado: "COMPLETO" | "PENDIENTE";
+    variables_faltantes_inicio: string;
+    variables_faltantes: string;
+    falta_dni: boolean;
+    falta_programas: boolean;
+    falta_direccion: boolean;
+    falta_eess: boolean;
+    sin_ultimo_corte: boolean;
+    payload: any[];
+  }> = [];
+
+  for (const [codpad, denom0] of denomByCodpad.entries()) {
+    const ultimo = ultimoByCodpad.get(codpad);
+    const inicio = inicioPayloadByCodpad.get(codpad);
+    const row = ultimo ?? inicio;
+    if (!row) continue;
+
+    const payload = row.payload;
 
     const docKey = normalizeDocKey(payload[1]);
     const parts = docKey === "SIN DATO" ? [] : docKey.split(",").map((x) => x.trim()).filter(Boolean);
     const faltaDni = !parts.includes("1");
-
     const faltaProgramas = isBlank(payload[39]);
 
     const zona = String(payload[25] ?? "").trim().toUpperCase();
@@ -288,30 +318,43 @@ export async function GET(request: Request) {
     }
 
     const faltaEess = isBlank(payload[33]);
-
     const faltaAny = faltaDni || faltaProgramas || faltaDireccion || faltaEess;
-    if (!faltaAny) continue;
 
-    const vars: string[] = [];
-    if (faltaDni) vars.push("DNI");
-    if (faltaProgramas) vars.push("PROGRAMAS");
-    if (faltaDireccion) vars.push("DIRECCIÓN");
-    if (faltaEess) vars.push("EESS");
+    const varsNow: string[] = [];
+    if (faltaDni) varsNow.push("DNI");
+    if (faltaProgramas) varsNow.push("PROGRAMAS");
+    if (faltaDireccion) varsNow.push("DIRECCIÓN");
+    if (faltaEess) varsNow.push("EESS");
+
+    const varsInicio: string[] = [];
+    if (denom0.missDni) varsInicio.push("DNI");
+    if (denom0.missProg) varsInicio.push("PROGRAMAS");
+    if (denom0.missDir) varsInicio.push("DIRECCIÓN");
+    if (denom0.missEess) varsInicio.push("EESS");
 
     out.push({
-      tipo: String(r?.tipo ?? ""),
-      row_num: Number(r?.row_num ?? 0),
-      dni: String(r?.dni ?? ""),
+      tipo: row.tipo,
+      row_num: row.row_num,
+      dni: row.dni,
       codpad,
       edad_dias: denom0.edad_dias,
-      variables_faltantes: vars.join(" | "),
+      estado: faltaAny ? "PENDIENTE" : "COMPLETO",
+      variables_faltantes_inicio: varsInicio.join(" | ") || "-",
+      variables_faltantes: faltaAny ? varsNow.join(" | ") : "COMPLETO",
       falta_dni: faltaDni,
       falta_programas: faltaProgramas,
       falta_direccion: faltaDireccion,
       falta_eess: faltaEess,
+      sin_ultimo_corte: !ultimo,
       payload,
     });
   }
+
+  out.sort((a, b) => {
+    if (a.estado !== b.estado) return a.estado === "PENDIENTE" ? -1 : 1;
+    if (a.tipo !== b.tipo) return a.tipo.localeCompare(b.tipo);
+    return a.row_num - b.row_num;
+  });
 
   const css = `
     body{font-family:Calibri,Arial,sans-serif;font-size:11pt}
@@ -323,19 +366,24 @@ export async function GET(request: Request) {
   `;
 
   const priBg = "#FEF3C7";
+  const okBg = "#DCFCE7";
+  const warnBg = "#FEE2E2";
   const prioritizedPayloadIdx = new Set([1, 14, 15, 16, 25, 33, 39]);
 
   const columns = [
     { label: "N°" },
+    { label: "Estado" },
     { label: "Archivo" },
     { label: "Key (CNV/DNI/CODPAD)" },
     { label: "COD.PAD" },
     { label: "Edad (días) al cierre" },
+    { label: "Faltantes al inicio" },
     { label: "Variables faltantes" },
     { label: "Falta DNI" },
     { label: "Falta Programas" },
     { label: "Falta Dirección" },
     { label: "Falta EESS" },
+    { label: "Sin último corte" },
     ...headers.map((h, idx) => ({ label: h || `COL_${idx + 1}`, idx })),
   ];
 
@@ -343,7 +391,9 @@ export async function GET(request: Request) {
     .map((c) => {
       const label = (c as any).label;
       const idx = (c as any).idx;
+      if (label === "Estado") return thBg(label, "#E5E7EB");
       if (label === "Variables faltantes") return thBg(label, priBg);
+      if (label === "Faltantes al inicio") return thBg(label, priBg);
       if (label === "Falta DNI") return thBg(label, priBg);
       if (label === "Falta Programas") return thBg(label, priBg);
       if (label === "Falta Dirección") return thBg(label, priBg);
@@ -355,17 +405,21 @@ export async function GET(request: Request) {
 
   const body = out
     .map((r, i) => {
+      const estadoBg = r.estado === "COMPLETO" ? okBg : warnBg;
       const fixed = [
         td(i + 1),
+        tdBg(r.estado, estadoBg),
         tdText(r.tipo),
         tdText(r.dni),
         tdText(r.codpad),
         td(r.edad_dias),
+        tdBg(r.variables_faltantes_inicio, priBg),
         tdBg(r.variables_faltantes, priBg),
         tdBg(r.falta_dni ? "SI" : "NO", priBg),
         tdBg(r.falta_programas ? "SI" : "NO", priBg),
         tdBg(r.falta_direccion ? "SI" : "NO", priBg),
         tdBg(r.falta_eess ? "SI" : "NO", priBg),
+        td(r.sin_ultimo_corte ? "SI" : "NO"),
       ];
       const payloadCells = headers.map((_, idx) => {
         const v = r.payload[idx] ?? "";
@@ -387,9 +441,10 @@ export async function GET(request: Request) {
       <tr><td>Corte inicio: <b>${escapeHtml(String(jobInicio.fecha_corte).slice(0, 10))}</b> · Último corte: <b>${escapeHtml(
         String(jobUltimo.fecha_corte).slice(0, 10),
       )}</b></td></tr>
-      <tr><td>Cierre (edad 0–364 días): <b>${escapeHtml(cierreISO)}</b> · Registros con faltantes (pendientes): <b>${escapeHtml(
-        out.length,
-      )}</b></td></tr>
+      <tr><td>Cierre (edad 0–364 días): <b>${escapeHtml(cierreISO)}</b></td></tr>
+      <tr><td>Meta (denominador): <b>${escapeHtml(denomByCodpad.size)}</b> · Actualizados: <b>${escapeHtml(
+        out.filter((x) => x.estado === "COMPLETO").length,
+      )}</b> · Pendientes: <b>${escapeHtml(out.filter((x) => x.estado === "PENDIENTE").length)}</b></td></tr>
       <tr><td>&nbsp;</td></tr>
     </table>
   `;
