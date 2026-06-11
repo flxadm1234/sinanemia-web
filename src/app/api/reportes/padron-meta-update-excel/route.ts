@@ -280,14 +280,14 @@ export async function GET(request: Request) {
     dni: string;
     codpad: string;
     edad_dias: number;
-    estado: "COMPLETO" | "PENDIENTE";
+    estado: "COMPLETO" | "PENDIENTE" | "REUBICADO";
     variables_faltantes_inicio: string;
     variables_faltantes: string;
     falta_dni: boolean;
     falta_programas: boolean;
     falta_direccion: boolean;
     falta_eess: boolean;
-    sin_ultimo_corte: boolean;
+    reubicado: boolean;
     payload: any[];
   }> = [];
 
@@ -297,6 +297,7 @@ export async function GET(request: Request) {
     const row = ultimo ?? inicio;
     if (!row) continue;
 
+    const reubicado = !ultimo;
     const payload = row.payload;
 
     const docKey = normalizeDocKey(payload[1]);
@@ -338,20 +339,21 @@ export async function GET(request: Request) {
       dni: row.dni,
       codpad,
       edad_dias: denom0.edad_dias,
-      estado: faltaAny ? "PENDIENTE" : "COMPLETO",
+      estado: reubicado ? "REUBICADO" : faltaAny ? "PENDIENTE" : "COMPLETO",
       variables_faltantes_inicio: varsInicio.join(" | ") || "-",
-      variables_faltantes: faltaAny ? varsNow.join(" | ") : "COMPLETO",
+      variables_faltantes: reubicado ? "REUBICADO" : faltaAny ? varsNow.join(" | ") : "COMPLETO",
       falta_dni: faltaDni,
       falta_programas: faltaProgramas,
       falta_direccion: faltaDireccion,
       falta_eess: faltaEess,
-      sin_ultimo_corte: !ultimo,
+      reubicado,
       payload,
     });
   }
 
   out.sort((a, b) => {
-    if (a.estado !== b.estado) return a.estado === "PENDIENTE" ? -1 : 1;
+    const order: Record<string, number> = { PENDIENTE: 0, REUBICADO: 1, COMPLETO: 2 };
+    if (a.estado !== b.estado) return (order[a.estado] ?? 9) - (order[b.estado] ?? 9);
     if (a.tipo !== b.tipo) return a.tipo.localeCompare(b.tipo);
     return a.row_num - b.row_num;
   });
@@ -368,6 +370,7 @@ export async function GET(request: Request) {
   const priBg = "#FEF3C7";
   const okBg = "#DCFCE7";
   const warnBg = "#FEE2E2";
+  const reubBg = "#E5E7EB";
   const prioritizedPayloadIdx = new Set([1, 14, 15, 16, 25, 33, 39]);
 
   const columns = [
@@ -383,7 +386,7 @@ export async function GET(request: Request) {
     { label: "Falta Programas" },
     { label: "Falta Dirección" },
     { label: "Falta EESS" },
-    { label: "Sin último corte" },
+    { label: "Reubicado" },
     ...headers.map((h, idx) => ({ label: h || `COL_${idx + 1}`, idx })),
   ];
 
@@ -405,7 +408,7 @@ export async function GET(request: Request) {
 
   const body = out
     .map((r, i) => {
-      const estadoBg = r.estado === "COMPLETO" ? okBg : warnBg;
+      const estadoBg = r.estado === "COMPLETO" ? okBg : r.estado === "REUBICADO" ? reubBg : warnBg;
       const fixed = [
         td(i + 1),
         tdBg(r.estado, estadoBg),
@@ -419,7 +422,7 @@ export async function GET(request: Request) {
         tdBg(r.falta_programas ? "SI" : "NO", priBg),
         tdBg(r.falta_direccion ? "SI" : "NO", priBg),
         tdBg(r.falta_eess ? "SI" : "NO", priBg),
-        td(r.sin_ultimo_corte ? "SI" : "NO"),
+        td(r.reubicado ? "SI" : "NO"),
       ];
       const payloadCells = headers.map((_, idx) => {
         const v = r.payload[idx] ?? "";
@@ -442,9 +445,14 @@ export async function GET(request: Request) {
         String(jobUltimo.fecha_corte).slice(0, 10),
       )}</b></td></tr>
       <tr><td>Cierre (edad 0–364 días): <b>${escapeHtml(cierreISO)}</b></td></tr>
-      <tr><td>Meta (denominador): <b>${escapeHtml(denomByCodpad.size)}</b> · Actualizados: <b>${escapeHtml(
-        out.filter((x) => x.estado === "COMPLETO").length,
-      )}</b> · Pendientes: <b>${escapeHtml(out.filter((x) => x.estado === "PENDIENTE").length)}</b></td></tr>
+      <tr><td>Meta (denominador): <b>${escapeHtml(denomByCodpad.size)}</b> · Reubicados (se omiten): <b>${escapeHtml(
+        out.filter((x) => x.estado === "REUBICADO").length,
+      )}</b></td></tr>
+      <tr><td>Meta (cálculo): <b>${escapeHtml(
+        Math.max(0, denomByCodpad.size - out.filter((x) => x.estado === "REUBICADO").length),
+      )}</b> · Actualizados: <b>${escapeHtml(out.filter((x) => x.estado === "COMPLETO").length)}</b> · Pendientes: <b>${escapeHtml(
+        out.filter((x) => x.estado === "PENDIENTE").length,
+      )}</b></td></tr>
       <tr><td>&nbsp;</td></tr>
     </table>
   `;

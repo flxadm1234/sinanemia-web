@@ -529,9 +529,16 @@ export default async function DashboardPage(props: {
                         {padronMetaStats.denom_meta}
                       </div>
                       <div className="mt-1 text-[11px] text-zinc-500">
-                        Actualizados: {padronMetaStats.numer_actualizados} · Avance:{" "}
-                        <span className="font-semibold">{padronMetaStats.pct_actualizados}%</span>
+                        Cálculo: {padronMetaStats.numer_actualizados}/{padronMetaStats.denom_calculo} · Avance:{" "}
+                        <span className="font-semibold">{padronMetaStats.pct_actualizados}%</span> · Pendientes:{" "}
+                        <span className="font-semibold">{padronMetaStats.pendientes}</span>
                       </div>
+                      {padronMetaStats.reubicados ? (
+                        <div className="mt-1 text-[11px] text-zinc-500">
+                          Reubicados (se omiten del cálculo):{" "}
+                          <span className="font-semibold">{padronMetaStats.reubicados}</span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 

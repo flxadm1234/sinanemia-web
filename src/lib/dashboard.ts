@@ -248,7 +248,10 @@ export type PadronMetaUpdateStat = {
   total_0_12m: number;
   invalid_birthdate: number;
   denom_meta: number;
+  denom_calculo: number;
+  reubicados: number;
   numer_actualizados: number;
+  pendientes: number;
   pct_actualizados: number;
   missing_inicio: { dni: number; programas: number; direccion: number; eess: number };
   avance_por_variable: {
@@ -428,6 +431,7 @@ export async function computePadronMetaUpdateStats(params: { ubigeo: number; per
   }
 
   let updatedTargets = 0;
+  let reubicados = 0;
   let denomDni = 0;
   let fixedDni = 0;
   let denomProg = 0;
@@ -438,7 +442,11 @@ export async function computePadronMetaUpdateStats(params: { ubigeo: number; per
   let fixedEess = 0;
 
   for (const [codpad, miss0] of inicioByCodpad.entries()) {
-    const missNow = ultimoByCodpad.get(codpad) ?? miss0;
+    const missNow = ultimoByCodpad.get(codpad);
+    if (!missNow) {
+      reubicados += 1;
+      continue;
+    }
 
     if (miss0.missDni) {
       denomDni += 1;
@@ -461,8 +469,10 @@ export async function computePadronMetaUpdateStats(params: { ubigeo: number; per
     if (!stillMissing) updatedTargets += 1;
   }
 
-  const numerActualizados = denomMeta > 0 ? updatedTargets : 0;
-  const pctActualizados = denomMeta > 0 ? Math.round((numerActualizados / denomMeta) * 1000) / 10 : 0;
+  const denomCalculo = Math.max(0, denomMeta - reubicados);
+  const numerActualizados = denomCalculo > 0 ? updatedTargets : 0;
+  const pendientes = Math.max(0, denomCalculo - numerActualizados);
+  const pctActualizados = denomCalculo > 0 ? Math.round((numerActualizados / denomCalculo) * 1000) / 10 : 0;
 
   const pctVar = (numer: number, denom: number) => (denom > 0 ? Math.round((numer / denom) * 1000) / 10 : 0);
 
@@ -476,7 +486,10 @@ export async function computePadronMetaUpdateStats(params: { ubigeo: number; per
     total_0_12m: total,
     invalid_birthdate: invalidBirthdate,
     denom_meta: denomMeta,
+    denom_calculo: denomCalculo,
+    reubicados,
     numer_actualizados: numerActualizados,
+    pendientes,
     pct_actualizados: pctActualizados,
     missing_inicio: { dni: missDni, programas: missProg, direccion: missDir, eess: missEess },
     avance_por_variable: {
