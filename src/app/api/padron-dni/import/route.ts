@@ -211,13 +211,14 @@ export async function POST(request: Request) {
     const pool = getDbPool();
     await pool.query(
       `INSERT INTO padron_dni_import_jobs
-        (id, status, progress, total_rows, processed_rows, inserted_rows, update_padron, periodo, fecha_corte, file_activo_name, file_activo_observado_name, file_transito_name, requested_by)
-       VALUES (?, 'queued', 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, status, progress, total_rows, processed_rows, inserted_rows, update_padron, periodo, fecha_corte, ubigeo, file_activo_name, file_activo_observado_name, file_transito_name, requested_by)
+       VALUES (?, 'queued', 0, 0, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         jobId,
         updatePadron ? 1 : 0,
         periodo,
         fechaISO,
+        expectedUbigeo,
         path.basename(activoPath),
         path.basename(observadoPath),
         path.basename(transitoPath),

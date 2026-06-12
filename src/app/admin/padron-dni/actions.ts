@@ -24,7 +24,12 @@ export async function deletePadronDniJobAction(formData: FormData) {
     }
     await deletePadronDniJob(jobId);
     redirect("/admin/padron-dni?ok=1");
-  } catch {
+  } catch (e: any) {
+    const digest = String(e?.digest ?? "");
+    const msg0 = String(e?.message ?? e ?? "");
+    if (digest.includes("NEXT_REDIRECT") || msg0 === "NEXT_REDIRECT" || digest.includes("NEXT_NOT_FOUND")) {
+      throw e;
+    }
     redirect("/admin/padron-dni?err=1");
   }
 }
