@@ -133,11 +133,11 @@ export function VisitasExcelImportClient(props: {
         </div>
         <div className="flex-1">
           <label className="block text-sm font-medium text-zinc-900">
-            Archivo Excel (.xlsx/.xls)
+            Archivo Excel (.xlsx/.xls/.xlsm/.csv)
           </label>
           <input
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.xlsm,.csv"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             className="mt-1 block w-full text-sm text-zinc-700 file:mr-4 file:rounded-xl file:border-0 file:bg-zinc-900 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-zinc-800"
           />

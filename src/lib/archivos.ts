@@ -1,7 +1,7 @@
 import { getDbPool } from "@/lib/db";
+import { getUploadsDir } from "@/lib/uploads";
 import crypto from "crypto";
 import fs from "fs/promises";
-import os from "os";
 import path from "path";
 
 export type ArchivoUpload = {
@@ -18,7 +18,7 @@ export type ArchivoUpload = {
 };
 
 export function getArchivosUploadDir() {
-  return path.join(os.tmpdir(), "sinanemia_uploads", "archivos");
+  return getUploadsDir("archivos");
 }
 
 export async function ensureArchivosTables() {
@@ -132,4 +132,3 @@ export async function deleteArchivoUpload(params: { id: number }) {
 
   return { ok: true as const, deleted: true as const };
 }
-

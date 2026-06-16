@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ensureVisitasTables, getDefaultVisitasConfigId, getVisitasConfig } from "@/lib/visitasImport";
 import { getDbPool } from "@/lib/db";
+import { getUploadsDir } from "@/lib/uploads";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
-import os from "os";
 import { spawn } from "child_process";
 import * as XLSX from "xlsx";
 
@@ -14,13 +14,13 @@ export const runtime = "nodejs";
 
 async function writeUploadToDisk(file: File, jobId: string) {
   const buf = Buffer.from(await file.arrayBuffer());
-  const dir = path.join(os.tmpdir(), "sinanemia_uploads", "visitas");
+  const dir = getUploadsDir("visitas");
   await fs.mkdir(dir, { recursive: true });
   const ext = path.extname(file.name || "").toLowerCase();
-  if (ext !== ".xls" && ext !== ".xlsx") {
+  if (ext !== ".xls" && ext !== ".xlsx" && ext !== ".xlsm" && ext !== ".csv") {
     throw new Error("invalid_excel_extension");
   }
-  if (ext === ".xlsx") {
+  if (ext === ".xlsx" || ext === ".xlsm") {
     const filePath = path.join(dir, `${jobId}.xlsx`);
     await fs.writeFile(filePath, buf);
     return filePath;
@@ -45,7 +45,7 @@ async function startPythonJob(params: { jobId: string; filePath: string; configI
     ? String(process.env.VISITAS_IMPORT_SCRIPT)
     : path.join("python", "visitas_importer.py");
 
-  const logDir = path.join(os.tmpdir(), "sinanemia_uploads", "visitas_logs");
+  const logDir = getUploadsDir("visitas_logs");
   await fs.mkdir(logDir, { recursive: true });
   const logPath = path.join(logDir, `${params.jobId}.log`);
 
@@ -124,10 +124,13 @@ export async function POST(request: Request) {
     } catch (e: any) {
       const msg = String(e?.message ?? e);
       if (msg === "invalid_excel_extension") {
-        return NextResponse.json({ error: "Solo se permiten archivos .xlsx o .xls." }, { status: 400 });
+        return NextResponse.json({ error: "Solo se permiten archivos .xlsx, .xls, .xlsm o .csv." }, { status: 400 });
       }
       if (msg === "invalid_xls") {
-        return NextResponse.json({ error: "No se pudo leer el archivo .xls. Intenta guardarlo como .xlsx e inténtalo nuevamente." }, { status: 400 });
+        return NextResponse.json(
+          { error: "No se pudo leer el archivo. Intenta guardarlo como .xlsx e inténtalo nuevamente." },
+          { status: 400 },
+        );
       }
       return NextResponse.json({ error: "No se pudo procesar el Excel. Intenta guardarlo como .xlsx." }, { status: 400 });
     }

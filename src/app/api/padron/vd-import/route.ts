@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ensurePadronVdTables, getDefaultPadronVdConfigId, getPadronVdConfig } from "@/lib/padronVdImport";
 import { getDbPool } from "@/lib/db";
+import { getUploadsDir } from "@/lib/uploads";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
-import os from "os";
 import { spawn } from "child_process";
 import * as XLSX from "xlsx";
 
@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 
 async function writeUploadToDisk(file: File, jobId: string) {
   const buf = Buffer.from(await file.arrayBuffer());
-  const dir = path.join(os.tmpdir(), "sinanemia_uploads", "padron_vd");
+  const dir = getUploadsDir("padron_vd");
   await fs.mkdir(dir, { recursive: true });
   const ext = path.extname(file.name || "").toLowerCase();
   if (ext !== ".xls" && ext !== ".xlsx") {
@@ -46,7 +46,7 @@ async function startPythonJob(params: { jobId: string; filePath: string; configI
     ? String(process.env.PADRON_VD_IMPORT_SCRIPT)
     : path.join("python", "padron_vd_importer.py");
 
-  const logDir = path.join(os.tmpdir(), "sinanemia_uploads", "padron_vd_logs");
+  const logDir = getUploadsDir("padron_vd_logs");
   await fs.mkdir(logDir, { recursive: true });
   const logPath = path.join(logDir, `${params.jobId}.log`);
 

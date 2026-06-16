@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ensurePadronDniTables } from "@/lib/padronDniImport";
 import { getDbPool } from "@/lib/db";
+import { getUploadsDir } from "@/lib/uploads";
 import crypto from "crypto";
 import path from "path";
 import fs from "fs/promises";
 import fsSync from "fs";
-import os from "os";
 import { spawn } from "child_process";
 import * as XLSX from "xlsx";
 
@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 
 async function writeUploadToDisk(file: File, jobId: string, suffix: string) {
   const buf = Buffer.from(await file.arrayBuffer());
-  const dir = path.join(os.tmpdir(), "sinanemia_uploads", "padron_dni");
+  const dir = getUploadsDir("padron_dni");
   await fs.mkdir(dir, { recursive: true });
   const ext = path.extname(file.name || "").toLowerCase();
   if (ext !== ".xls" && ext !== ".xlsx") throw new Error("invalid_excel_extension");
@@ -70,7 +70,7 @@ async function startPythonJob(params: {
     ? String(process.env.PADRON_DNI_IMPORT_SCRIPT)
     : path.join("python", "padron_dni_importer.py");
 
-  const logDir = path.join(os.tmpdir(), "sinanemia_uploads", "padron_dni_logs");
+  const logDir = getUploadsDir("padron_dni_logs");
   await fs.mkdir(logDir, { recursive: true });
   const logPath = path.join(logDir, `${params.jobId}.log`);
 
