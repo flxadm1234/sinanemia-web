@@ -80,11 +80,17 @@ def build_query(tipo: str, etapas: list, ubigeos: list):
     elif len(ubigeos) > 1:
         vr_ubigeo_sql = f"AND vr0.ubigeo IN ({','.join(['%s'] * len(ubigeos))})"
 
+    where_pn2 = [w.replace("pn0.", "pn2.") for w in where]
+    values_pn2 = values[:]
+
     query_values = []
     query_values.extend(values)
     query_values.extend(etapas)
     if len(ubigeos) > 0:
         query_values.extend(ubigeos)
+    query_values.extend(values_pn2)
+
+    limit = 2000000
 
     sql = f"""
 WITH pdj AS (
@@ -121,264 +127,230 @@ pdrx AS (
       NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[46]'))), '') AS madre_apmat,
       NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[47]'))), '') AS madre_nombres,
       NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[48]'))), '') AS madre_celular,
-      NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[54]'))), '') AS padre_dni,
-      NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[55]'))), '') AS padre_appat,
-      NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[56]'))), '') AS padre_apmat,
-      NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[57]'))), '') AS padre_nombres,
-      r0.created_at,
+      NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[54]'))), '') AS jefe_dni,
+      NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[55]'))), '') AS jefe_appat,
+      NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[56]'))), '') AS jefe_apmat,
+      NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[57]'))), '') AS jefe_nombres,
       ROW_NUMBER() OVER (
-        PARTITION BY r0.job_id, COALESCE(NULLIF(TRIM(COALESCE(r0.dni,'')),''), r0.id)
-        ORDER BY r0.created_at DESC, r0.id DESC
-      ) AS rn
+        PARTITION BY
+          r0.job_id,
+          COALESCE(
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[3]'))), ''),
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[5]'))), ''),
+            NULLIF(TRIM(JSON_UNQUOTE(JSON_EXTRACT(r0.payload, '$[2]'))), ''),
+            NULLIF(TRIM(COALESCE(r0.dni,'')), '')
+          )
+        ORDER BY r0.id DESC
+      ) AS rn_key
     FROM padron_dni_raw r0
+    JOIN pdj ON pdj.job_id = r0.job_id
     WHERE JSON_VALID(r0.payload)
-  ) x
-  WHERE rn = 1
-),
-pdr_cnv AS (
-  SELECT *
-  FROM (
-    SELECT
-      pdrx.*,
-      ROW_NUMBER() OVER (
-        PARTITION BY pdrx.job_id, pdrx.cnv_key
-        ORDER BY pdrx.created_at DESC, pdrx.id DESC
-      ) AS rn_key
-    FROM pdrx
-    WHERE pdrx.cnv_key IS NOT NULL
-  ) x
+  ) y
   WHERE rn_key = 1
-),
-pdr_dni AS (
-  SELECT *
-  FROM (
-    SELECT
-      pdrx.*,
-      ROW_NUMBER() OVER (
-        PARTITION BY pdrx.job_id, pdrx.dni_key
-        ORDER BY pdrx.created_at DESC, pdrx.id DESC
-      ) AS rn_key
-    FROM pdrx
-    WHERE pdrx.dni_key IS NOT NULL
-  ) x
-  WHERE rn_key = 1
-),
-pdr_cod AS (
-  SELECT *
-  FROM (
-    SELECT
-      pdrx.*,
-      ROW_NUMBER() OVER (
-        PARTITION BY pdrx.job_id, pdrx.codpad_key
-        ORDER BY pdrx.created_at DESC, pdrx.id DESC
-      ) AS rn_key
-    FROM pdrx
-    WHERE pdrx.codpad_key IS NOT NULL
-  ) x
-  WHERE rn_key = 1
-),
-pn0 AS (
-  SELECT
-    pn.idpn,
-    pn.tipo,
-    pn.rango,
-    pn.ccpp,
-    pn.zona,
-    pn.mz,
-    pn.direccion,
-    pn.referencia,
-    pn.codeess,
-    pn.tipodoc,
-    pn.dni,
-    pn.nombres,
-    pn.fecha_nac,
-    pn.dnimadre,
-    pn.appatmadre,
-    pn.apmatmadre,
-    pn.nombresmadre,
-    pn.dni_padre,
-    pn.nombre_padre,
-    pn.idocurrencia,
-    pn.idocurrencia2,
-    pn.nuevadireccion,
-    pn.nuevareferencia,
-    pn.observacion,
-    pn.obspadron,
-    pn.actorsocial,
-    pn.responsable,
-    pn.telefono,
-    pn.telefonopn,
-    pn.adulto,
-    pn.cantidada,
-    pn.etapa,
-    pn.estadovd,
-    pn.fechacita,
-    pn.nrovd,
-    pn.eess_ua,
-    pn.departamento,
-    pn.provincia,
-    pn.distrito,
-    pn.codqr,
-    pn.modovd,
-    pn.tipovd,
-    pn.lat,
-    pn.lon,
-    pn.lat2,
-    pn.long2,
-    pn.lat3,
-    pn.long3,
-    pn.fechamodificacion,
-    pn.fechamodificacion2,
-    pn.tamisaje,
-    pn.hb,
-    pn.anemia,
-    pn.hierro,
-    pn.tsf,
-    pn.rsf,
-    pn.visitadops,
-    pn.sesiondem,
-    pn.tieneps,
-    pn.observacion2,
-    pn.fechatamisaje,
-    pn.tiposeguro,
-    pn.tipodocum,
-    pn.usuario,
-    pn.ubigeo,
-    pn.fecha_inicio_vd,
-    pn.fecha_fin_vd,
-    pn.estadosvd,
-    pn.estadosvd2,
-    pn.estadosvd3,
-    pn.primera_vd,
-    pn.segunda_vd,
-    pn.tercera_vd,
-    pn.tam_fecha_atencion,
-    pn.tam_hemoglobina,
-    pn.tam_peso,
-    pn.tam_talla,
-    pn.tam_cie_10,
-    pn.tam_resultado,
-    pn.hemoglobina1,
-    pn.fecha_atencion1,
-    pn.hemoglobina2,
-    pn.fecha_atencion2,
-    pn.hemoglobina3,
-    pn.fecha_atencion3,
-    pn.resultado,
-    pn.avance,
-    pn.fotos,
-    pn.programacion1,
-    pn.padronnominal,
-    pn.iddistrito,
-    pn.discapacidad,
-    pn.titular_linea,
-    pn.codigov,
-    pn.img_carnet,
-    pn.estado_verificacion,
-    pn.estado,
-    pn.estado_verificado,
-    pn.celularseapp,
-    pn.tipodispositivo,
-    pn.estadointervencion,
-    pn.asignacion,
-    pn.estadoseguro,
-    pn.fecha_act_seguro,
-    pn.nombre_comercial,
-    pn.hbregistro,
-    pn.ccred,
-    ROW_NUMBER() OVER (
-      PARTITION BY pn.ubigeo, pn.etapa, pn.idpn
-      ORDER BY pn.fechamodificacion DESC, pn.idpn DESC
-    ) AS rn_pn
-  FROM padronnominal pn
-  WHERE {" AND ".join(where)}
-),
-vr0 AS (
-  SELECT vr.ubigeo, vr.etapa, vr.dni, vr.tamisaje, vr.hb, vr.anemia, vr.hierro, vr.tsf, vr.rsf, vr.visitadops, vr.sesiondem, vr.tieneps,
-         vr.fecha_atencion1, vr.hemoglobina1, vr.fecha_atencion2, vr.hemoglobina2, vr.fecha_atencion3, vr.hemoglobina3,
-         vr.tiposeguro, vr.tipodocum, vr.estadoseguro, vr.fecha_act_seguro, vr.titular_linea, vr.celularseapp,
-         vr.tam_fecha_atencion, vr.tam_hemoglobina, vr.tam_peso, vr.tam_talla, vr.tam_cie_10, vr.tam_resultado,
-         ROW_NUMBER() OVER (
-           PARTITION BY vr.ubigeo, vr.etapa, TRIM(vr.dni)
-           ORDER BY vr.idverificacion DESC
-         ) AS rn_ver
-  FROM verificacion vr
-  WHERE vr.etapa IN ({','.join(['%s'] * len(etapas))})
-  {vr_ubigeo_sql}
-),
-pn AS (
-  SELECT
-    pn0.*,
-    COALESCE(NULLIF(UPPER(TRIM(pn0.nombres)),'NULL'), pdr_cnv.nino_nombres, pdr_dni.nino_nombres, pdr_cod.nino_nombres, pn0.nombres) AS nombres_final,
-    COALESCE(NULLIF(UPPER(TRIM(pn0.appatmadre)),'NULL'), pdr_cnv.madre_appat, pdr_dni.madre_appat, pdr_cod.madre_appat, pn0.appatmadre) AS appatmadre_final,
-    COALESCE(NULLIF(UPPER(TRIM(pn0.apmatmadre)),'NULL'), pdr_cnv.madre_apmat, pdr_dni.madre_apmat, pdr_cod.madre_apmat, pn0.apmatmadre) AS apmatmadre_final,
-    COALESCE(NULLIF(UPPER(TRIM(pn0.nombresmadre)),'NULL'), pdr_cnv.madre_nombres, pdr_dni.madre_nombres, pdr_cod.madre_nombres, pn0.nombresmadre) AS nombresmadre_final,
-    COALESCE(NULLIF(UPPER(TRIM(pn0.telefonopn)),'NULL'), pdr_cnv.madre_celular, pdr_dni.madre_celular, pdr_cod.madre_celular, pn0.telefonopn) AS telefonopn_final,
-    COALESCE(NULLIF(UPPER(TRIM(pn0.dni_padre)),'NULL'), pdr_cnv.padre_dni, pdr_dni.padre_dni, pdr_cod.padre_dni, pn0.dni_padre) AS dni_padre_final,
-    TRIM(CONCAT_WS(' ', pdr_cnv.padre_appat, pdr_cnv.padre_apmat, pdr_cnv.padre_nombres)) AS padre_nombre_cnv,
-    TRIM(CONCAT_WS(' ', pdr_dni.padre_appat, pdr_dni.padre_apmat, pdr_dni.padre_nombres)) AS padre_nombre_dni,
-    TRIM(CONCAT_WS(' ', pdr_cod.padre_appat, pdr_cod.padre_apmat, pdr_cod.padre_nombres)) AS padre_nombre_cod
-  FROM pn0
-  LEFT JOIN pdj ON pdj.ubigeo = pn0.ubigeo AND pdj.periodo = pn0.etapa
-  LEFT JOIN pdr_cnv ON pdr_cnv.job_id = pdj.job_id AND pdr_cnv.cnv_key = TRIM(pn0.dni)
-  LEFT JOIN pdr_dni ON pdr_dni.job_id = pdj.job_id AND pdr_dni.dni_key = TRIM(pn0.dni)
-  LEFT JOIN pdr_cod ON pdr_cod.job_id = pdj.job_id AND pdr_cod.codpad_key = TRIM(pn0.dni)
-  WHERE pn0.rn_pn = 1
-),
-p_actor AS (
-  SELECT dni, nombrecompleto, apellidos
-  FROM (
-    SELECT TRIM(p.dni) AS dni, p.nombrecompleto, p.apellidos,
-           ROW_NUMBER() OVER (PARTITION BY TRIM(p.dni) ORDER BY p.idpersona DESC) AS rn_persona
-    FROM persona p
-    WHERE TRIM(COALESCE(p.dni,'')) <> ''
-  ) x
-  WHERE rn_persona = 1
-),
-p_resp AS (
-  SELECT dni, nombrecompleto, apellidos
-  FROM (
-    SELECT TRIM(p.dni) AS dni, p.nombrecompleto, p.apellidos,
-           ROW_NUMBER() OVER (PARTITION BY TRIM(p.dni) ORDER BY p.idpersona DESC) AS rn_persona
-    FROM persona p
-    WHERE TRIM(COALESCE(p.dni,'')) <> ''
-  ) x
-  WHERE rn_persona = 1
 )
 SELECT
-  pn.idpn, pn.tipo, pn.rango, pn.ccpp, pn.zona, pn.mz, pn.direccion, pn.referencia, pn.codeess, pn.tipodoc, pn.dni,
-  pn.nombres_final AS nombres,
+  pn.idpn, pn.tipo, pn.rango, pn.ccpp, pn.zona, pn.mz, pn.direccion, pn.referencia, pn.codeess, pn.tipodoc,
+  pn.dni,
+  COALESCE(
+    NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.nombres,''))), 'NULL'), ''),
+    NULLIF(TRIM(CONCAT_WS(' ', pdr_cnv.nino_appat, pdr_cnv.nino_apmat, pdr_cnv.nino_nombres)), ''),
+    NULLIF(TRIM(CONCAT_WS(' ', pdr_dni.nino_appat, pdr_dni.nino_apmat, pdr_dni.nino_nombres)), ''),
+    NULLIF(TRIM(CONCAT_WS(' ', pdr_cod.nino_appat, pdr_cod.nino_apmat, pdr_cod.nino_nombres)), '')
+  ) AS nombres,
   pn.fecha_nac,
-  pn.dnimadre,
-  pn.appatmadre_final AS appatmadre,
-  pn.apmatmadre_final AS apmatmadre,
-  pn.nombresmadre_final AS nombresmadre,
-  pn.dni_padre_final AS dni_padre,
-  COALESCE(NULLIF(UPPER(TRIM(pn.nombre_padre)),'NULL'), NULLIF(pn.padre_nombre_cnv,''), NULLIF(pn.padre_nombre_dni,''), NULLIF(pn.padre_nombre_cod,''), pn.nombre_padre) AS nombre_padre,
-  pn.idocurrencia, pn.idocurrencia2, pn.nuevadireccion, pn.nuevareferencia, pn.observacion, pn.obspadron,
-  pn.actorsocial, pn.responsable, pn.telefono, pn.telefonopn_final AS telefonopn, pn.adulto, pn.cantidada, pn.etapa, pn.estadovd, pn.fechacita, pn.nrovd,
-  pn.eess_ua, pn.departamento, pn.provincia, pn.distrito, pn.codqr, pn.modovd, pn.tipovd, pn.lat, pn.lon, pn.lat2, pn.long2, pn.lat3, pn.long3,
+  COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.dnimadre,''))), 'NULL'), ''), pdr_cnv.madre_dni, pdr_dni.madre_dni, pdr_cod.madre_dni) AS dnimadre,
+  COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.appatmadre,''))), 'NULL'), ''), pdr_cnv.madre_appat, pdr_dni.madre_appat, pdr_cod.madre_appat) AS appatmadre,
+  COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.apmatmadre,''))), 'NULL'), ''), pdr_cnv.madre_apmat, pdr_dni.madre_apmat, pdr_cod.madre_apmat) AS apmatmadre,
+  COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.nombresmadre,''))), 'NULL'), ''), pdr_cnv.madre_nombres, pdr_dni.madre_nombres, pdr_cod.madre_nombres) AS nombresmadre,
+  COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.dni_padre,''))), 'NULL'), ''), pdr_cnv.jefe_dni, pdr_dni.jefe_dni, pdr_cod.jefe_dni) AS dni_padre,
+  COALESCE(
+    NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.nombre_padre,''))), 'NULL'), ''),
+    NULLIF(TRIM(CONCAT_WS(' ', pdr_cnv.jefe_appat, pdr_cnv.jefe_apmat, pdr_cnv.jefe_nombres)), ''),
+    NULLIF(TRIM(CONCAT_WS(' ', pdr_dni.jefe_appat, pdr_dni.jefe_apmat, pdr_dni.jefe_nombres)), ''),
+    NULLIF(TRIM(CONCAT_WS(' ', pdr_cod.jefe_appat, pdr_cod.jefe_apmat, pdr_cod.jefe_nombres)), '')
+  ) AS nombre_padre,
+  pn.idocurrencia, pn.idocurrencia2,
+  pn.nuevadireccion, pn.nuevareferencia,
+  pn.observacion, pn.obspadron,
+  pn.actorsocial, pn.responsable,
+  pn.telefono,
+  COALESCE(NULLIF(NULLIF(UPPER(TRIM(COALESCE(pn.telefonopn,''))), 'NULL'), ''), pdr_cnv.madre_celular, pdr_dni.madre_celular, pdr_cod.madre_celular) AS telefonopn,
+  pn.adulto, pn.cantidada,
+  pn.etapa, pn.estadovd, pn.fechacita, pn.nrovd,
+  pn.eess_ua, pn.departamento, pn.provincia, pn.distrito,
+  pn.codqr, pn.modovd, pn.tipovd,
+  pn.lat, pn.lon, pn.lat2, pn.long2, pn.lat3, pn.long3,
   pn.fechamodificacion, pn.fechamodificacion2,
-  vr0.tamisaje, vr0.hb, vr0.anemia, vr0.hierro, vr0.tsf, vr0.rsf, vr0.visitadops, vr0.sesiondem, vr0.tieneps,
-  pn.observacion2, pn.fechatamisaje, vr0.tiposeguro, vr0.tipodocum, pn.usuario, pn.ubigeo, pn.fecha_inicio_vd, pn.fecha_fin_vd,
-  pn.estadosvd, pn.estadosvd2, pn.estadosvd3, pn.primera_vd, pn.segunda_vd, pn.tercera_vd,
-  vr0.tam_fecha_atencion, vr0.tam_hemoglobina, vr0.tam_peso, vr0.tam_talla, vr0.tam_cie_10, vr0.tam_resultado,
-  vr0.hemoglobina1, vr0.fecha_atencion1, vr0.hemoglobina2, vr0.fecha_atencion2, vr0.hemoglobina3, vr0.fecha_atencion3,
-  pn.resultado, pn.avance, pn.fotos, pn.programacion1, pn.padronnominal, pn.iddistrito, pn.discapacidad, vr0.titular_linea, pn.codigov, pn.img_carnet,
-  pn.estado_verificacion, pn.estado, pn.estado_verificado, vr0.celularseapp, pn.tipodispositivo, pn.estadointervencion, pn.asignacion, vr0.estadoseguro, vr0.fecha_act_seguro,
-  pn.nombre_comercial, pn.hbregistro, pn.ccred,
-  p_actor.nombrecompleto AS actor_nombre,
-  p_resp.nombrecompleto AS responsable_nombre,
+  pn.tamisaje, pn.hb, pn.anemia, pn.hierro, pn.tsf, pn.rsf,
+  pn.visitadops, pn.sesiondem, pn.tieneps,
+  pn.observacion2, pn.fechatamisaje,
+  pn.tiposeguro, pn.tipodocum, pn.usuario,
+  pn.ubigeo,
+  pn.fecha_inicio_vd, pn.fecha_fin_vd,
+  vr.estadosvd, vr.estadosvd2, vr.estadosvd3,
+  vr.primera_vd, vr.segunda_vd, vr.tercera_vd,
+  tam.fecha_atencion AS tam_fecha_atencion,
+  tam.hemoglobina AS tam_hemoglobina,
+  tam.peso AS tam_peso,
+  tam.talla AS tam_talla,
+  tam.cie_10 AS tam_cie_10,
+  tam.resultado AS tam_resultado,
+  tam.hemoglobina1, tam.fecha_atencion1,
+  tam.hemoglobina2, tam.fecha_atencion2,
+  tam.hemoglobina3, tam.fecha_atencion3,
+  pn.resultado, pn.avance,
+  pn.fotos, pn.programacion1, pn.padronnominal,
+  pn.iddistrito, pn.discapacidad, pn.titular_linea, pn.codigov,
+  pn.img_carnet, pn.estado_verificacion, pn.estado, pn.estado_verificado,
+  pn.celularseapp, pn.tipodispositivo, pn.estadointervencion, pn.asignacion,
+  pn.estadoseguro, pn.fecha_act_seguro, pn.nombre_comercial, pn.hbregistro, pn.ccred,
+  TRIM(CONCAT(COALESCE(p_actor.nombrecompleto,''),' ',COALESCE(p_actor.apellidos,''))) AS actor_nombre,
+  TRIM(CONCAT(COALESCE(p_resp.nombrecompleto,''),' ',COALESCE(p_resp.apellidos,''))) AS responsable_nombre,
   o1.descripcion AS ocurrencia_desc,
   o2.descripcion AS ocurrencia2_desc
-FROM pn
-LEFT JOIN vr0 ON vr0.rn_ver = 1 AND vr0.etapa = pn.etapa AND TRIM(vr0.dni) = TRIM(pn.dni)
-LEFT JOIN p_actor ON p_actor.dni = TRIM(pn.actorsocial)
-LEFT JOIN p_resp ON p_resp.dni = TRIM(pn.responsable)
+FROM (
+  SELECT
+    pn0.*,
+    ROW_NUMBER() OVER (
+      PARTITION BY pn0.ubigeo, pn0.etapa, TRIM(pn0.dni)
+      ORDER BY pn0.idpn DESC
+    ) AS rn_pn
+  FROM padronnominal pn0
+  WHERE {" AND ".join(where)}
+) pn
+LEFT JOIN pdj ON pdj.ubigeo = pn.ubigeo AND pdj.periodo = DATE(pn.etapa)
+LEFT JOIN pdrx pdr_cnv ON pdr_cnv.job_id = pdj.job_id AND pdr_cnv.cnv_key = TRIM(pn.dni)
+LEFT JOIN pdrx pdr_dni ON pdr_dni.job_id = pdj.job_id AND pdr_dni.dni_key = TRIM(pn.dni)
+LEFT JOIN pdrx pdr_cod ON pdr_cod.job_id = pdj.job_id AND pdr_cod.codpad_key = TRIM(pn.dni)
+LEFT JOIN (
+  SELECT
+    ubigeo,
+    etapa_mes,
+    TRIM(dni_nino) AS dni_nino,
+    MAX(CASE WHEN rn = 1 THEN fecha_intervencion END) AS primera_vd,
+    MAX(CASE WHEN rn = 2 THEN fecha_intervencion END) AS segunda_vd,
+    MAX(CASE WHEN rn = 3 THEN fecha_intervencion END) AS tercera_vd,
+    MAX(CASE WHEN rn = 1 THEN etapa_text END) AS estadosvd,
+    MAX(CASE WHEN rn = 2 THEN etapa_text END) AS estadosvd2,
+    MAX(CASE WHEN rn = 3 THEN etapa_text END) AS estadosvd3
+  FROM (
+    SELECT
+      y.ubigeo,
+      y.etapa_mes,
+      y.dni_nino,
+      y.fecha_intervencion,
+      y.etapa_text,
+      ROW_NUMBER() OVER (
+        PARTITION BY y.ubigeo, y.etapa_mes, y.dni_nino
+        ORDER BY y.fecha_intervencion ASC
+      ) AS rn
+    FROM (
+      SELECT
+        d.ubigeo,
+        d.etapa_mes,
+        d.dni_nino,
+        d.fecha_intervencion,
+        d.etapa_text
+      FROM (
+        SELECT
+          vr0.ubigeo,
+          vr0.etapa_mes,
+          TRIM(vr0.dni_nino) AS dni_nino,
+          DATE(vr0.fecha_intervencion) AS fecha_intervencion,
+          vr0.etapa_text,
+          ROW_NUMBER() OVER (
+            PARTITION BY vr0.ubigeo, vr0.etapa_mes, TRIM(vr0.dni_nino), DATE(vr0.fecha_intervencion)
+            ORDER BY
+              CASE
+                WHEN LOWER(COALESCE(vr0.etapa_text,'')) LIKE 'visita%' THEN 3
+                WHEN LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%no encontrado%' THEN 2
+                WHEN LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%rechaz%' THEN 1
+                ELSE 0
+              END DESC,
+              vr0.fecha_intervencion ASC
+          ) AS rn_day
+        FROM visitas_raw vr0
+        WHERE vr0.etapa_mes IN ({','.join(['%s'] * len(etapas))})
+          {vr_ubigeo_sql}
+          AND vr0.fecha_intervencion IS NOT NULL
+          AND (
+            LOWER(COALESCE(vr0.etapa_text,'')) LIKE 'visita%'
+            OR LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%no encontrado%'
+            OR LOWER(COALESCE(vr0.etapa_text,'')) LIKE '%rechaz%'
+          )
+      ) d
+      WHERE d.rn_day = 1
+    ) y
+  ) x
+  WHERE rn <= 3
+  GROUP BY ubigeo, etapa_mes, TRIM(dni_nino)
+) vr ON vr.ubigeo = pn.ubigeo AND vr.etapa_mes = pn.etapa AND vr.dni_nino = TRIM(pn.dni)
+LEFT JOIN (
+  SELECT
+    dni,
+    MAX(CASE WHEN rn = 1 THEN fecha_atencion END) AS fecha_atencion,
+    MAX(CASE WHEN rn = 1 THEN hemoglobina END) AS hemoglobina,
+    MAX(CASE WHEN rn = 1 THEN peso END) AS peso,
+    MAX(CASE WHEN rn = 1 THEN talla END) AS talla,
+    MAX(CASE WHEN rn = 1 THEN cie_10 END) AS cie_10,
+    MAX(CASE WHEN rn = 1 THEN resultado END) AS resultado,
+    MAX(CASE WHEN rn = 1 THEN hemoglobina END) AS hemoglobina1,
+    MAX(CASE WHEN rn = 1 THEN fecha_atencion END) AS fecha_atencion1,
+    MAX(CASE WHEN rn = 2 THEN hemoglobina END) AS hemoglobina2,
+    MAX(CASE WHEN rn = 2 THEN fecha_atencion END) AS fecha_atencion2,
+    MAX(CASE WHEN rn = 3 THEN hemoglobina END) AS hemoglobina3,
+    MAX(CASE WHEN rn = 3 THEN fecha_atencion END) AS fecha_atencion3
+  FROM (
+    SELECT
+      TRIM(rt.dni) AS dni,
+      DATE(rt.fecha_atencion) AS fecha_atencion,
+      rt.hemoglobina,
+      rt.peso,
+      rt.talla,
+      rt.cie_10,
+      rt.resultado,
+      ROW_NUMBER() OVER (
+        PARTITION BY TRIM(rt.dni)
+        ORDER BY rt.fecha_atencion DESC, rt.id DESC
+      ) AS rn
+    FROM registro_tamizaje rt
+    JOIN (
+      SELECT DISTINCT TRIM(pn2.dni) AS dni
+      FROM padronnominal pn2
+      WHERE {" AND ".join(where_pn2)}
+    ) dnis ON dnis.dni = TRIM(rt.dni)
+    WHERE rt.fecha_atencion IS NOT NULL
+  ) t
+  WHERE rn <= 3
+  GROUP BY dni
+) tam ON tam.dni = TRIM(pn.dni)
+LEFT JOIN (
+  SELECT dni, nombrecompleto, apellidos
+  FROM (
+    SELECT TRIM(p.dni) AS dni, p.nombrecompleto, p.apellidos,
+           ROW_NUMBER() OVER (PARTITION BY TRIM(p.dni) ORDER BY p.idpersona DESC) AS rn_persona
+    FROM persona p
+    WHERE TRIM(COALESCE(p.dni,'')) <> ''
+  ) x
+  WHERE rn_persona = 1
+) p_actor ON p_actor.dni = TRIM(pn.actorsocial)
+LEFT JOIN (
+  SELECT dni, nombrecompleto, apellidos
+  FROM (
+    SELECT TRIM(p.dni) AS dni, p.nombrecompleto, p.apellidos,
+           ROW_NUMBER() OVER (PARTITION BY TRIM(p.dni) ORDER BY p.idpersona DESC) AS rn_persona
+    FROM persona p
+    WHERE TRIM(COALESCE(p.dni,'')) <> ''
+  ) x
+  WHERE rn_persona = 1
+) p_resp ON p_resp.dni = TRIM(pn.responsable)
 LEFT JOIN ocurrencias o1 ON o1.idocurrencias = pn.idocurrencia
 LEFT JOIN ocurrencias o2 ON o2.idocurrencias = pn.idocurrencia2
+WHERE pn.rn_pn = 1
 ORDER BY pn.ubigeo ASC, pn.etapa DESC, pn.idpn ASC
+LIMIT {limit}
 """
+
     return sql, query_values
 
 
