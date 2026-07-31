@@ -80,15 +80,11 @@ def build_query(tipo: str, etapas: list, ubigeos: list):
     elif len(ubigeos) > 1:
         vr_ubigeo_sql = f"AND vr0.ubigeo IN ({','.join(['%s'] * len(ubigeos))})"
 
-    where_pn2 = [w.replace("pn0.", "pn2.") for w in where]
-    values_pn2 = values[:]
-
     query_values = []
     query_values.extend(values)
     query_values.extend(etapas)
     if len(ubigeos) > 0:
         query_values.extend(ubigeos)
-    query_values.extend(values_pn2)
 
     sql = f"""
 WITH pdj AS (
