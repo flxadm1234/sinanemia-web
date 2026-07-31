@@ -23,6 +23,9 @@ export function PadronExcelReportClient(props: {
   const [selectedUbigeos, setSelectedUbigeos] = useState<number[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<number | null>(null);
+  const [jobMsg, setJobMsg] = useState<string>("");
+  const [jobPct, setJobPct] = useState<number>(0);
 
   const byEtapa = useMemo(() => {
     const map = new Map<string, MesOption>();
@@ -48,6 +51,9 @@ export function PadronExcelReportClient(props: {
 
   const download = async () => {
     setError(null);
+    setJobId(null);
+    setJobMsg("");
+    setJobPct(0);
     const etapas = selectedEtapas
       .map((e) => String(e).trim())
       .filter((e) => /^\d{4}-\d{2}-\d{2}$/.test(e));
@@ -57,13 +63,53 @@ export function PadronExcelReportClient(props: {
     }
     setPending(true);
     try {
-      const url = new URL("/api/reportes/padron-excel", window.location.origin);
-      url.searchParams.set("tipo", tipo);
-      url.searchParams.set("etapas", etapas.join(","));
+      const payload: any = { tipo, etapas };
       if (role === "SUPER ADMIN" && selectedUbigeos.length) {
-        url.searchParams.set("ubigeos", selectedUbigeos.slice().sort((a, b) => a - b).join(","));
+        payload.ubigeos = selectedUbigeos.slice().sort((a, b) => a - b);
       }
-      window.location.href = url.toString();
+
+      const res = await fetch("/api/reportes/padron-excel-async/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(String(data?.error || "No se pudo iniciar la descarga"));
+      const id = Number(data?.jobId ?? 0);
+      if (!Number.isFinite(id) || id <= 0) throw new Error("No se pudo iniciar la descarga");
+      setJobId(id);
+      setJobMsg("Generando Excel...");
+      setJobPct(1);
+
+      const start = Date.now();
+      let tries = 0;
+      while (true) {
+        tries += 1;
+        const st = await fetch(`/api/reportes/padron-excel-async/jobs/${id}`, { cache: "no-store" });
+        const js = await st.json();
+        if (!st.ok) throw new Error(String(js?.error || "No se pudo obtener el estado del reporte"));
+        const status = String(js?.status || "");
+        const progress = Number(js?.progress ?? 0);
+        const message = String(js?.message ?? "");
+        setJobPct(Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0);
+        setJobMsg(message || (status === "done" ? "Listo" : "Procesando..."));
+
+        if (status === "done" && js?.ready) {
+          const url = new URL(`/api/reportes/padron-excel-async/jobs/${id}/download`, window.location.origin);
+          window.location.href = url.toString();
+          break;
+        }
+        if (status === "failed") {
+          throw new Error(message || "No se pudo generar el reporte");
+        }
+        if (Date.now() - start > 15 * 60 * 1000) {
+          throw new Error("La generación está demorando demasiado. Inténtalo nuevamente.");
+        }
+        if (tries > 600) {
+          throw new Error("La generación está demorando demasiado. Inténtalo nuevamente.");
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
     } finally {
       setTimeout(() => setPending(false), 800);
     }
@@ -196,6 +242,19 @@ export function PadronExcelReportClient(props: {
             {pending ? "Generando..." : "Descargar Excel"}
           </button>
         </div>
+
+        {pending && (jobId || jobMsg) ? (
+          <div className="mt-4 rounded-2xl border border-zinc-200 bg-zinc-50 px-4 py-4">
+            <div className="text-sm font-semibold text-zinc-900">Generación en curso</div>
+            <div className="mt-1 text-sm text-zinc-700">
+              {jobMsg || "Procesando..."}
+              {jobId ? <span className="ml-2 text-xs text-zinc-500">(Job #{jobId})</span> : null}
+            </div>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-zinc-200">
+              <div className="h-full bg-blue-700" style={{ width: `${Math.max(1, Math.min(100, jobPct))}%` }} />
+            </div>
+          </div>
+        ) : null}
 
         {error ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
