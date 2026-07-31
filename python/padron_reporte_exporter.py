@@ -383,11 +383,6 @@ LEFT JOIN ocurrencias o1 ON o1.idocurrencias = pn.idocurrencia
 LEFT JOIN ocurrencias o2 ON o2.idocurrencias = pn.idocurrencia2
 ORDER BY pn.ubigeo ASC, pn.etapa DESC, pn.idpn ASC
 """
-    if len(etapas) > 0:
-        query_values.extend(etapas)
-    if vr_ubigeo_sql:
-        query_values.extend(ubigeos)
-
     return sql, query_values
 
 
@@ -478,4 +473,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
