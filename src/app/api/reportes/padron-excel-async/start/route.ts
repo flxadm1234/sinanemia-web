@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import { ensureReportExportJobsTable, createReportExportJob } from "@/lib/reportExportJobs";
+import {
+  ensureReportExportJobsTable,
+  createReportExportJob,
+  getReportExportJobById,
+  markReportExportJobFailed,
+  markReportExportJobRunning,
+} from "@/lib/reportExportJobs";
 import { getUploadsDir } from "@/lib/uploads";
 import fs from "fs/promises";
 import path from "path";
@@ -31,6 +37,13 @@ async function startPythonJob(params: { jobId: number; args: string[]; logPath: 
     ? String(process.env.PADRON_REPORTE_EXPORT_SCRIPT)
     : path.join("python", "padron_reporte_exporter.py");
 
+  const logStream = await fs.open(params.logPath, "a");
+  const writeLog = async (line: string) => {
+    try {
+      await logStream.appendFile(`[${new Date().toISOString()}] ${line}\n`);
+    } catch {}
+  };
+
   const child = spawn(pythonBin, [script, ...params.args], {
     cwd: process.cwd(),
     env: {
@@ -40,7 +53,19 @@ async function startPythonJob(params: { jobId: number; args: string[]; logPath: 
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  const logStream = await fs.open(params.logPath, "a");
+  child.on("error", async (e) => {
+    await writeLog(`spawn error: ${String((e as any)?.message ?? e)}`);
+    try {
+      const job = await getReportExportJobById(params.jobId);
+      if (job && job.status !== "done" && job.status !== "failed") {
+        await markReportExportJobFailed({
+          id: params.jobId,
+          message: `No se pudo iniciar el proceso: ${String((e as any)?.message ?? e)}`,
+        });
+      }
+    } catch {}
+  });
+
   child.stdout?.on("data", async (d) => {
     try {
       await logStream.appendFile(d);
@@ -51,7 +76,16 @@ async function startPythonJob(params: { jobId: number; args: string[]; logPath: 
       await logStream.appendFile(d);
     } catch {}
   });
-  child.on("close", async () => {
+  child.on("close", async (code) => {
+    try {
+      const job = await getReportExportJobById(params.jobId);
+      if (job && job.status !== "done" && job.status !== "failed") {
+        await markReportExportJobFailed({
+          id: params.jobId,
+          message: `El proceso terminó inesperadamente (code=${code ?? "null"}). Revisa el log del job.`,
+        });
+      }
+    } catch {}
     try {
       await logStream.close();
     } catch {}
@@ -102,6 +136,8 @@ export async function POST(req: Request) {
     const logPath = path.join(logsDir, `padron-excel-${jobId}.log`);
     const outPath = path.join(reportsDir, `padron-excel-${jobId}.xlsx`);
 
+    await markReportExportJobRunning({ id: jobId, message: "Iniciando proceso de exportación..." });
+
     await startPythonJob({
       jobId,
       logPath,
@@ -113,4 +149,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No se pudo iniciar la generación." }, { status: 400 });
   }
 }
-
