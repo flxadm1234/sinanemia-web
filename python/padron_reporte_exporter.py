@@ -3,10 +3,14 @@ import json
 import os
 import sys
 from datetime import datetime
+from typing import Any
 
 import mysql.connector
 from dotenv import load_dotenv
 from openpyxl import Workbook
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 
 def log_line(msg: str):
@@ -354,6 +358,227 @@ LIMIT {limit}
     return sql, query_values
 
 
+def label_for_col(name: str) -> str:
+    n = (name or "").strip()
+    m = {
+        "idpn": "ID PN",
+        "ubigeo": "Ubigeo",
+        "etapa": "Etapa",
+        "dni": "DNI",
+        "fecha_nac": "F. Nac.",
+        "dnimadre": "DNI Madre",
+        "appatmadre": "Ap. Pat Madre",
+        "apmatmadre": "Ap. Mat Madre",
+        "nombresmadre": "Nombres Madre",
+        "telefonopn": "Teléfono",
+        "dni_padre": "DNI Padre",
+        "nombre_padre": "Nombre Padre",
+        "departamento": "Departamento",
+        "provincia": "Provincia",
+        "distrito": "Distrito",
+        "iddistrito": "ID Distrito",
+        "nuevadireccion": "Nueva dirección",
+        "nuevareferencia": "Nueva referencia",
+        "actorsocial": "Actor social (DNI)",
+        "actor_nombre": "Actor social (Nombre)",
+        "responsable": "Responsable (DNI)",
+        "responsable_nombre": "Responsable (Nombre)",
+        "idocurrencia": "ID Ocurrencia",
+        "ocurrencia_desc": "Ocurrencia",
+        "idocurrencia2": "ID Ocurrencia 2",
+        "ocurrencia2_desc": "Ocurrencia 2",
+        "estadovd": "Estado VD",
+        "estadosvd": "EstadosVD",
+        "estadosvd2": "EstadosVD2",
+        "estadosvd3": "EstadosVD3",
+        "nrovd": "Nro VD",
+        "modovd": "Modo VD",
+        "fechacita": "Fecha cita",
+        "fecha_inicio_vd": "F. inicio VD",
+        "fecha_fin_vd": "F. fin VD",
+        "primera_vd": "1ra VD",
+        "segunda_vd": "2da VD",
+        "tercera_vd": "3ra VD",
+        "programacion1": "Programación 1",
+        "fechamodificacion": "F. modif.",
+        "fechamodificacion2": "F. modif. 2",
+        "estadointervencion": "Estado intervención",
+        "tam_fecha_atencion": "F. atención (últ.)",
+        "tam_hemoglobina": "Hemoglobina (últ.)",
+        "tam_peso": "Peso (últ.)",
+        "tam_talla": "Talla (últ.)",
+        "tam_cie_10": "CIE10 (últ.)",
+        "tam_resultado": "Resultado (últ.)",
+        "hbregistro": "HB registro",
+        "ccred": "CCRED",
+        "estado_verificacion": "Estado verificación",
+        "estado_verificado": "Estado verificado",
+        "img_carnet": "Img carnet",
+        "padronnominal": "Padrón nominal",
+        "codigov": "Código V",
+    }
+    if n in m:
+        return m[n]
+    return n.replace("_", " ").strip().title()
+
+
+def section_for_col(name: str) -> str:
+    n = (name or "").strip()
+    if n in (
+        "idpn",
+        "ubigeo",
+        "etapa",
+        "tipo",
+        "rango",
+        "tipodoc",
+        "tipodocum",
+        "dni",
+        "nombres",
+        "fecha_nac",
+    ):
+        return "Menor"
+    if n in (
+        "dnimadre",
+        "appatmadre",
+        "apmatmadre",
+        "nombresmadre",
+        "telefonopn",
+        "telefono",
+        "titular_linea",
+        "celularseapp",
+        "tiposeguro",
+        "estadoseguro",
+        "fecha_act_seguro",
+    ):
+        return "Madre"
+    if n in ("dni_padre", "nombre_padre"):
+        return "Padre"
+    if n in (
+        "departamento",
+        "provincia",
+        "distrito",
+        "iddistrito",
+        "ccpp",
+        "zona",
+        "mz",
+        "direccion",
+        "referencia",
+        "nuevadireccion",
+        "nuevareferencia",
+        "lat",
+        "lon",
+        "lat2",
+        "long2",
+        "lat3",
+        "long3",
+        "eess_ua",
+        "codeess",
+        "nombre_comercial",
+        "codqr",
+        "codigov",
+    ):
+        return "Ubicación"
+    if n in (
+        "actorsocial",
+        "actor_nombre",
+        "responsable",
+        "responsable_nombre",
+        "usuario",
+        "asignacion",
+    ):
+        return "Asignación"
+    if n in ("idocurrencia", "ocurrencia_desc", "idocurrencia2", "ocurrencia2_desc"):
+        return "Ocurrencias"
+    if n in (
+        "estadovd",
+        "estadosvd",
+        "estadosvd2",
+        "estadosvd3",
+        "nrovd",
+        "modovd",
+        "fechacita",
+        "fecha_inicio_vd",
+        "fecha_fin_vd",
+        "primera_vd",
+        "segunda_vd",
+        "tercera_vd",
+        "programacion1",
+        "fechamodificacion",
+        "fechamodificacion2",
+        "estadointervencion",
+    ):
+        return "VD / Estados"
+    return "Tamizaje / Otros"
+
+
+def section_color(label: str) -> str:
+    c = {
+        "Menor": "E0F2FE",
+        "Madre": "ECFDF5",
+        "Padre": "FEF3C7",
+        "Ubicación": "F3E8FF",
+        "Asignación": "FFE4E6",
+        "Ocurrencias": "E5E7EB",
+        "VD / Estados": "DBEAFE",
+        "Tamizaje / Otros": "FEE2E2",
+    }
+    return c.get(label, "E5E7EB")
+
+
+def fmt_dmy(v: Any) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        d = v.date()
+    else:
+        d = v
+    try:
+        y = int(getattr(d, "year", 0))
+        m = int(getattr(d, "month", 0))
+        dd = int(getattr(d, "day", 0))
+        if y and m and dd:
+            return f"{dd:02d}/{m:02d}/{y:04d}"
+    except Exception:
+        pass
+    s = str(v).strip()
+    if not s:
+        return ""
+    m = None
+    try:
+        m = datetime.fromisoformat(s.replace("Z", "")).date()
+    except Exception:
+        pass
+    if m:
+        return f"{m.day:02d}/{m.month:02d}/{m.year:04d}"
+    return s
+
+
+def fmt_dmy_hm(v: Any) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, datetime):
+        return v.strftime("%d/%m/%Y %H:%M")
+    s = str(v).strip()
+    if not s:
+        return ""
+    return s
+
+
+def make_cell(ws, value: Any, font: Font = None, fill: PatternFill = None, align: Alignment = None, border: Border = None, number_format: str = None):
+    c = WriteOnlyCell(ws, value=value)
+    if font:
+        c.font = font
+    if fill:
+        c.fill = fill
+    if align:
+        c.alignment = align
+    if border:
+        c.border = border
+    if number_format:
+        c.number_format = number_format
+    return c
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--job_id", required=True, type=int)
@@ -397,16 +622,138 @@ def main():
         wb = Workbook(write_only=True)
         ws = wb.create_sheet("Padron")
 
-        headers = [d[0] for d in (cur_stream.description or [])]
-        ws.append(headers)
+        thin = Side(style="thin", color="D1D5DB")
+        border_thin = Border(left=thin, right=thin, top=thin, bottom=thin)
+        font_meta_k = Font(bold=True)
+        font_group = Font(bold=True, color="111827")
+        font_header = Font(bold=True, color="FFFFFF")
+        align_left = Alignment(horizontal="left", vertical="top", wrap_text=False)
+        align_center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        fill_header = PatternFill("solid", fgColor="111827")
 
-        written = 0
+        tipo_label = "Niños" if tipo == "1" else "Gestantes"
+        generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ubigeos_label = ",".join([str(x) for x in ubigeos]) if ubigeos else "TODOS"
+        etapas_label = ",".join(etapas)
+
+        row_idx = 0
+        ws.append(
+            [
+                make_cell(ws, "Reporte:", font=font_meta_k, align=align_left),
+                make_cell(ws, "Padrón nominal", align=align_left),
+            ]
+        )
+        row_idx += 1
+        ws.append([make_cell(ws, "Generado:", font=font_meta_k, align=align_left), make_cell(ws, generated_at, align=align_left)])
+        row_idx += 1
+        ws.append([make_cell(ws, "Tipo:", font=font_meta_k, align=align_left), make_cell(ws, f"{tipo_label} (tipovd={tipo})", align=align_left)])
+        row_idx += 1
+        ws.append([make_cell(ws, "Ubigeo:", font=font_meta_k, align=align_left), make_cell(ws, ubigeos_label, align=align_left)])
+        row_idx += 1
+        ws.append([make_cell(ws, "Etapas:", font=font_meta_k, align=align_left), make_cell(ws, etapas_label, align=align_left)])
+        row_idx += 1
+        ws.append([])
+        row_idx += 1
+
+        col_names = [d[0] for d in (cur_stream.description or [])]
+        name_to_idx = {n: i for i, n in enumerate(col_names)}
+
+        out_names = ["__n__"] + col_names
+        out_labels = ["N°"] + [label_for_col(n) for n in col_names]
+        out_sections = ["Menor"] + [section_for_col(n) for n in col_names]
+
+        group_row_num = row_idx + 1
+        group_cells = []
+        spans = []
+        span_start = 1
+        span_label = out_sections[0]
+        for i, s in enumerate(out_sections, start=1):
+            if i == 1:
+                span_start = 1
+                span_label = s
+            if s != span_label:
+                spans.append((span_start, i - 1, span_label))
+                span_start = i
+                span_label = s
+        spans.append((span_start, len(out_sections), span_label))
+
+        span_starts = {a: lab for a, _b, lab in spans}
+
+        for i, s in enumerate(out_sections, start=1):
+            if i in span_starts:
+                fill_group = PatternFill("solid", fgColor=section_color(s))
+                group_cells.append(make_cell(ws, s, font=font_group, fill=fill_group, align=align_center, border=border_thin))
+            else:
+                fill_group = PatternFill("solid", fgColor=section_color(s))
+                group_cells.append(make_cell(ws, "", font=font_group, fill=fill_group, align=align_center, border=border_thin))
+        ws.append(group_cells)
+        row_idx += 1
+
+        for a, b, _lab in spans:
+            if b > a:
+                ws.merge_cells(start_row=group_row_num, start_column=a, end_row=group_row_num, end_column=b)
+
+        header_row_num = row_idx + 1
+        ws.append(
+            [
+                make_cell(ws, lab, font=font_header, fill=fill_header, align=align_left, border=border_thin)
+                for lab in out_labels
+            ]
+        )
+        row_idx += 1
+        ws.freeze_panes = f"A{header_row_num + 1}"
+
+        text_cols = {
+            "ubigeo",
+            "dni",
+            "dnimadre",
+            "dni_padre",
+            "telefono",
+            "telefonopn",
+            "celularseapp",
+            "codqr",
+            "codigov",
+            "actorsocial",
+            "responsable",
+            "tipodocum",
+        }
+        date_cols = {
+            "etapa",
+            "fecha_nac",
+            "fechacita",
+            "fecha_inicio_vd",
+            "fecha_fin_vd",
+            "primera_vd",
+            "segunda_vd",
+            "tercera_vd",
+            "programacion1",
+            "fechatamisaje",
+            "tam_fecha_atencion",
+            "fecha_atencion1",
+            "fecha_atencion2",
+            "fecha_atencion3",
+        }
+        datetime_cols = {"fechamodificacion", "fechamodificacion2", "fecha_act_seguro"}
+
         last_update = 0
+        written = 0
         while True:
             batch = cur_stream.fetchmany(500)
             if not batch:
                 break
-            for r in batch:
+                out_row = [written + 1]
+                for n in col_names:
+                    i = name_to_idx.get(n)
+                    v = r[i] if i is not None else None
+                    if n in datetime_cols:
+                        out_row.append(fmt_dmy_hm(v))
+                    elif n in date_cols:
+                        out_row.append(fmt_dmy(v))
+                    elif n in text_cols:
+                        out_row.append(make_cell(ws, "" if v is None else str(v), number_format="@"))
+                    else:
+                        out_row.append("" if v is None else v)
+                ws.append(out_row)
                 ws.append([("" if v is None else v) for v in r])
                 written += 1
             if written - last_update >= 5000:
@@ -414,12 +761,27 @@ def main():
                 job_update(cur, job_id, "running", 10, f"Escribiendo filas: {written}", None)
                 db.commit()
                 log_line(f"Job {job_id}: filas={written}")
+        last_row = header_row_num + written
+        last_col_letter = get_column_letter(len(out_labels))
+        ws.auto_filter.ref = f"A{header_row_num}:{last_col_letter}{last_row}"
+
+        ws.column_dimensions["A"].width = 6
+        for idx, n in enumerate(col_names, start=2):
+            letter = get_column_letter(idx)
+            w = 14
+            if n in ("nombres", "nombresmadre", "nombre_padre", "direccion", "referencia", "nuevadireccion", "nuevareferencia"):
+                w = 30
+            if n in ("observacion", "observacion2", "obspadron"):
+                w = 40
+            if n in ("dni", "dnimadre", "dni_padre", "ubigeo"):
+                w = 14
+            ws.column_dimensions[letter].width = w
+
 
         wb.save(out_path)
         job_update(cur, job_id, "done", 100, f"Listo. Filas: {written}", out_path)
         db.commit()
         log_line(f"Job {job_id}: terminado filas={written}")
-        return 0
     except Exception as e:
         try:
             job_update(cur, job_id, "failed", 100, f"Error: {str(e)[:450]}", None)
