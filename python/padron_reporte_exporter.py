@@ -689,9 +689,12 @@ def main():
         ws.append(group_cells)
         row_idx += 1
 
-        for a, b, _lab in spans:
-            if b > a:
-                ws.merge_cells(start_row=group_row_num, start_column=a, end_row=group_row_num, end_column=b)
+        try:
+            for a, b, _lab in spans:
+                if b > a:
+                    ws.merge_cells(start_row=group_row_num, start_column=a, end_row=group_row_num, end_column=b)
+        except Exception:
+            pass
 
         header_row_num = row_idx + 1
         ws.append(
@@ -701,7 +704,10 @@ def main():
             ]
         )
         row_idx += 1
-        ws.freeze_panes = f"A{header_row_num + 1}"
+        try:
+            ws.freeze_panes = f"A{header_row_num + 1}"
+        except Exception:
+            pass
 
         text_cols = {
             "ubigeo",
@@ -741,6 +747,7 @@ def main():
             batch = cur_stream.fetchmany(500)
             if not batch:
                 break
+            for r in batch:
                 out_row = [written + 1]
                 for n in col_names:
                     i = name_to_idx.get(n)
@@ -754,7 +761,6 @@ def main():
                     else:
                         out_row.append("" if v is None else v)
                 ws.append(out_row)
-                ws.append([("" if v is None else v) for v in r])
                 written += 1
             if written - last_update >= 5000:
                 last_update = written
@@ -763,19 +769,25 @@ def main():
                 log_line(f"Job {job_id}: filas={written}")
         last_row = header_row_num + written
         last_col_letter = get_column_letter(len(out_labels))
-        ws.auto_filter.ref = f"A{header_row_num}:{last_col_letter}{last_row}"
+        try:
+            ws.auto_filter.ref = f"A{header_row_num}:{last_col_letter}{last_row}"
+        except Exception:
+            pass
 
-        ws.column_dimensions["A"].width = 6
-        for idx, n in enumerate(col_names, start=2):
-            letter = get_column_letter(idx)
-            w = 14
-            if n in ("nombres", "nombresmadre", "nombre_padre", "direccion", "referencia", "nuevadireccion", "nuevareferencia"):
-                w = 30
-            if n in ("observacion", "observacion2", "obspadron"):
-                w = 40
-            if n in ("dni", "dnimadre", "dni_padre", "ubigeo"):
+        try:
+            ws.column_dimensions["A"].width = 6
+            for idx, n in enumerate(col_names, start=2):
+                letter = get_column_letter(idx)
                 w = 14
-            ws.column_dimensions[letter].width = w
+                if n in ("nombres", "nombresmadre", "nombre_padre", "direccion", "referencia", "nuevadireccion", "nuevareferencia"):
+                    w = 30
+                if n in ("observacion", "observacion2", "obspadron"):
+                    w = 40
+                if n in ("dni", "dnimadre", "dni_padre", "ubigeo"):
+                    w = 14
+                ws.column_dimensions[letter].width = w
+        except Exception:
+            pass
 
 
         wb.save(out_path)
