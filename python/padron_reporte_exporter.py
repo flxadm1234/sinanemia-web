@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import mysql.connector
@@ -579,6 +579,179 @@ def make_cell(ws, value: Any, font: Font = None, fill: PatternFill = None, align
     return c
 
 
+def to_date(v: Any):
+    if v is None:
+        return None
+    if isinstance(v, datetime):
+        return v.date()
+    if hasattr(v, "year") and hasattr(v, "month") and hasattr(v, "day"):
+        try:
+            return datetime(int(v.year), int(v.month), int(v.day)).date()
+        except Exception:
+            pass
+    s = str(v).strip()
+    if not s:
+        return None
+    try:
+        if len(s) >= 10 and s[4] == "-" and s[7] == "-":
+            return datetime.fromisoformat(s[:10]).date()
+    except Exception:
+        pass
+    try:
+        if len(s) >= 10 and s[2] == "/" and s[5] == "/":
+            dd = int(s[0:2])
+            mm = int(s[3:5])
+            yy = int(s[6:10])
+            return datetime(yy, mm, dd).date()
+    except Exception:
+        pass
+    return None
+
+
+def days_between(a: Any, b: Any):
+    da = to_date(a)
+    db = to_date(b)
+    if not da or not db:
+        return None
+    return (db - da).days
+
+
+def diff_age_parts(birth: Any, as_of: Any):
+    b = to_date(birth)
+    a = to_date(as_of)
+    if not b or not a:
+        return None
+    if a < b:
+        return None
+    years = a.year - b.year
+    months = a.month - b.month
+    days = a.day - b.day
+    if days < 0:
+        prev_month_first = datetime(a.year, a.month, 1).date()
+        prev_last_date = prev_month_first - timedelta(days=1)
+        prev_last = prev_last_date.day
+        days += prev_last
+        months -= 1
+    if months < 0:
+        months += 12
+        years -= 1
+    total_days = (a - b).days
+    return {"years": years, "months": months, "days": days, "total_days": total_days}
+
+
+def is_no_encontrado(s: str) -> bool:
+    v = (s or "").strip().lower()
+    return "no encontrado" in v
+
+
+def is_rechazado(s: str) -> bool:
+    v = (s or "").strip().lower()
+    return "rechaz" in v
+
+
+def canon_estado_visita(s: str) -> str:
+    if is_no_encontrado(s):
+        return "No Encontrado"
+    if is_rechazado(s):
+        return "Rechazado"
+    return (s or "").strip()
+
+
+def calc_alerta_vd(getv):
+    hoy = datetime.utcnow().date()
+    primera = to_date(getv("primera_vd"))
+    segunda = to_date(getv("segunda_vd"))
+    tercera = to_date(getv("tercera_vd"))
+    fechainicio_vd = to_date(getv("fecha_inicio_vd"))
+    fechafin_vd = to_date(getv("fecha_fin_vd"))
+    try:
+        nrovd = int(getv("nrovd")) if getv("nrovd") is not None and str(getv("nrovd")).strip() != "" else None
+    except Exception:
+        nrovd = None
+    try:
+        tipo = int(getv("tipo")) if getv("tipo") is not None and str(getv("tipo")).strip() != "" else None
+    except Exception:
+        tipo = None
+
+    limit_min = 13 if tipo == 6 else 7
+    limit_max = 15 if tipo == 6 else 10
+    limit_rgo = 15 if tipo == 6 else 9
+
+    if not primera:
+        nrovdr = 0
+    elif primera and not segunda:
+        nrovdr = 1
+    elif primera and segunda and not tercera:
+        nrovdr = 2
+    else:
+        nrovdr = 3
+
+    estado1 = canon_estado_visita(str(getv("estadosvd") or ""))
+    estado2 = canon_estado_visita(str(getv("estadosvd2") or ""))
+    estado3 = canon_estado_visita(str(getv("estadosvd3") or ""))
+    estado_actual = estado1 if nrovdr == 1 else estado2 if nrovdr == 2 else estado3 if nrovdr == 3 else ""
+    if estado_actual and (is_no_encontrado(estado_actual) or is_rechazado(estado_actual)):
+        return estado_actual
+
+    if nrovdr == 0:
+        if not fechainicio_vd:
+            return ""
+        d0 = days_between(fechainicio_vd, hoy)
+        if d0 == 0:
+            return "INICIO DE 1RA VD"
+        if d0 is not None and d0 < 0:
+            return "ESPERANDO FECHA DE 1RA VD"
+        if d0 is not None and d0 > 5:
+            return "CERO VD, FUERA DE FECHA"
+        return "1RA VD EN CURSO"
+
+    if nrovdr == 1:
+        if not primera:
+            return ""
+        if (not segunda) and (isinstance(nrovd, int) and nrovd > 1):
+            dt = days_between(primera, hoy)
+            if dt is not None and dt > limit_max:
+                return "INC. 2DA FECHA NO REALIZADA"
+            ideal = primera + timedelta(days=limit_min)
+            riesgo = primera + timedelta(days=limit_rgo)
+            if ideal and hoy < ideal:
+                return "ESPERANDO FECHA 2DA VD"
+            if riesgo and hoy >= riesgo:
+                return "VD EN RIESGO"
+            return "2DA VISITA EN CURSO"
+        if fechainicio_vd and primera < fechainicio_vd:
+            return "INCONSISTENCIA VD ANTES DE INICIO DE INTERVENCION"
+        if fechafin_vd and primera > fechafin_vd:
+            return "INCONSISTENCIA VD FUERA DE MAXIMO PERMITIDO"
+        if isinstance(nrovd, int) and nrovd == nrovdr:
+            return "VD COMPLETO"
+        return ""
+
+    if nrovdr in (2, 3):
+        if not primera or not segunda:
+            return ""
+        d12 = days_between(primera, segunda)
+        if d12 is not None and (d12 < limit_min or d12 > limit_max):
+            return "ERROR POR RANGO DE FECHA"
+        if nrovdr == 3 and tercera:
+            d23 = days_between(segunda, tercera)
+            if d23 is not None and (d23 < limit_min or d23 > limit_max):
+                return "ERROR POR RANGO DE FECHA"
+
+        fechas = [primera, segunda] + ([tercera] if tercera else [])
+        if fechainicio_vd and any(f < fechainicio_vd for f in fechas):
+            return "INCONSISTENCIA VD ANTES DE FECHA PERMITIDO"
+        if fechafin_vd and any(f > fechafin_vd for f in fechas):
+            return "INCONSISTENCIA VD FUERA DE MAXIMO PERMITIDO"
+        if isinstance(nrovd, int) and nrovdr > nrovd:
+            return "SOBREPASO EL NRO DE VD PERMITIDO"
+        if isinstance(nrovd, int) and nrovdr == nrovd:
+            return "VD COMPLETO"
+        return ""
+
+    return ""
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--job_id", required=True, type=int)
@@ -658,9 +831,154 @@ def main():
         col_names = [d[0] for d in (cur_stream.description or [])]
         name_to_idx = {n: i for i, n in enumerate(col_names)}
 
-        out_names = ["__n__"] + col_names
-        out_labels = ["N°"] + [label_for_col(n) for n in col_names]
-        out_sections = ["Menor"] + [section_for_col(n) for n in col_names]
+        def gv(r, name: str):
+            i = name_to_idx.get(name)
+            if i is None:
+                return None
+            return r[i]
+
+        def age_amd(r):
+            age = diff_age_parts(gv(r, "fecha_nac"), gv(r, "etapa"))
+            if not age:
+                return ""
+            return f"{age['years']}a {age['months']}m {age['days']}d"
+
+        def age_days(r):
+            age = diff_age_parts(gv(r, "fecha_nac"), gv(r, "etapa"))
+            if not age:
+                return ""
+            return age["total_days"]
+
+        def tel_madre(r):
+            v = gv(r, "telefonopn")
+            if v is None or str(v).strip() == "":
+                v = gv(r, "telefono")
+            return "" if v is None else str(v)
+
+        def alerta_vd(r):
+            return calc_alerta_vd(lambda n: gv(r, n))
+
+        export_cols = [
+            ("Menor", "N°", "raw", lambda r, idx: idx + 1),
+            ("Menor", "ID PN", "raw", lambda r, _idx: gv(r, "idpn") or ""),
+            ("Menor", "Ubigeo", "text", lambda r, _idx: gv(r, "ubigeo") or ""),
+            ("Menor", "Etapa", "raw", lambda r, _idx: fmt_dmy(gv(r, "etapa"))),
+            ("Menor", "Tipo", "raw", lambda r, _idx: gv(r, "tipo") or ""),
+            ("Menor", "Rango", "raw", lambda r, _idx: gv(r, "rango") or ""),
+            ("Menor", "Tipodoc", "raw", lambda r, _idx: gv(r, "tipodoc") or ""),
+            ("Menor", "Tipodocum", "text", lambda r, _idx: gv(r, "tipodocum") or ""),
+            ("Menor", "DNI", "text", lambda r, _idx: gv(r, "dni") or ""),
+            ("Menor", "Nombres", "raw", lambda r, _idx: gv(r, "nombres") or ""),
+            ("Menor", "F. Nac.", "raw", lambda r, _idx: fmt_dmy(gv(r, "fecha_nac"))),
+            ("Menor", "Edad (a/m/d)", "raw", lambda r, _idx: age_amd(r)),
+            ("Menor", "Edad (días)", "raw", lambda r, _idx: age_days(r)),
+            ("Madre", "DNI Madre", "text", lambda r, _idx: gv(r, "dnimadre") or ""),
+            ("Madre", "Ap. Pat Madre", "raw", lambda r, _idx: gv(r, "appatmadre") or ""),
+            ("Madre", "Ap. Mat Madre", "raw", lambda r, _idx: gv(r, "apmatmadre") or ""),
+            ("Madre", "Nombres Madre", "raw", lambda r, _idx: gv(r, "nombresmadre") or ""),
+            ("Madre", "Teléfono", "text", lambda r, _idx: tel_madre(r)),
+            ("Madre", "Titular línea", "raw", lambda r, _idx: gv(r, "titular_linea") or ""),
+            ("Madre", "Celular SEAPP", "text", lambda r, _idx: gv(r, "celularseapp") or ""),
+            ("Madre", "Tipo seguro", "raw", lambda r, _idx: gv(r, "tiposeguro") or ""),
+            ("Madre", "Estado seguro", "raw", lambda r, _idx: gv(r, "estadoseguro") or ""),
+            ("Madre", "Fecha act. seguro", "raw", lambda r, _idx: fmt_dmy_hm(gv(r, "fecha_act_seguro"))),
+            ("Padre", "DNI Padre", "text", lambda r, _idx: gv(r, "dni_padre") or ""),
+            ("Padre", "Nombre Padre", "raw", lambda r, _idx: gv(r, "nombre_padre") or ""),
+            ("Ubicación", "Departamento", "raw", lambda r, _idx: gv(r, "departamento") or ""),
+            ("Ubicación", "Provincia", "raw", lambda r, _idx: gv(r, "provincia") or ""),
+            ("Ubicación", "Distrito", "raw", lambda r, _idx: gv(r, "distrito") or ""),
+            ("Ubicación", "ID Distrito", "raw", lambda r, _idx: gv(r, "iddistrito") or ""),
+            ("Ubicación", "CCPP", "raw", lambda r, _idx: gv(r, "ccpp") or ""),
+            ("Ubicación", "Zona", "raw", lambda r, _idx: gv(r, "zona") or ""),
+            ("Ubicación", "MZ", "raw", lambda r, _idx: gv(r, "mz") or ""),
+            ("Ubicación", "Dirección", "raw", lambda r, _idx: gv(r, "direccion") or ""),
+            ("Ubicación", "Referencia", "raw", lambda r, _idx: gv(r, "referencia") or ""),
+            ("Ubicación", "Nueva dirección", "raw", lambda r, _idx: gv(r, "nuevadireccion") or ""),
+            ("Ubicación", "Nueva referencia", "raw", lambda r, _idx: gv(r, "nuevareferencia") or ""),
+            ("Ubicación", "Lat", "raw", lambda r, _idx: gv(r, "lat") or ""),
+            ("Ubicación", "Lon", "raw", lambda r, _idx: gv(r, "lon") or ""),
+            ("Ubicación", "Lat2", "raw", lambda r, _idx: gv(r, "lat2") or ""),
+            ("Ubicación", "Long2", "raw", lambda r, _idx: gv(r, "long2") or ""),
+            ("Ubicación", "Lat3", "raw", lambda r, _idx: gv(r, "lat3") or ""),
+            ("Ubicación", "Long3", "raw", lambda r, _idx: gv(r, "long3") or ""),
+            ("Ubicación", "EESS UA", "raw", lambda r, _idx: gv(r, "eess_ua") or ""),
+            ("Ubicación", "CodEESS", "raw", lambda r, _idx: gv(r, "codeess") or ""),
+            ("Ubicación", "Nombre comercial", "raw", lambda r, _idx: gv(r, "nombre_comercial") or ""),
+            ("Ubicación", "CodQR", "raw", lambda r, _idx: gv(r, "codqr") or ""),
+            ("Ubicación", "Código V", "raw", lambda r, _idx: gv(r, "codigov") or ""),
+            ("Asignación", "Actor social (DNI)", "text", lambda r, _idx: gv(r, "actorsocial") or ""),
+            ("Asignación", "Actor social (Nombre)", "raw", lambda r, _idx: gv(r, "actor_nombre") or ""),
+            ("Asignación", "Responsable (DNI)", "text", lambda r, _idx: gv(r, "responsable") or ""),
+            ("Asignación", "Responsable (Nombre)", "raw", lambda r, _idx: gv(r, "responsable_nombre") or ""),
+            ("Asignación", "Usuario", "text", lambda r, _idx: gv(r, "usuario") or ""),
+            ("Asignación", "Asignación", "raw", lambda r, _idx: gv(r, "asignacion") or ""),
+            ("Ocurrencias", "ID Ocurrencia", "raw", lambda r, _idx: gv(r, "idocurrencia") or ""),
+            ("Ocurrencias", "Ocurrencia", "raw", lambda r, _idx: gv(r, "ocurrencia_desc") or ""),
+            ("Ocurrencias", "ID Ocurrencia 2", "raw", lambda r, _idx: gv(r, "idocurrencia2") or ""),
+            ("Ocurrencias", "Ocurrencia 2", "raw", lambda r, _idx: gv(r, "ocurrencia2_desc") or ""),
+            ("VD / Estados", "Estado VD", "raw", lambda r, _idx: gv(r, "estadovd") or ""),
+            ("VD / Estados", "EstadosVD", "raw", lambda r, _idx: gv(r, "estadosvd") or ""),
+            ("VD / Estados", "EstadosVD2", "raw", lambda r, _idx: gv(r, "estadosvd2") or ""),
+            ("VD / Estados", "EstadosVD3", "raw", lambda r, _idx: gv(r, "estadosvd3") or ""),
+            ("VD / Estados", "Nro VD", "raw", lambda r, _idx: gv(r, "nrovd") or ""),
+            ("VD / Estados", "Modo VD", "raw", lambda r, _idx: gv(r, "modovd") or ""),
+            ("VD / Estados", "Fecha cita", "raw", lambda r, _idx: fmt_dmy(gv(r, "fechacita"))),
+            ("VD / Estados", "F. inicio VD", "raw", lambda r, _idx: fmt_dmy(gv(r, "fecha_inicio_vd"))),
+            ("VD / Estados", "F. fin VD", "raw", lambda r, _idx: fmt_dmy(gv(r, "fecha_fin_vd"))),
+            ("VD / Estados", "1ra VD", "raw", lambda r, _idx: fmt_dmy(gv(r, "primera_vd"))),
+            ("VD / Estados", "2da VD", "raw", lambda r, _idx: fmt_dmy(gv(r, "segunda_vd"))),
+            ("VD / Estados", "3ra VD", "raw", lambda r, _idx: fmt_dmy(gv(r, "tercera_vd"))),
+            ("VD / Estados", "Días 1-2", "raw", lambda r, _idx: days_between(gv(r, "primera_vd"), gv(r, "segunda_vd")) or ""),
+            ("VD / Estados", "Días 2-3", "raw", lambda r, _idx: days_between(gv(r, "segunda_vd"), gv(r, "tercera_vd")) or ""),
+            ("VD / Estados", "Alerta VD", "raw", lambda r, _idx: alerta_vd(r)),
+            ("VD / Estados", "Programación 1", "raw", lambda r, _idx: fmt_dmy(gv(r, "programacion1"))),
+            ("VD / Estados", "F. modif.", "raw", lambda r, _idx: fmt_dmy_hm(gv(r, "fechamodificacion"))),
+            ("VD / Estados", "F. modif. 2", "raw", lambda r, _idx: fmt_dmy_hm(gv(r, "fechamodificacion2"))),
+            ("VD / Estados", "Estado intervención", "raw", lambda r, _idx: gv(r, "estadointervencion") or ""),
+            ("Tamizaje / Otros", "Tipovd", "raw", lambda r, _idx: gv(r, "tipovd") or ""),
+            ("Tamizaje / Otros", "Tamisaje", "raw", lambda r, _idx: gv(r, "tamisaje") or ""),
+            ("Tamizaje / Otros", "Fecha tamisaje", "raw", lambda r, _idx: fmt_dmy(gv(r, "fechatamisaje"))),
+            ("Tamizaje / Otros", "F. atención (últ.)", "raw", lambda r, _idx: fmt_dmy(gv(r, "tam_fecha_atencion"))),
+            ("Tamizaje / Otros", "Hemoglobina (últ.)", "raw", lambda r, _idx: gv(r, "tam_hemoglobina") or ""),
+            ("Tamizaje / Otros", "Peso (últ.)", "raw", lambda r, _idx: gv(r, "tam_peso") or ""),
+            ("Tamizaje / Otros", "Talla (últ.)", "raw", lambda r, _idx: gv(r, "tam_talla") or ""),
+            ("Tamizaje / Otros", "CIE10 (últ.)", "raw", lambda r, _idx: gv(r, "tam_cie_10") or ""),
+            ("Tamizaje / Otros", "Resultado (últ.)", "raw", lambda r, _idx: gv(r, "tam_resultado") or ""),
+            ("Tamizaje / Otros", "Hemoglobina1", "raw", lambda r, _idx: gv(r, "hemoglobina1") or ""),
+            ("Tamizaje / Otros", "F. atención1", "raw", lambda r, _idx: fmt_dmy(gv(r, "fecha_atencion1"))),
+            ("Tamizaje / Otros", "Hemoglobina2", "raw", lambda r, _idx: gv(r, "hemoglobina2") or ""),
+            ("Tamizaje / Otros", "F. atención2", "raw", lambda r, _idx: fmt_dmy(gv(r, "fecha_atencion2"))),
+            ("Tamizaje / Otros", "Hemoglobina3", "raw", lambda r, _idx: gv(r, "hemoglobina3") or ""),
+            ("Tamizaje / Otros", "F. atención3", "raw", lambda r, _idx: fmt_dmy(gv(r, "fecha_atencion3"))),
+            ("Tamizaje / Otros", "HB", "raw", lambda r, _idx: gv(r, "hb") or ""),
+            ("Tamizaje / Otros", "Anemia", "raw", lambda r, _idx: gv(r, "anemia") or ""),
+            ("Tamizaje / Otros", "Hierro", "raw", lambda r, _idx: gv(r, "hierro") or ""),
+            ("Tamizaje / Otros", "TSF", "raw", lambda r, _idx: gv(r, "tsf") or ""),
+            ("Tamizaje / Otros", "RSF", "raw", lambda r, _idx: gv(r, "rsf") or ""),
+            ("Tamizaje / Otros", "Resultado", "raw", lambda r, _idx: gv(r, "resultado") or ""),
+            ("Tamizaje / Otros", "Avance", "raw", lambda r, _idx: gv(r, "avance") or ""),
+            ("Tamizaje / Otros", "HB registro", "raw", lambda r, _idx: gv(r, "hbregistro") or ""),
+            ("Tamizaje / Otros", "CCRED", "raw", lambda r, _idx: gv(r, "ccred") or ""),
+            ("Tamizaje / Otros", "Adulto", "raw", lambda r, _idx: gv(r, "adulto") or ""),
+            ("Tamizaje / Otros", "Cantidad A", "raw", lambda r, _idx: gv(r, "cantidada") or ""),
+            ("Tamizaje / Otros", "Discapacidad", "raw", lambda r, _idx: gv(r, "discapacidad") or ""),
+            ("Tamizaje / Otros", "Visita DOPS", "raw", lambda r, _idx: gv(r, "visitadops") or ""),
+            ("Tamizaje / Otros", "Sesión DEM", "raw", lambda r, _idx: gv(r, "sesiondem") or ""),
+            ("Tamizaje / Otros", "Tiene PS", "raw", lambda r, _idx: gv(r, "tieneps") or ""),
+            ("Tamizaje / Otros", "Observación", "raw", lambda r, _idx: gv(r, "observacion") or ""),
+            ("Tamizaje / Otros", "Observación 2", "raw", lambda r, _idx: gv(r, "observacion2") or ""),
+            ("Tamizaje / Otros", "Obs padrón", "raw", lambda r, _idx: gv(r, "obspadron") or ""),
+            ("Tamizaje / Otros", "Estado verificación", "raw", lambda r, _idx: gv(r, "estado_verificacion") or ""),
+            ("Tamizaje / Otros", "Estado", "raw", lambda r, _idx: gv(r, "estado") or ""),
+            ("Tamizaje / Otros", "Estado verificado", "raw", lambda r, _idx: gv(r, "estado_verificado") or ""),
+            ("Tamizaje / Otros", "Tipo dispositivo", "raw", lambda r, _idx: gv(r, "tipodispositivo") or ""),
+            ("Tamizaje / Otros", "Fotos", "raw", lambda r, _idx: gv(r, "fotos") or ""),
+            ("Tamizaje / Otros", "Img carnet", "raw", lambda r, _idx: gv(r, "img_carnet") or ""),
+            ("Tamizaje / Otros", "Padrón nominal", "raw", lambda r, _idx: gv(r, "padronnominal") or ""),
+        ]
+
+        out_labels = [c[1] for c in export_cols]
+        out_sections = [c[0] for c in export_cols]
 
         group_row_num = row_idx + 1
         group_cells = []
@@ -748,15 +1066,10 @@ def main():
             if not batch:
                 break
             for r in batch:
-                out_row = [written + 1]
-                for n in col_names:
-                    i = name_to_idx.get(n)
-                    v = r[i] if i is not None else None
-                    if n in datetime_cols:
-                        out_row.append(fmt_dmy_hm(v))
-                    elif n in date_cols:
-                        out_row.append(fmt_dmy(v))
-                    elif n in text_cols:
+                out_row = []
+                for sec, lab, kind, fn in export_cols:
+                    v = fn(r, written)
+                    if kind == "text":
                         out_row.append(make_cell(ws, "" if v is None else str(v), number_format="@"))
                     else:
                         out_row.append("" if v is None else v)
@@ -775,16 +1088,17 @@ def main():
             pass
 
         try:
-            ws.column_dimensions["A"].width = 6
-            for idx, n in enumerate(col_names, start=2):
+            for idx, (_sec, lab, kind, _fn) in enumerate(export_cols, start=1):
                 letter = get_column_letter(idx)
                 w = 14
-                if n in ("nombres", "nombresmadre", "nombre_padre", "direccion", "referencia", "nuevadireccion", "nuevareferencia"):
+                if lab in ("N°",):
+                    w = 6
+                if "Nombres" in lab or "Dirección" in lab or "Referencia" in lab or "Observación" in lab or "Nombre Padre" in lab:
                     w = 30
-                if n in ("observacion", "observacion2", "obspadron"):
+                if "Observación" in lab:
                     w = 40
-                if n in ("dni", "dnimadre", "dni_padre", "ubigeo"):
-                    w = 14
+                if kind == "text":
+                    w = 16
                 ws.column_dimensions[letter].width = w
         except Exception:
             pass
