@@ -212,7 +212,7 @@ export function PadronDniExcelImportClient() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-900">Activo - Observado</label>
+          <label className="block text-sm font-medium text-zinc-900">Activo - Observado (opcional)</label>
           <input
             type="file"
             accept=".xlsx,.xls"
@@ -225,7 +225,7 @@ export function PadronDniExcelImportClient() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-zinc-900">Tránsito</label>
+          <label className="block text-sm font-medium text-zinc-900">Tránsito (opcional)</label>
           <input
             type="file"
             accept=".xlsx,.xls"
