@@ -56,8 +56,8 @@ function monthStartISO(d: Date) {
 async function startPythonJob(params: {
   jobId: string;
   activoPath: string;
-  observadoPath: string;
-  transitoPath: string;
+  observadoPath?: string;
+  transitoPath?: string;
   fechaCorteISO: string;
   updatePadron: boolean;
   expectedUbigeo?: number | null;
@@ -87,7 +87,7 @@ async function startPythonJob(params: {
   try {
     fsSync.writeSync(
       fd,
-      `[bootstrap] pythonBin=${pythonBin} script=${script} activo=${params.activoPath} observado=${params.observadoPath} transito=${params.transitoPath} fecha_corte=${params.fechaCorteISO} update_padron=${params.updatePadron ? 1 : 0} expected_ubigeo=${params.expectedUbigeo ?? ""}\n`,
+      `[bootstrap] pythonBin=${pythonBin} script=${script} activo=${params.activoPath} observado=${params.observadoPath ?? ""} transito=${params.transitoPath ?? ""} fecha_corte=${params.fechaCorteISO} update_padron=${params.updatePadron ? 1 : 0} expected_ubigeo=${params.expectedUbigeo ?? ""}\n`,
     );
   } catch {}
 
@@ -103,9 +103,9 @@ async function startPythonJob(params: {
       "--activo",
       params.activoPath,
       "--observado",
-      params.observadoPath,
+      params.observadoPath ?? "",
       "--transito",
-      params.transitoPath,
+      params.transitoPath ?? "",
       "--fecha_corte",
       params.fechaCorteISO,
       "--update_padron",
@@ -181,9 +181,11 @@ export async function POST(request: Request) {
     const fActivo = formData.get("file_activo");
     const fObs = formData.get("file_activo_observado");
     const fTran = formData.get("file_transito");
-    if (!(fActivo instanceof File) || !(fObs instanceof File) || !(fTran instanceof File)) {
-      return NextResponse.json({ error: "Debes adjuntar los 3 archivos (Activo, Activo-Observado, Tránsito)." }, { status: 400 });
+    if (!(fActivo instanceof File)) {
+      return NextResponse.json({ error: "Debes adjuntar el archivo Activo." }, { status: 400 });
     }
+    const obsFile = fObs instanceof File ? fObs : null;
+    const tranFile = fTran instanceof File ? fTran : null;
 
     const jobId =
       typeof crypto.randomUUID === "function"
@@ -195,8 +197,8 @@ export async function POST(request: Request) {
     let transitoPath = "";
     try {
       activoPath = await writeUploadToDisk(fActivo, jobId, "activo");
-      observadoPath = await writeUploadToDisk(fObs, jobId, "observado");
-      transitoPath = await writeUploadToDisk(fTran, jobId, "transito");
+      if (obsFile) observadoPath = await writeUploadToDisk(obsFile, jobId, "observado");
+      if (tranFile) transitoPath = await writeUploadToDisk(tranFile, jobId, "transito");
     } catch (e: any) {
       const msg = String(e?.message ?? e);
       if (msg === "invalid_excel_extension") {
@@ -220,8 +222,8 @@ export async function POST(request: Request) {
         fechaISO,
         expectedUbigeo,
         path.basename(activoPath),
-        path.basename(observadoPath),
-        path.basename(transitoPath),
+        observadoPath ? path.basename(observadoPath) : null,
+        transitoPath ? path.basename(transitoPath) : null,
         session.dni,
       ],
     );
@@ -229,8 +231,8 @@ export async function POST(request: Request) {
     await startPythonJob({
       jobId,
       activoPath,
-      observadoPath,
-      transitoPath,
+      observadoPath: observadoPath || "",
+      transitoPath: transitoPath || "",
       fechaCorteISO: fechaISO,
       updatePadron,
       expectedUbigeo,

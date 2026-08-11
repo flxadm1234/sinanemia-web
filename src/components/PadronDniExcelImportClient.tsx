@@ -118,8 +118,8 @@ export function PadronDniExcelImportClient() {
       setError("La opción de actualizar padrón nominal solo está disponible para Inicio de mes.");
       return;
     }
-    if (!fileActivo || !fileObs || !fileTran) {
-      setError("Debes adjuntar los 3 archivos (Activo, Activo-Observado, Tránsito).");
+    if (!fileActivo) {
+      setError("Debes adjuntar el archivo Activo.");
       return;
     }
 
@@ -130,8 +130,8 @@ export function PadronDniExcelImportClient() {
       fd.append("fecha_corte", fechaCorte);
       fd.append("update_padron", updatePadron ? "1" : "0");
       fd.append("file_activo", fileActivo);
-      fd.append("file_activo_observado", fileObs);
-      fd.append("file_transito", fileTran);
+      if (fileObs) fd.append("file_activo_observado", fileObs);
+      if (fileTran) fd.append("file_transito", fileTran);
       const res = await fetch("/api/padron-dni/import", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "No se pudo iniciar la carga");
@@ -199,7 +199,7 @@ export function PadronDniExcelImportClient() {
 
       <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
         <div>
-          <label className="block text-sm font-medium text-zinc-900">Activo</label>
+          <label className="block text-sm font-medium text-zinc-900">Activo (obligatorio)</label>
           <input
             type="file"
             accept=".xlsx,.xls"

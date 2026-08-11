@@ -372,25 +372,41 @@ def run_import(
 
     periodo = period_from_fecha_corte(fecha_corte)
 
+    if not activo_path or not str(activo_path).strip():
+        raise Exception("Falta el archivo Activo.")
+
     wb_a = load_workbook(filename=activo_path, read_only=True, data_only=True)
-    wb_o = load_workbook(filename=observado_path, read_only=True, data_only=True)
-    wb_t = load_workbook(filename=transito_path, read_only=True, data_only=True)
     ws_a = pick_sheet(wb_a)
-    ws_o = pick_sheet(wb_o)
-    ws_t = pick_sheet(wb_t)
-
     ub_a, headers, rows_a = extract_rows(ws_a, "ACTIVO")
-    ub_o, headers_o, rows_o = extract_rows(ws_o, "ACTIVO_OBSERVADO")
-    ub_t, headers_t, rows_t = extract_rows(ws_t, "TRANSITO")
 
-    if ub_a != ub_o or ub_a != ub_t:
-        raise Exception(f"Los 3 archivos no tienen el mismo ubigeo. Activo={ub_a} Observado={ub_o} Transito={ub_t}")
+    rows_o = []
+    rows_t = []
+    headers_o = headers
+    headers_t = headers
+    ub_o = ub_a
+    ub_t = ub_a
+
+    if observado_path and str(observado_path).strip():
+        wb_o = load_workbook(filename=observado_path, read_only=True, data_only=True)
+        ws_o = pick_sheet(wb_o)
+        ub_o, headers_o, rows_o = extract_rows(ws_o, "ACTIVO_OBSERVADO")
+        if ub_o != ub_a:
+            raise Exception(f"Los archivos no tienen el mismo ubigeo. Activo={ub_a} Observado={ub_o}")
+
+    if transito_path and str(transito_path).strip():
+        wb_t = load_workbook(filename=transito_path, read_only=True, data_only=True)
+        ws_t = pick_sheet(wb_t)
+        ub_t, headers_t, rows_t = extract_rows(ws_t, "TRANSITO")
+        if ub_t != ub_a:
+            raise Exception(f"Los archivos no tienen el mismo ubigeo. Activo={ub_a} Transito={ub_t}")
 
     if expected_ubigeo and int(expected_ubigeo) != int(ub_a):
         raise Exception(f"El ubigeo del Excel ({ub_a}) no coincide con el ubigeo del usuario ({expected_ubigeo}).")
 
-    if len(headers_o) != len(headers) or len(headers_t) != len(headers):
-        raise Exception("Los 3 archivos no tienen la misma plantilla (número de columnas).")
+    if rows_o and len(headers_o) != len(headers):
+        raise Exception("Activo y Activo-Observado no tienen la misma plantilla (número de columnas).")
+    if rows_t and len(headers_t) != len(headers):
+        raise Exception("Activo y Tránsito no tienen la misma plantilla (número de columnas).")
 
     ok, msg = validate_fecha_corte_rules(cur, job_id, ub_a, periodo, fecha_corte)
     if not ok:
@@ -453,8 +469,10 @@ def run_import(
                 last_tick = now
 
     insert_many("ACTIVO", rows_a)
-    insert_many("ACTIVO_OBSERVADO", rows_o)
-    insert_many("TRANSITO", rows_t)
+    if rows_o:
+        insert_many("ACTIVO_OBSERVADO", rows_o)
+    if rows_t:
+        insert_many("TRANSITO", rows_t)
 
     updated_pn = 0
     if update_padron:
@@ -609,8 +627,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--job", required=True)
     ap.add_argument("--activo", required=True)
-    ap.add_argument("--observado", required=True)
-    ap.add_argument("--transito", required=True)
+    ap.add_argument("--observado", default="")
+    ap.add_argument("--transito", default="")
     ap.add_argument("--fecha_corte", required=True)
     ap.add_argument("--update_padron", default="0")
     ap.add_argument("--expected_ubigeo", default="")
