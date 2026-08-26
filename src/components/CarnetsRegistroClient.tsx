@@ -74,6 +74,13 @@ export function CarnetsRegistroClient() {
 
   const [savingEstado, setSavingEstado] = useState(false);
 
+  const [imgScale, setImgScale] = useState(1);
+  const [imgRotate, setImgRotate] = useState(0);
+  const [imgX, setImgX] = useState(0);
+  const [imgY, setImgY] = useState(0);
+  const dragging = useRef(false);
+  const dragLast = useRef<{ x: number; y: number } | null>(null);
+
   const [addingTipo1, setAddingTipo1] = useState(false);
   const [newFecha1, setNewFecha1] = useState("");
   const [newEdad1, setNewEdad1] = useState("");
@@ -153,6 +160,24 @@ export function CarnetsRegistroClient() {
     ]);
   };
 
+  const resetViewer = () => {
+    setImgScale(1);
+    setImgRotate(0);
+    setImgX(0);
+    setImgY(0);
+    dragging.current = false;
+    dragLast.current = null;
+  };
+
+  const zoomTo = (next: number) => {
+    const v = Math.max(1, Math.min(4, Number(next)));
+    setImgScale(v);
+    if (v === 1) {
+      setImgX(0);
+      setImgY(0);
+    }
+  };
+
   useEffect(() => {
     if (qDebounce.current) clearTimeout(qDebounce.current);
     qDebounce.current = setTimeout(() => {
@@ -173,6 +198,10 @@ export function CarnetsRegistroClient() {
     if (!selectedIdpn) return;
     loadDetail(selectedIdpn);
   }, [selectedIdpn]);
+
+  useEffect(() => {
+    resetViewer();
+  }, [selectedIdpn, padron?.img_carnet]);
 
   const onPick = (r: CarnetListadoRow) => {
     setSelectedIdpn(r.idpn);
@@ -489,11 +518,100 @@ export function CarnetsRegistroClient() {
                 <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                   <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-3">
                     {padron?.img_carnet ? (
-                      <img
-                        src={`/api/carnets/${selectedIdpn}/image`}
-                        alt="Carnet"
-                        className="w-full rounded-xl bg-white object-contain"
-                      />
+                      <div className="rounded-xl bg-white ring-1 ring-black/5 overflow-hidden">
+                        <div className="flex items-center justify-between gap-2 border-b border-zinc-100 px-3 py-2">
+                          <div className="text-xs font-medium text-zinc-700">Imagen</div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="h-8 rounded-lg border border-zinc-200 bg-white px-2 text-xs text-zinc-900"
+                              onClick={() => zoomTo(imgScale - 0.25)}
+                            >
+                              Zoom -
+                            </button>
+                            <button
+                              type="button"
+                              className="h-8 rounded-lg border border-zinc-200 bg-white px-2 text-xs text-zinc-900"
+                              onClick={() => zoomTo(imgScale + 0.25)}
+                            >
+                              Zoom +
+                            </button>
+                            <button
+                              type="button"
+                              className="h-8 rounded-lg border border-zinc-200 bg-white px-2 text-xs text-zinc-900"
+                              onClick={() => setImgRotate((r) => (r + 270) % 360)}
+                            >
+                              Girar ⟲
+                            </button>
+                            <button
+                              type="button"
+                              className="h-8 rounded-lg border border-zinc-200 bg-white px-2 text-xs text-zinc-900"
+                              onClick={() => setImgRotate((r) => (r + 90) % 360)}
+                            >
+                              Girar ⟳
+                            </button>
+                            <button
+                              type="button"
+                              className="h-8 rounded-lg bg-zinc-900 px-2 text-xs font-medium text-white"
+                              onClick={resetViewer}
+                            >
+                              Reset
+                            </button>
+                          </div>
+                        </div>
+
+                        <div
+                          className="relative h-[520px] bg-white"
+                          onWheel={(e) => {
+                            e.preventDefault();
+                            const dir = e.deltaY < 0 ? 1 : -1;
+                            zoomTo(imgScale + dir * 0.15);
+                          }}
+                          onPointerDown={(e) => {
+                            if (imgScale <= 1) return;
+                            (e.currentTarget as any).setPointerCapture?.(e.pointerId);
+                            dragging.current = true;
+                            dragLast.current = { x: e.clientX, y: e.clientY };
+                          }}
+                          onPointerMove={(e) => {
+                            if (!dragging.current || imgScale <= 1) return;
+                            const prev = dragLast.current;
+                            if (!prev) return;
+                            const dx = e.clientX - prev.x;
+                            const dy = e.clientY - prev.y;
+                            dragLast.current = { x: e.clientX, y: e.clientY };
+                            setImgX((v) => v + dx);
+                            setImgY((v) => v + dy);
+                          }}
+                          onPointerUp={() => {
+                            dragging.current = false;
+                            dragLast.current = null;
+                          }}
+                          onPointerCancel={() => {
+                            dragging.current = false;
+                            dragLast.current = null;
+                          }}
+                          onDoubleClick={resetViewer}
+                          style={{ touchAction: imgScale > 1 ? "none" : "pan-y" }}
+                        >
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <img
+                              src={`/api/carnets/${selectedIdpn}/image`}
+                              alt="Carnet"
+                              draggable={false}
+                              className="max-h-full max-w-full select-none"
+                              style={{
+                                transform: `translate(${imgX}px, ${imgY}px) scale(${imgScale}) rotate(${imgRotate}deg)`,
+                                transformOrigin: "center center",
+                                cursor: imgScale > 1 ? (dragging.current ? "grabbing" : "grab") : "default",
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className="border-t border-zinc-100 px-3 py-2 text-xs text-zinc-500">
+                          Zoom: {Math.round(imgScale * 100)}% · Rotación: {imgRotate}°
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex h-80 items-center justify-center rounded-xl bg-white text-sm text-zinc-500">
                         Sin imagen
@@ -801,4 +919,3 @@ export function CarnetsRegistroClient() {
     </div>
   );
 }
-
