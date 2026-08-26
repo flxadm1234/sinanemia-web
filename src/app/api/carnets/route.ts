@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ensurePadronHasCarnetFields, getCarnetCounters, listCarnets } from "@/lib/carnets";
+import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,8 @@ export async function GET(request: Request) {
   if (typeof session.ubigeo !== "number") return NextResponse.json({ error: "missing_ubigeo" }, { status: 400 });
 
   await ensurePadronHasCarnetFields();
+  const sel = await getEtapaSeleccionadaPorUbigeo(session.ubigeo);
+  if (!sel?.etapa) return NextResponse.json({ error: "missing_etapa" }, { status: 400 });
 
   const url = new URL(request.url);
   const search = String(url.searchParams.get("search") ?? "").trim();
@@ -24,16 +27,16 @@ export async function GET(request: Request) {
   const counters = await getCarnetCounters({
     ubigeo: session.ubigeo,
     search,
-    status: status === "confirmado" ? "confirmado" : status === "all" ? "all" : "pendiente",
+    etapa: sel.etapa,
   });
   const rows = await listCarnets({
     ubigeo: session.ubigeo,
     search,
     status: status === "confirmado" ? "confirmado" : status === "all" ? "all" : "pendiente",
+    etapa: sel.etapa,
     limit: pageSize,
     offset,
   });
 
-  return NextResponse.json({ ok: true, counters, rows, page, pageSize });
+  return NextResponse.json({ ok: true, counters, rows, page, pageSize, etapa: sel.etapa });
 }
-

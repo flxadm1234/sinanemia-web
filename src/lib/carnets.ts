@@ -47,31 +47,40 @@ function normEstado(v: unknown) {
   return s;
 }
 
-export async function getCarnetCounters(params: { ubigeo: number; search?: string; status?: "pendiente" | "confirmado" | "all" }) {
+export async function getCarnetCounters(params: { ubigeo: number; search?: string; etapa?: string }) {
   const pool = getDbPool();
   const search = String(params.search ?? "").trim();
-  const status = String(params.status ?? "pendiente").trim().toLowerCase();
+
+  const etapa = String(params.etapa ?? "").trim();
 
   const where: string[] = ["pn.ubigeo = ?", "TRIM(COALESCE(pn.img_carnet,'')) <> ''"];
   const args: any[] = [params.ubigeo];
+
+  if (etapa) {
+    where.push("DATE_FORMAT(pn.etapa, '%Y-%m-01') = ?");
+    args.push(etapa);
+  }
 
   if (search) {
     where.push("TRIM(COALESCE(pn.dni,'')) LIKE ?");
     args.push(`%${search}%`);
   }
 
-  if (status === "confirmado") {
-    where.push("LOWER(TRIM(COALESCE(pn.estado_verificacion,''))) = 'confirmado'");
-  } else if (status === "pendiente") {
-    where.push("LOWER(TRIM(COALESCE(pn.estado_verificacion,''))) <> 'confirmado'");
-  }
-
   const [rows] = await pool.query(
     `SELECT
       COUNT(*) AS total,
-      SUM(CASE WHEN LOWER(TRIM(COALESCE(pn.estado_verificacion,''))) = 'confirmado' THEN 1 ELSE 0 END) AS confirmados
-     FROM padronnominal pn
-     WHERE ${where.join(" AND ")}`,
+      SUM(t.is_confirmed) AS confirmados
+     FROM (
+       SELECT
+         CASE
+           WHEN TRIM(COALESCE(pn.dni,'')) = '' THEN CONCAT('IDPN:', pn.idpn)
+           ELSE TRIM(COALESCE(pn.dni,''))
+         END AS dni_key,
+         MAX(CASE WHEN LOWER(TRIM(COALESCE(pn.estado_verificacion,''))) = 'confirmado' THEN 1 ELSE 0 END) AS is_confirmed
+       FROM padronnominal pn
+       WHERE ${where.join(" AND ")}
+       GROUP BY dni_key
+     ) t`,
     args,
   );
 
@@ -85,33 +94,46 @@ export async function listCarnets(params: {
   ubigeo: number;
   search?: string;
   status?: "pendiente" | "confirmado" | "all";
+  etapa?: string;
   limit: number;
   offset: number;
 }) {
   const pool = getDbPool();
   const search = String(params.search ?? "").trim();
   const status = String(params.status ?? "pendiente").trim().toLowerCase();
+  const etapa = String(params.etapa ?? "").trim();
   const limit = Math.min(Math.max(params.limit, 1), 200);
   const offset = Math.max(params.offset, 0);
 
   const where: string[] = ["pn.ubigeo = ?", "TRIM(COALESCE(pn.img_carnet,'')) <> ''"];
   const args: any[] = [params.ubigeo];
 
+  if (etapa) {
+    where.push("DATE_FORMAT(pn.etapa, '%Y-%m-01') = ?");
+    args.push(etapa);
+  }
+
   if (search) {
     where.push("TRIM(COALESCE(pn.dni,'')) LIKE ?");
     args.push(`%${search}%`);
   }
 
-  if (status === "confirmado") {
-    where.push("LOWER(TRIM(COALESCE(pn.estado_verificacion,''))) = 'confirmado'");
-  } else if (status === "pendiente") {
-    where.push("LOWER(TRIM(COALESCE(pn.estado_verificacion,''))) <> 'confirmado'");
-  }
-
   const [rows] = await pool.query(
     `SELECT pn.idpn, pn.dni, pn.nombres, pn.img_carnet, pn.estado_verificacion
      FROM padronnominal pn
-     WHERE ${where.join(" AND ")}
+     JOIN (
+       SELECT
+         MAX(pn2.idpn) AS idpn,
+         CASE
+           WHEN TRIM(COALESCE(pn2.dni,'')) = '' THEN CONCAT('IDPN:', pn2.idpn)
+           ELSE TRIM(COALESCE(pn2.dni,''))
+         END AS dni_key,
+         MAX(CASE WHEN LOWER(TRIM(COALESCE(pn2.estado_verificacion,''))) = 'confirmado' THEN 1 ELSE 0 END) AS is_confirmed
+       FROM padronnominal pn2
+       WHERE ${where.join(" AND ").replaceAll("pn.", "pn2.")}
+       GROUP BY dni_key
+     ) t ON t.idpn = pn.idpn
+     WHERE ${status === "confirmado" ? "t.is_confirmed = 1" : status === "pendiente" ? "t.is_confirmed = 0" : "1=1"}
      ORDER BY pn.idpn DESC
      LIMIT ? OFFSET ?`,
     [...args, limit, offset],
@@ -128,36 +150,50 @@ export async function listCarnets(params: {
   );
 }
 
-export async function getCarnetByIdpn(params: { ubigeo: number; idpn: number }) {
+export async function getCarnetByIdpn(params: { ubigeo: number; idpn: number; etapa?: string }) {
   const pool = getDbPool();
+  const etapa = String(params.etapa ?? "").trim();
+  const whereEtapa = etapa ? " AND DATE_FORMAT(etapa, '%Y-%m-01') = ?" : "";
+  const args = etapa ? [params.idpn, params.ubigeo, etapa] : [params.idpn, params.ubigeo];
   const [rows] = await pool.query(
     `SELECT idpn, dni, nombres, etapa, fecha_nac, img_carnet, estado_verificacion
      FROM padronnominal
-     WHERE idpn = ? AND ubigeo = ?
+     WHERE idpn = ? AND ubigeo = ?${whereEtapa}
      LIMIT 1`,
-    [params.idpn, params.ubigeo],
+    args,
   );
   const r = (rows as any[])?.[0];
   if (!r) return null;
+  const etapaStr =
+    r.etapa instanceof Date ? r.etapa.toISOString().slice(0, 10) : r.etapa == null ? null : String(r.etapa).slice(0, 10);
+  const fechaNacStr =
+    r.fecha_nac instanceof Date
+      ? r.fecha_nac.toISOString().slice(0, 10)
+      : r.fecha_nac == null
+        ? null
+        : String(r.fecha_nac).slice(0, 10);
   return {
     idpn: Number(r.idpn),
     dni: r.dni == null ? null : String(r.dni),
     nombres: r.nombres == null ? null : String(r.nombres),
-    etapa: r.etapa == null ? null : String(r.etapa).slice(0, 10),
-    fecha_nac: r.fecha_nac == null ? null : String(r.fecha_nac).slice(0, 10),
+    etapa: etapaStr,
+    fecha_nac: fechaNacStr,
     img_carnet: r.img_carnet == null ? null : String(r.img_carnet),
     estado_verificacion: normEstado(r.estado_verificacion),
   };
 }
 
-export async function setCarnetEstado(params: { ubigeo: number; idpn: number; estado: CarnetEstado }) {
+export async function setCarnetEstado(params: { ubigeo: number; idpn: number; estado: CarnetEstado; etapa?: string }) {
   const pool = getDbPool();
   const estado = params.estado === "confirmado" ? "confirmado" : "pendiente";
+  const etapa = String(params.etapa ?? "").trim();
+  const whereEtapa = etapa ? " AND DATE_FORMAT(etapa, '%Y-%m-01') = ?" : "";
+  const args = etapa ? [estado, params.idpn, params.ubigeo, etapa] : [estado, params.idpn, params.ubigeo];
   const [res] = await pool.query(
     `UPDATE padronnominal
      SET estado_verificacion = ?
-     WHERE idpn = ? AND ubigeo = ? AND TRIM(COALESCE(img_carnet,'')) <> ''`,
-    [estado, params.idpn, params.ubigeo],
+     WHERE idpn = ? AND ubigeo = ? AND TRIM(COALESCE(img_carnet,'')) <> ''${whereEtapa}`,
+    args,
   );
   return res as any;
 }
@@ -182,4 +218,3 @@ export async function dniBelongsToUbigeo(params: { ubigeo: number; dni: string }
   );
   return (rows as any[]).length > 0;
 }
-

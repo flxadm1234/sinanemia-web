@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ensureRegistrosHemoglobinaTable, getCarnetByIdpn, setCarnetEstado } from "@/lib/carnets";
 import { listRegistrosHemoglobinaByDni } from "@/lib/registrosHemoglobina";
+import { getEtapaSeleccionadaPorUbigeo } from "@/lib/meses";
 
 export const runtime = "nodejs";
 
@@ -23,12 +24,14 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
   if (!idpn) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
 
   await ensureRegistrosHemoglobinaTable();
+  const sel = await getEtapaSeleccionadaPorUbigeo(session.ubigeo);
+  if (!sel?.etapa) return NextResponse.json({ error: "missing_etapa" }, { status: 400 });
 
-  const padron = await getCarnetByIdpn({ ubigeo: session.ubigeo, idpn });
+  const padron = await getCarnetByIdpn({ ubigeo: session.ubigeo, idpn, etapa: sel.etapa });
   if (!padron) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const registros = padron.dni ? await listRegistrosHemoglobinaByDni(padron.dni) : [];
-  return NextResponse.json({ ok: true, padron, registros });
+  return NextResponse.json({ ok: true, padron, registros, etapa: sel.etapa });
 }
 
 export async function PUT(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -46,7 +49,9 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   const estado = String(body?.estado_verificacion ?? "").trim().toLowerCase();
   const nextEstado = estado === "confirmado" ? "confirmado" : "pendiente";
 
-  await setCarnetEstado({ ubigeo: session.ubigeo, idpn, estado: nextEstado as any });
+  const sel = await getEtapaSeleccionadaPorUbigeo(session.ubigeo);
+  if (!sel?.etapa) return NextResponse.json({ error: "missing_etapa" }, { status: 400 });
+
+  await setCarnetEstado({ ubigeo: session.ubigeo, idpn, estado: nextEstado as any, etapa: sel.etapa });
   return NextResponse.json({ ok: true });
 }
-
