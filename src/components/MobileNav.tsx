@@ -38,6 +38,9 @@ function buildLinks(user: SessionUser): NavLink[] {
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "COORDINADOR") {
     links.push({ href: "/asignacion", label: "Asignación" });
   }
+  if (user.tipo === "ADMINISTRADOR" || user.tipo === "COORDINADOR") {
+    links.push({ href: "/admin/carnets", label: "Registro de carnets" });
+  }
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
     links.push({ href: "/admin/padronnominal", label: "Configurar actor social y CVD" });
   }
