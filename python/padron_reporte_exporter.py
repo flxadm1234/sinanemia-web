@@ -858,6 +858,13 @@ def main():
         def alerta_vd(r):
             return calc_alerta_vd(lambda n: gv(r, n))
 
+        def fecha_maxima_tamizaje_formula(row_num: int):
+            grupo_cell = f"$F{row_num}"
+            edad_dias_cell = f"$M{row_num}"
+            return (
+                f'=IF({edad_dias_cell}="","",IF(UPPER(TRIM({grupo_cell}))="6M",TODAY()-1+(209-{edad_dias_cell}),TODAY()-1+(394-{edad_dias_cell})))'
+            )
+
         export_cols = [
             ("Menor", "N°", "raw", lambda r, idx: idx + 1),
             ("Menor", "ID PN", "raw", lambda r, _idx: gv(r, "idpn") or ""),
@@ -938,6 +945,7 @@ def main():
             ("Tamizaje / Otros", "Tipovd", "raw", lambda r, _idx: gv(r, "tipovd") or ""),
             ("Tamizaje / Otros", "Tamisaje", "raw", lambda r, _idx: gv(r, "tamisaje") or ""),
             ("Tamizaje / Otros", "Fecha tamisaje", "raw", lambda r, _idx: fmt_dmy(gv(r, "fechatamisaje"))),
+            ("Tamizaje / Otros", "Fecha_maxima_tamizaje", "date", lambda _r, idx: fecha_maxima_tamizaje_formula(header_row_num + 1 + idx)),
             ("Tamizaje / Otros", "F. atención (últ.)", "raw", lambda r, _idx: fmt_dmy(gv(r, "tam_fecha_atencion"))),
             ("Tamizaje / Otros", "Hemoglobina (últ.)", "raw", lambda r, _idx: gv(r, "tam_hemoglobina") or ""),
             ("Tamizaje / Otros", "Peso (últ.)", "raw", lambda r, _idx: gv(r, "tam_peso") or ""),
@@ -1071,6 +1079,8 @@ def main():
                     v = fn(r, written)
                     if kind == "text":
                         out_row.append(make_cell(ws, "" if v is None else str(v), number_format="@"))
+                    elif kind == "date":
+                        out_row.append(make_cell(ws, "" if v is None else v, number_format="dd/mm/yyyy"))
                     else:
                         out_row.append("" if v is None else v)
                 ws.append(out_row)
