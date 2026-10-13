@@ -31,6 +31,11 @@ function tdText(v: unknown, style = "") {
   return `<td style="mso-number-format:'\\@'${st}">${escapeHtml(v)}</td>`;
 }
 
+function tdFormulaDate(formula: string, style = "") {
+  const st = style ? `;${style}` : "";
+  return `<td style="mso-number-format:'dd\\/mm\\/yyyy'${st}">${formula}</td>`;
+}
+
 function th(v: unknown, style = "") {
   const st = style ? ` style="${style}"` : "";
   return `<th${st}>${escapeHtml(v)}</th>`;
@@ -123,6 +128,7 @@ export async function GET(req: Request) {
     { label: "Edad (años)", key: "edad_anios" },
     { label: "Edad (meses)", key: "edad_meses" },
     { label: "Edad (días)", key: "edad_dias" },
+    { label: "Fecha_maxima_tamizaje", key: "fecha_max_tamizaje" },
     { label: "Tipo seguro", key: "seg" },
     { label: "F. atención (HIS)", key: "fat" },
     { label: "Hemoglobina", key: "hb" },
@@ -150,6 +156,8 @@ export async function GET(req: Request) {
           : r.en_numerador === "SI"
             ? "row_num"
             : "row_denom";
+      const fechaMaxTamizajeFormula =
+        '=IF(INDIRECT("E"&ROW())="6M";TODAY()-1+(209-INDIRECT("V"&ROW()));TODAY()-1+(394-INDIRECT("V"&ROW())))';
       return `<tr class="${rowClass}">
         ${td(i + 1)}
         ${td(clas)}
@@ -173,6 +181,7 @@ export async function GET(req: Request) {
         ${td(r.edad_anios)}
         ${td(r.edad_meses)}
         ${td(r.edad_dias)}
+        ${tdFormulaDate(fechaMaxTamizajeFormula)}
         ${td(r.tiposeguro)}
         ${td(r.fecha_atencion)}
         ${td(r.hemoglobina)}
