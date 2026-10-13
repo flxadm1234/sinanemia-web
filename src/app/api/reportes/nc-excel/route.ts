@@ -144,6 +144,7 @@ export async function GET(req: Request) {
 
   const bodyRows = rows
     .map((r, i) => {
+      const excelRowNum = 8 + i;
       const clas =
         r.en_denominador === "NO"
           ? "Excluido (Denominador)"
@@ -156,8 +157,7 @@ export async function GET(req: Request) {
           : r.en_numerador === "SI"
             ? "row_num"
             : "row_denom";
-      const fechaMaxTamizajeFormula =
-        '=IF(INDIRECT("E"&ROW())="6M";TODAY()-1+(209-INDIRECT("V"&ROW()));TODAY()-1+(394-INDIRECT("V"&ROW())))';
+      const fechaMaxTamizajeFormula = `=SI(MAYUSC(E${excelRowNum})="6M";HOY()-1+(209-V${excelRowNum});HOY()-1+(394-V${excelRowNum}))`;
       return `<tr class="${rowClass}">
         ${td(i + 1)}
         ${td(clas)}
