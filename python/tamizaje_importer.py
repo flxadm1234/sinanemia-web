@@ -44,6 +44,7 @@ REQUIRED_HEADERS = [
     "LAB3",
     "RESULTADO",
     "TOTAL",
+    "Fecha_Registro",
 ]
 
 
@@ -413,6 +414,7 @@ def run_import(job_id: str, file_path: str):
     idx_lab3 = col_map.get(norm_header("LAB3"))
     idx_resultado = col_map.get(norm_header("RESULTADO"))
     idx_total = col_map.get(norm_header("TOTAL"))
+    idx_fecha_registro = col_map.get(norm_header("Fecha_Registro"))
 
     def at(row_vals, idx):
         if idx is None:
@@ -470,7 +472,7 @@ def run_import(job_id: str, file_path: str):
             to_text(at(row_vals, idx_lab3)),
             to_text(at(row_vals, idx_resultado)),
             to_int(at(row_vals, idx_total)),
-            datetime.utcnow(),
+            to_date(at(row_vals, idx_fecha_registro)),
         )
         batch.append(rec)
 
