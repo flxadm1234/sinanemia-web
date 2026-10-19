@@ -206,6 +206,7 @@ def ensure_tables(cur):
           lab3 VARCHAR(40) NULL,
           resultado VARCHAR(200) NULL,
           total INT NULL,
+          fecha_registro DATETIME NULL,
           created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
           INDEX idx_dni (dni),
           INDEX idx_fecha_atencion (fecha_atencion),
@@ -216,6 +217,10 @@ def ensure_tables(cur):
         ) ENGINE=InnoDB
         """
     )
+    try:
+        cur.execute("ALTER TABLE registro_tamizaje ADD COLUMN fecha_registro DATETIME NULL")
+    except Exception:
+        pass
 
 
 def job_update(cur, job_id: str, **fields):
@@ -274,7 +279,7 @@ INSERT INTO registro_tamizaje (
   peso, talla, hemoglobina, grupo_riesgo_desc, condicion_gestante,
   tipo_edad_pac, anio_actual_pac, mes_actual_pac, dia_actual_pac,
   nombre_establecimiento, cie_10, diagnostico,
-  lab1, lab2, lab3, resultado, total
+  lab1, lab2, lab3, resultado, total, fecha_registro
 ) VALUES (
   %s,%s,%s,%s,%s,%s,
   %s,%s,%s,%s,%s,
@@ -282,7 +287,7 @@ INSERT INTO registro_tamizaje (
   %s,%s,%s,%s,%s,
   %s,%s,%s,%s,
   %s,%s,%s,
-  %s,%s,%s,%s,%s
+  %s,%s,%s,%s,%s,%s
 )
 """
 
@@ -465,6 +470,7 @@ def run_import(job_id: str, file_path: str):
             to_text(at(row_vals, idx_lab3)),
             to_text(at(row_vals, idx_resultado)),
             to_int(at(row_vals, idx_total)),
+            datetime.utcnow(),
         )
         batch.append(rec)
 

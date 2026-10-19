@@ -10,6 +10,7 @@ type BaseRow = {
 type TamizajeRow = {
   dni: string | null;
   fecha_atencion: string | null;
+  fecha_registro: string | null;
   cie_10: string | null;
   hemoglobina: number | null;
   lab1: string | null;
@@ -71,6 +72,7 @@ export type NcMatrixRow = {
   en_numerador: "SI" | "NO";
   motivo_exclusion_numerador: string;
   fecha_atencion: string;
+  fecha_registro: string;
   hemoglobina: string;
   cie_10: string;
   diagnostico: string;
@@ -379,7 +381,7 @@ export async function computeNcMetricsForEtapa(params: {
   for (const part of chunk(dnis, 900)) {
     const placeholders = part.map(() => "?").join(",");
     const [rowsT] = await pool.query(
-      `SELECT id, dni, fecha_atencion, cie_10, diagnostico, hemoglobina, lab1, resultado
+      `SELECT id, dni, fecha_atencion, fecha_registro, cie_10, diagnostico, hemoglobina, lab1, resultado
        FROM registro_tamizaje
        WHERE dni IN (${placeholders})
          AND fecha_atencion IS NOT NULL
@@ -392,6 +394,7 @@ export async function computeNcMetricsForEtapa(params: {
         id: r.id == null ? null : Number(r.id),
         dni: r.dni == null ? null : String(r.dni).trim(),
         fecha_atencion: fmtDateISO(r.fecha_atencion),
+        fecha_registro: fmtDateISO(r.fecha_registro),
         cie_10: r.cie_10 == null ? null : String(r.cie_10),
         diagnostico: r.diagnostico == null ? null : String(r.diagnostico),
         hemoglobina: r.hemoglobina == null ? null : Number(r.hemoglobina),
@@ -652,12 +655,13 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
     for (const part of chunk(allDnis, 900)) {
       const placeholders = part.map(() => "?").join(",");
       const [rowsT] = await pool.query(
-        `SELECT id, TRIM(dni) AS dni, fecha_atencion, cie_10, diagnostico, hemoglobina, lab1, resultado
+        `SELECT id, TRIM(dni) AS dni, fecha_atencion, fecha_registro, cie_10, diagnostico, hemoglobina, lab1, resultado
          FROM (
            SELECT
              rt.id,
              rt.dni,
              rt.fecha_atencion,
+             rt.fecha_registro,
              rt.cie_10,
              rt.diagnostico,
              rt.hemoglobina,
@@ -677,6 +681,7 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
           id: r.id == null ? null : Number(r.id),
           dni: r.dni == null ? null : String(r.dni).trim(),
           fecha_atencion: fmtDateISO(r.fecha_atencion),
+          fecha_registro: fmtDateISO(r.fecha_registro),
           cie_10: r.cie_10 == null ? null : String(r.cie_10),
           diagnostico: r.diagnostico == null ? null : String(r.diagnostico),
           hemoglobina: r.hemoglobina == null ? null : Number(r.hemoglobina),
@@ -723,7 +728,7 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
     for (const part of chunk(denomDnis, 900)) {
       const placeholders = part.map(() => "?").join(",");
       const [rowsT] = await pool.query(
-        `SELECT id, dni, fecha_atencion, cie_10, diagnostico, hemoglobina, lab1, resultado
+        `SELECT id, dni, fecha_atencion, fecha_registro, cie_10, diagnostico, hemoglobina, lab1, resultado
          FROM registro_tamizaje
          WHERE dni IN (${placeholders})
            AND fecha_atencion IS NOT NULL
@@ -736,6 +741,7 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
           id: r.id == null ? null : Number(r.id),
           dni: r.dni == null ? null : String(r.dni).trim(),
           fecha_atencion: fmtDateISO(r.fecha_atencion),
+          fecha_registro: fmtDateISO(r.fecha_registro),
           cie_10: r.cie_10 == null ? null : String(r.cie_10),
           diagnostico: r.diagnostico == null ? null : String(r.diagnostico),
           hemoglobina: r.hemoglobina == null ? null : Number(r.hemoglobina),
@@ -826,6 +832,7 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
       en_numerador: "NO",
       motivo_exclusion_numerador: den.ok ? "" : "No aplica (fuera del denominador)",
       fecha_atencion: "",
+      fecha_registro: "",
       hemoglobina: "",
       cie_10: "",
       diagnostico: "",
@@ -845,6 +852,7 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
     const t = byTamizajeDni.get(it.dni) ?? null;
     if (t) {
       row.fecha_atencion = t.fecha_atencion ?? "";
+      row.fecha_registro = t.fecha_registro ?? "";
       row.hemoglobina = t.hemoglobina == null ? "" : String(t.hemoglobina);
       row.cie_10 = t.cie_10 ?? "";
       row.diagnostico = t.diagnostico ?? "";

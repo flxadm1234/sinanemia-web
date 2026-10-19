@@ -76,6 +76,7 @@ export async function ensureTamizajeTables() {
       lab3 VARCHAR(40) NULL,
       resultado VARCHAR(200) NULL,
       total INT NULL,
+      fecha_registro DATETIME NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       INDEX idx_dni (dni),
       INDEX idx_fecha_atencion (fecha_atencion),
@@ -85,6 +86,10 @@ export async function ensureTamizajeTables() {
       INDEX idx_dni_fecha (dni, fecha_atencion)
     ) ENGINE=InnoDB
   `);
+
+  try {
+    await pool.query("ALTER TABLE registro_tamizaje ADD COLUMN fecha_registro DATETIME NULL");
+  } catch {}
 }
 
 export async function getTamizajeJobById(id: string) {

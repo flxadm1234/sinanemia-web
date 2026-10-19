@@ -130,6 +130,7 @@ export async function GET(req: Request) {
     { label: "Edad (días)", key: "edad_dias" },
     { label: "Fecha_maxima_tamizaje", key: "fecha_max_tamizaje" },
     { label: "Tipo seguro", key: "seg" },
+    { label: "Fecha_Registro", key: "fecha_registro" },
     { label: "F. atención (HIS)", key: "fat" },
     { label: "Hemoglobina", key: "hb" },
     { label: "CIE10", key: "cie" },
@@ -183,6 +184,7 @@ export async function GET(req: Request) {
         ${td(r.edad_dias)}
         ${tdFormulaDate(fechaMaxTamizajeFormula)}
         ${td(r.tiposeguro)}
+        ${td(r.fecha_registro)}
         ${td(r.fecha_atencion)}
         ${td(r.hemoglobina)}
         ${td(r.cie_10)}
