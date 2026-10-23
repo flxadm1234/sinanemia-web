@@ -661,6 +661,8 @@ export default async function DashboardPage(props: {
                       <span className="font-semibold">
                         {Math.max(0, ncSelected.denom_total - ncSelected.tamizaje_ninos_con_registro)}
                       </span>
+                      · Inoportunos:{" "}
+                      <span className="font-semibold">{ncSelected.tamizaje_inoportunos}</span>
                     </div>
                   </div>
                   <div className="rounded-2xl bg-zinc-50 ring-1 ring-black/5 p-4">

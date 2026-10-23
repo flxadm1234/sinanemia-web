@@ -36,6 +36,28 @@ function tdFormulaDate(formula: string, style = "") {
   return `<td style="mso-number-format:'dd\\/mm\\/yyyy'${st}">${formula}</td>`;
 }
 
+function tdFormulaText(formula: string, style = "") {
+  const st = style ? ` style="${style}"` : "";
+  return `<td${st}>${formula}</td>`;
+}
+
+function isoToFechaFormula(v: unknown) {
+  const s = String(v ?? "").trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (!m) return "";
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return "";
+  return `=FECHA(${y};${mo};${d})`;
+}
+
+function tdIsoDate(v: unknown, style = "") {
+  const f = isoToFechaFormula(v);
+  if (!f) return td("", style);
+  return tdFormulaDate(f, style);
+}
+
 function th(v: unknown, style = "") {
   const st = style ? ` style="${style}"` : "";
   return `<th${st}>${escapeHtml(v)}</th>`;
@@ -129,6 +151,7 @@ export async function GET(req: Request) {
     { label: "Edad (meses)", key: "edad_meses" },
     { label: "Edad (días)", key: "edad_dias" },
     { label: "Fecha_maxima_tamizaje", key: "fecha_max_tamizaje" },
+    { label: "Oportunidad_tamizaje", key: "oportunidad" },
     { label: "Tipo seguro", key: "seg" },
     { label: "Fecha_Registro", key: "fecha_registro" },
     { label: "F. atención (HIS)", key: "fat" },
@@ -158,7 +181,8 @@ export async function GET(req: Request) {
           : r.en_numerador === "SI"
             ? "row_num"
             : "row_denom";
-      const fechaMaxTamizajeFormula = `=SI(MAYUSC(E${excelRowNum})="6M";HOY()-1+(209-V${excelRowNum});HOY()-1+(394-V${excelRowNum}))`;
+      const fechaMaxTamizajeFormula = `=SI(MAYUSC(E${excelRowNum})="6M";S${excelRowNum}+209;S${excelRowNum}+394)`;
+      const oportunidadFormula = `=SI(ESBLANCO(Z${excelRowNum});"";SI(Z${excelRowNum}>W${excelRowNum};"INOPORTUNO";"OPORTUNO"))`;
       return `<tr class="${rowClass}">
         ${td(i + 1)}
         ${td(clas)}
@@ -172,20 +196,21 @@ export async function GET(req: Request) {
         ${tdText(r.actorsocial)}
         ${tdText(r.responsable)}
         ${td(r.eess_ua)}
-        ${td(r.fechacita)}
+        ${tdIsoDate(r.fechacita)}
         ${td(r.estadosvd)}
         ${td(r.rango)}
         ${td(r.departamento)}
         ${td(r.provincia)}
         ${td(r.distrito)}
-        ${td(r.fecha_nac)}
+        ${tdIsoDate(r.fecha_nac)}
         ${td(r.edad_anios)}
         ${td(r.edad_meses)}
         ${td(r.edad_dias)}
         ${tdFormulaDate(fechaMaxTamizajeFormula)}
+        ${tdFormulaText(oportunidadFormula)}
         ${td(r.tiposeguro)}
-        ${td(r.fecha_registro)}
-        ${td(r.fecha_atencion)}
+        ${tdIsoDate(r.fecha_registro)}
+        ${tdIsoDate(r.fecha_atencion)}
         ${td(r.hemoglobina)}
         ${td(r.cie_10)}
         ${td(r.diagnostico)}
@@ -203,7 +228,7 @@ export async function GET(req: Request) {
         denom ? Math.round((numer / denom) * 1000) / 10 : 0,
       )}%</b></td></tr>
       <tr><td>Filtros del denominador: edad crítica + permanencia (2 meses) + seguro (SIS o sin seguro)</td></tr>
-      <tr><td>Numerador: tamizaje en ventana (6m: 170-209 días / 12m: 365-394 días) con HB registrada (HB&gt;0) y sin anemia (HB&gt;=10.5). Denominador excluye inconsistencias (HB&lt;6 o &gt;18, o CIE10 con HB 0/vacía). En tabla se muestra el último HIS global.</td></tr>
+      <tr><td>Numerador: tamizaje en ventana (6m: 170-209 días / 12m: 365-394 días) con HB registrada (HB&gt;0), sin anemia (HB&gt;=10.5) y OPORTUNO (Fecha_Registro &lt;= Fecha_maxima_tamizaje). Denominador excluye inconsistencias (HB&lt;6 o &gt;18, o CIE10 con HB 0/vacía). En tabla se muestra el HIS en ventana; si no existe, se muestra el último HIS global.</td></tr>
       <tr><td>&nbsp;</td></tr>
     </table>
   `;

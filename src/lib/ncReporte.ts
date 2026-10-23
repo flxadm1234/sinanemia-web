@@ -35,6 +35,7 @@ export type NcMonthMetrics = {
   total_con_seguro_valido: number;
   tamizaje_registros_encontrados: number;
   tamizaje_ninos_con_registro: number;
+  tamizaje_inoportunos: number;
   denom_total: number;
   denom_6m: number;
   denom_12m: number;
@@ -71,6 +72,7 @@ export type NcMatrixRow = {
   motivo_exclusion_denominador: string;
   en_numerador: "SI" | "NO";
   motivo_exclusion_numerador: string;
+  oportunidad: "" | "OPORTUNO" | "INOPORTUNO";
   fecha_atencion: string;
   fecha_registro: string;
   hemoglobina: string;
@@ -339,6 +341,7 @@ export async function computeNcMetricsForEtapa(params: {
       total_con_seguro_valido: totalSeguroValido,
       tamizaje_registros_encontrados: 0,
       tamizaje_ninos_con_registro: 0,
+      tamizaje_inoportunos: 0,
       denom_total: 0,
       denom_6m: 0,
       denom_12m: 0,
@@ -433,6 +436,7 @@ export async function computeNcMetricsForEtapa(params: {
   let num6 = 0;
   let num12 = 0;
   let ninosConTamizaje = 0;
+  let inoportunos = 0;
 
   for (const c of candidates) {
     const dni = c.dni;
@@ -488,6 +492,16 @@ export async function computeNcMetricsForEtapa(params: {
 
     ninosConTamizaje += 1;
 
+    const maxDate = c.grupo === "6m" ? addDaysUTC(birth, 209) : addDaysUTC(birth, 394);
+    const regDate = toDate(t.fecha_registro);
+    if (regDate && regDate.getTime() > maxDate.getTime()) {
+      inoportunos += 1;
+      const motivo = "INOPORTUNO";
+      if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo });
+      exclNum.set(motivo, (exclNum.get(motivo) ?? 0) + 1);
+      continue;
+    }
+
     if (hbVal >= 10.5) {
       if (c.grupo === "6m") num6 += 1;
       else num12 += 1;
@@ -508,6 +522,7 @@ export async function computeNcMetricsForEtapa(params: {
     total_con_seguro_valido: totalSeguroValido,
     tamizaje_registros_encontrados: tamizajes.length,
     tamizaje_ninos_con_registro: ninosConTamizaje,
+    tamizaje_inoportunos: inoportunos,
     denom_total: denomTotalAdj,
     denom_6m: denom6Adj,
     denom_12m: denom12Adj,
@@ -833,6 +848,7 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
       motivo_exclusion_denominador: den.ok ? "" : den.motivo,
       en_numerador: "NO",
       motivo_exclusion_numerador: den.ok ? "" : "No aplica (fuera del denominador)",
+      oportunidad: "",
       fecha_atencion: "",
       fecha_registro: "",
       hemoglobina: "",
@@ -852,18 +868,19 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
     }
 
     const t = byTamizajeDni.get(it.dni) ?? null;
-    if (t) {
-      row.fecha_atencion = t.fecha_atencion ?? "";
-      row.fecha_registro = t.fecha_registro ?? "";
-      row.hemoglobina = t.hemoglobina == null ? "" : String(t.hemoglobina);
-      row.cie_10 = t.cie_10 ?? "";
-      row.diagnostico = t.diagnostico ?? "";
-      row.lab1 = t.lab1 ?? "";
-      row.resultado = t.resultado ?? "";
+    const tw = tamizajeUsado.get(it.dni) ?? null;
+    const toShow = tw ?? t;
+    if (toShow) {
+      row.fecha_atencion = toShow.fecha_atencion ?? "";
+      row.fecha_registro = toShow.fecha_registro ?? "";
+      row.hemoglobina = toShow.hemoglobina == null ? "" : String(toShow.hemoglobina);
+      row.cie_10 = toShow.cie_10 ?? "";
+      row.diagnostico = toShow.diagnostico ?? "";
+      row.lab1 = toShow.lab1 ?? "";
+      row.resultado = toShow.resultado ?? "";
     }
 
     if (den.ok && (den.grupo === "6m" || den.grupo === "12m")) {
-      const tw = tamizajeUsado.get(it.dni) ?? null;
       if (!tw) {
         const hasAny = byTamizajeDni.has(it.dni);
         row.motivo_exclusion_numerador = hasAny ? "TAMIZAJE FUERA DE VENTANA" : "SIN TAMIZAJE";
@@ -872,6 +889,18 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
         if (isHbMissing(Number.isFinite(hb) ? hb : null)) {
           row.motivo_exclusion_numerador = "SIN TAMIZAJE";
         } else {
+          if (den.birth) {
+            const maxDate = den.grupo === "6m" ? addDaysUTC(den.birth, 209) : addDaysUTC(den.birth, 394);
+            const regDate = toDate(tw.fecha_registro);
+            if (regDate) {
+              row.oportunidad = regDate.getTime() > maxDate.getTime() ? "INOPORTUNO" : "OPORTUNO";
+            }
+            if (row.oportunidad === "INOPORTUNO") {
+              row.motivo_exclusion_numerador = "INOPORTUNO";
+              out.push(row);
+              continue;
+            }
+          }
           const cons = hbConsistente(hb, tw.cie_10, tw.lab1);
           if (!cons.ok) {
             row.motivo_exclusion_numerador = cons.motivo;
