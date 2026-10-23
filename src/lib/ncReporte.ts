@@ -465,8 +465,10 @@ export async function computeNcMetricsForEtapa(params: {
     else denom12Adj += 1;
 
     if (!t) {
-      if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo: "SIN TAMIZAJE" });
-      exclNum.set("SIN TAMIZAJE", (exclNum.get("SIN TAMIZAJE") ?? 0) + 1);
+      const hasAny = (byTamizajeDni.get(dni)?.length ?? 0) > 0;
+      const motivo = hasAny ? "TAMIZAJE FUERA DE VENTANA" : "SIN TAMIZAJE";
+      if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo });
+      exclNum.set(motivo, (exclNum.get(motivo) ?? 0) + 1);
       continue;
     }
 
@@ -849,21 +851,24 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
       }
     }
 
-    const t = byTamizajeDni.get(it.dni) ?? null;
-    if (t) {
-      row.fecha_atencion = t.fecha_atencion ?? "";
-      row.fecha_registro = t.fecha_registro ?? "";
-      row.hemoglobina = t.hemoglobina == null ? "" : String(t.hemoglobina);
-      row.cie_10 = t.cie_10 ?? "";
-      row.diagnostico = t.diagnostico ?? "";
-      row.lab1 = t.lab1 ?? "";
-      row.resultado = t.resultado ?? "";
+    if (den.ok && (den.grupo === "6m" || den.grupo === "12m")) {
+      const tw = tamizajeUsado.get(it.dni) ?? null;
+      if (tw) {
+        row.fecha_atencion = tw.fecha_atencion ?? "";
+        row.fecha_registro = tw.fecha_registro ?? "";
+        row.hemoglobina = tw.hemoglobina == null ? "" : String(tw.hemoglobina);
+        row.cie_10 = tw.cie_10 ?? "";
+        row.diagnostico = tw.diagnostico ?? "";
+        row.lab1 = tw.lab1 ?? "";
+        row.resultado = tw.resultado ?? "";
+      }
     }
 
     if (den.ok && (den.grupo === "6m" || den.grupo === "12m")) {
       const tw = tamizajeUsado.get(it.dni) ?? null;
       if (!tw) {
-        row.motivo_exclusion_numerador = "SIN TAMIZAJE";
+        const hasAny = (byTamizajeVentanaDni.get(it.dni)?.length ?? 0) > 0;
+        row.motivo_exclusion_numerador = hasAny ? "TAMIZAJE FUERA DE VENTANA" : "SIN TAMIZAJE";
       } else {
         const hb = Number(tw.hemoglobina ?? NaN);
         if (isHbMissing(Number.isFinite(hb) ? hb : null)) {
