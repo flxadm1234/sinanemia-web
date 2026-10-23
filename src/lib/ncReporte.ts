@@ -154,34 +154,6 @@ function normalizeLab(v: unknown) {
   return s || "";
 }
 
-function normalizeResultado(v: unknown) {
-  const s = String(v ?? "").trim().toUpperCase();
-  return s || "";
-}
-
-function isResultadoSinAnemia(v: unknown) {
-  const s = normalizeResultado(v);
-  if (!s) return false;
-  if (s.includes("NO TIENE ANEMIA")) return true;
-  if (s.includes("SIN ANEMIA")) return true;
-  return false;
-}
-
-function isResultadoConAnemia(v: unknown) {
-  const s = normalizeResultado(v);
-  if (!s) return false;
-  if (s.includes("NO TIENE ANEMIA")) return false;
-  if (s.includes("SIN ANEMIA")) return false;
-  if (s.includes("TIENE ANEMIA")) return true;
-  return false;
-}
-
-function isSinAnemia(hb: number, resultado: unknown) {
-  if (isResultadoSinAnemia(resultado)) return true;
-  if (isResultadoConAnemia(resultado)) return false;
-  return hb >= 10.5;
-}
-
 function hbConsistente(hb: number | null, _cie10: string | null, _lab1: string | null) {
   if (hb == null || !Number.isFinite(hb) || hb <= 0) return { ok: false, motivo: "Sin hemoglobina" };
   if (hb < 6.0 || hb > 18.0) return { ok: false, motivo: "Hemoglobina atípica (<6 o >18)" };
@@ -468,13 +440,11 @@ export async function computeNcMetricsForEtapa(params: {
 
     const start = c.grupo === "6m" ? isoDate(addDaysUTC(birth, 170)) : isoDate(addDaysUTC(birth, 365));
     const end = c.grupo === "6m" ? isoDate(addDaysUTC(birth, 209)) : isoDate(addDaysUTC(birth, 394));
-    const tIn = findLastInRange(dni, start, end);
-    const tAny = byTamizajeDni.get(dni)?.[0] ?? null;
-    const t = tIn ?? tAny;
+    const t = findLastInRange(dni, start, end);
 
-    if (tIn) {
-      const hb = Number(tIn.hemoglobina ?? NaN);
-      const cie = String(tIn.cie_10 ?? "").trim();
+    if (t) {
+      const hb = Number(t.hemoglobina ?? NaN);
+      const cie = String(t.cie_10 ?? "").trim();
       if (isHbMissing(Number.isFinite(hb) ? hb : null)) {
         if (cie) {
           const motivo = "Inconsistencia: CIE10 con hemoglobina 0/vacía";
@@ -495,8 +465,10 @@ export async function computeNcMetricsForEtapa(params: {
     else denom12Adj += 1;
 
     if (!t) {
-      if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo: "SIN TAMIZAJE" });
-      exclNum.set("SIN TAMIZAJE", (exclNum.get("SIN TAMIZAJE") ?? 0) + 1);
+      const hasAny = (byTamizajeDni.get(dni)?.length ?? 0) > 0;
+      const motivo = hasAny ? "TAMIZAJE FUERA DE VENTANA" : "SIN TAMIZAJE";
+      if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo });
+      exclNum.set(motivo, (exclNum.get(motivo) ?? 0) + 1);
       continue;
     }
 
@@ -516,11 +488,11 @@ export async function computeNcMetricsForEtapa(params: {
 
     ninosConTamizaje += 1;
 
-    if (isSinAnemia(hbVal, t.resultado)) {
+    if (hbVal >= 10.5) {
       if (c.grupo === "6m") num6 += 1;
       else num12 += 1;
     } else {
-      const motivo = "Anemia (según tamizaje)";
+      const motivo = "Anemia (HB < 10.5)";
       if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo });
       exclNum.set(motivo, (exclNum.get(motivo) ?? 0) + 1);
     }
@@ -811,7 +783,7 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
     if (!den || !den.ok || !den.birth || (den.grupo !== "6m" && den.grupo !== "12m")) continue;
     const start = den.grupo === "6m" ? isoDate(addDaysUTC(den.birth, 170)) : isoDate(addDaysUTC(den.birth, 365));
     const end = den.grupo === "6m" ? isoDate(addDaysUTC(den.birth, 209)) : isoDate(addDaysUTC(den.birth, 394));
-    const t = findLastInRange(dni, start, end) ?? byTamizajeDni.get(dni) ?? null;
+    const t = findLastInRange(dni, start, end);
     tamizajeUsado.set(dni, t);
 
     if (!t) continue;
@@ -879,23 +851,22 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
       }
     }
 
-    if (den.ok && (den.grupo === "6m" || den.grupo === "12m")) {
-      const tw = tamizajeUsado.get(it.dni) ?? null;
-      if (tw) {
-        row.fecha_atencion = tw.fecha_atencion ?? "";
-        row.fecha_registro = tw.fecha_registro ?? "";
-        row.hemoglobina = tw.hemoglobina == null ? "" : String(tw.hemoglobina);
-        row.cie_10 = tw.cie_10 ?? "";
-        row.diagnostico = tw.diagnostico ?? "";
-        row.lab1 = tw.lab1 ?? "";
-        row.resultado = tw.resultado ?? "";
-      }
+    const t = byTamizajeDni.get(it.dni) ?? null;
+    if (t) {
+      row.fecha_atencion = t.fecha_atencion ?? "";
+      row.fecha_registro = t.fecha_registro ?? "";
+      row.hemoglobina = t.hemoglobina == null ? "" : String(t.hemoglobina);
+      row.cie_10 = t.cie_10 ?? "";
+      row.diagnostico = t.diagnostico ?? "";
+      row.lab1 = t.lab1 ?? "";
+      row.resultado = t.resultado ?? "";
     }
 
     if (den.ok && (den.grupo === "6m" || den.grupo === "12m")) {
       const tw = tamizajeUsado.get(it.dni) ?? null;
       if (!tw) {
-        row.motivo_exclusion_numerador = "SIN TAMIZAJE";
+        const hasAny = byTamizajeDni.has(it.dni);
+        row.motivo_exclusion_numerador = hasAny ? "TAMIZAJE FUERA DE VENTANA" : "SIN TAMIZAJE";
       } else {
         const hb = Number(tw.hemoglobina ?? NaN);
         if (isHbMissing(Number.isFinite(hb) ? hb : null)) {
@@ -904,11 +875,11 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
           const cons = hbConsistente(hb, tw.cie_10, tw.lab1);
           if (!cons.ok) {
             row.motivo_exclusion_numerador = cons.motivo;
-          } else if (isSinAnemia(hb, tw.resultado)) {
+          } else if (hb >= 10.5) {
             row.en_numerador = "SI";
             row.motivo_exclusion_numerador = "";
           } else {
-            row.motivo_exclusion_numerador = "Anemia (según tamizaje)";
+            row.motivo_exclusion_numerador = "Anemia (HB < 10.5)";
           }
         }
       }
