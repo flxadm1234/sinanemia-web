@@ -140,6 +140,17 @@ export function AppShell(props: {
               Tamizaje
             </Link>
           ) : null}
+          {user.tipo === "ADMINISTRADOR" ||
+          user.tipo === "COORDINADOR" ||
+          user.tipo === "SUPER ADMIN" ||
+          user.tipo === "SUPERVISOR" ? (
+            <Link
+              href="/admin/consulta-tamizaje"
+              className="block rounded-xl px-3 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-100"
+            >
+              Consulta de tamizaje
+            </Link>
+          ) : null}
           {user.tipo === "COORDINADOR" ? (
             <Link
               href="/coordinador/actores"

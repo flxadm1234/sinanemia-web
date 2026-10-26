@@ -59,6 +59,14 @@ function buildLinks(user: SessionUser): NavLink[] {
   if (user.tipo === "ADMINISTRADOR" || user.tipo === "SUPER ADMIN") {
     links.push({ href: "/admin/tamizaje/importar", label: "Tamizaje" });
   }
+  if (
+    user.tipo === "ADMINISTRADOR" ||
+    user.tipo === "COORDINADOR" ||
+    user.tipo === "SUPER ADMIN" ||
+    user.tipo === "SUPERVISOR"
+  ) {
+    links.push({ href: "/admin/consulta-tamizaje", label: "Consulta de tamizaje" });
+  }
   if (user.tipo === "COORDINADOR") {
     links.push({ href: "/coordinador/actores", label: "Actores sociales" });
   }
