@@ -160,6 +160,7 @@ export async function GET(req: Request) {
     { label: "Diagnóstico", key: "diag" },
     { label: "LAB1", key: "lab1" },
     { label: "Resultado", key: "res" },
+    { label: "Etapa", key: "etapa" },
   ] as const;
 
   const thead = `<thead><tr>${columns
@@ -216,6 +217,7 @@ export async function GET(req: Request) {
         ${td(r.diagnostico)}
         ${td(r.lab1)}
         ${td(r.resultado)}
+        ${td(etapa)}
       </tr>`;
     })
     .join("");

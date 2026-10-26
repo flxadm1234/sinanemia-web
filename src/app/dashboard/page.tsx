@@ -812,15 +812,26 @@ export default async function DashboardPage(props: {
                       La exportación de Excel se encuentra deshabilitada para tu rol.
                     </div>
                   ) : (
-                    <DownloadFileButton
-                      href={`/api/reportes/nc-excel?ubigeo=${encodeURIComponent(
-                        scopeUbigeo,
-                      )}&etapa=${encodeURIComponent(ncSelected.etapa)}`}
-                      filename={`nc_${scopeUbigeo}_${ncSelected.etapa}.xls`}
-                      label="Descargar Excel"
-                      overlayLabel="Generando Excel..."
-                      className="mt-3 inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
-                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <DownloadFileButton
+                        href={`/api/reportes/nc-excel?ubigeo=${encodeURIComponent(
+                          scopeUbigeo,
+                        )}&etapa=${encodeURIComponent(ncSelected.etapa)}`}
+                        filename={`nc_${scopeUbigeo}_${ncSelected.etapa}.xls`}
+                        label="Descargar Excel"
+                        overlayLabel="Generando Excel..."
+                        className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                      />
+                      <DownloadFileButton
+                        href={`/api/reportes/nc-excel-anual?ubigeo=${encodeURIComponent(
+                          scopeUbigeo,
+                        )}&year=${encodeURIComponent(String(ncSelected.etapa).slice(0, 4))}`}
+                        filename={`nc_${scopeUbigeo}_${String(ncSelected.etapa).slice(0, 4)}.xls`}
+                        label="Consolidado anual"
+                        overlayLabel="Generando Excel..."
+                        className="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-50 disabled:opacity-60"
+                      />
+                    </div>
                   )}
                 </div>
               </div>
