@@ -182,7 +182,7 @@ export async function GET(req: Request) {
             ? "row_num"
             : "row_denom";
       const fechaMaxTamizajeFormula = `=SI(MAYUSC(E${excelRowNum})="6M";S${excelRowNum}+209;S${excelRowNum}+394)`;
-      const oportunidadFormula = `=SI(ESBLANCO(Z${excelRowNum});"";SI(Z${excelRowNum}>W${excelRowNum};"INOPORTUNO";"OPORTUNO"))`;
+      const oportunidadFormula = `=SI(ESBLANCO(AA${excelRowNum});"";SI(AA${excelRowNum}>W${excelRowNum};"INOPORTUNO";"OPORTUNO"))`;
       return `<tr class="${rowClass}">
         ${td(i + 1)}
         ${td(clas)}

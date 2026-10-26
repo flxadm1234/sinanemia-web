@@ -493,8 +493,8 @@ export async function computeNcMetricsForEtapa(params: {
     ninosConTamizaje += 1;
 
     const maxDate = c.grupo === "6m" ? addDaysUTC(birth, 209) : addDaysUTC(birth, 394);
-    const regDate = toDate(t.fecha_registro);
-    if (regDate && regDate.getTime() > maxDate.getTime()) {
+    const atDate = toDate(t.fecha_atencion);
+    if (atDate && atDate.getTime() > maxDate.getTime()) {
       inoportunos += 1;
       const motivo = "INOPORTUNO";
       if (params.includeDetails) excl.push({ dni, grupo: c.grupo, motivo });
@@ -891,9 +891,9 @@ export async function listNcMatrixForEtapa(params: { ubigeo: number; etapa: stri
         } else {
           if (den.birth) {
             const maxDate = den.grupo === "6m" ? addDaysUTC(den.birth, 209) : addDaysUTC(den.birth, 394);
-            const regDate = toDate(tw.fecha_registro);
-            if (regDate) {
-              row.oportunidad = regDate.getTime() > maxDate.getTime() ? "INOPORTUNO" : "OPORTUNO";
+            const atDate = toDate(tw.fecha_atencion);
+            if (atDate) {
+              row.oportunidad = atDate.getTime() > maxDate.getTime() ? "INOPORTUNO" : "OPORTUNO";
             }
             if (row.oportunidad === "INOPORTUNO") {
               row.motivo_exclusion_numerador = "INOPORTUNO";
